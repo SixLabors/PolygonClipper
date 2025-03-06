@@ -17,8 +17,38 @@ internal static class PolygonUtilities
     /// <param name="p2">The third point.</param>
     /// <returns>The <see cref="double"/> area.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static double SignedArea(Vertex p0, Vertex p1, Vertex p2)
+    public static double SignedArea2(Vertex p0, Vertex p1, Vertex p2)
         => ((p0.X - p2.X) * (p1.Y - p2.Y)) - ((p1.X - p2.X) * (p0.Y - p2.Y));
+
+    /// <summary>
+    /// Computes the robust signed area (actually twice the area) of the triangle defined by the three vertices.
+    /// The sign indicates the orientation (positive for counterclockwise, negative for clockwise).
+    /// </summary>
+    /// <param name="p0">The first point.</param>
+    /// <param name="p1">The second point.</param>
+    /// <param name="p2">The third point.</param>
+    /// <returns>The <see cref="double"/> area.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double SignedArea(Vertex p0, Vertex p1, Vertex p2)
+    {
+        // Fast computation in double precision:
+        double det = ((p1.X - p0.X) * (p2.Y - p0.Y)) - ((p1.Y - p0.Y) * (p2.X - p0.X));
+
+        // If the determinant is clearly non-zero, return it.
+        const double tolerance = 1e-12;
+        if (Math.Abs(det) > tolerance)
+        {
+            return det;
+        }
+
+        // If the value is near zero, recompute using higher-precision arithmetic.
+        decimal ax = (decimal)p0.X, ay = (decimal)p0.Y;
+        decimal bx = (decimal)p1.X, by = (decimal)p1.Y;
+        decimal cx = (decimal)p2.X, cy = (decimal)p2.Y;
+        decimal detDec = ((bx - ax) * (cy - ay)) - ((by - ay) * (cx - ax));
+
+        return (double)detDec;
+    }
 
     /// <summary>
     /// Finds the intersection of two line segments, constraining results to their intersection bounding box.

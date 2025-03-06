@@ -216,17 +216,15 @@ public class PolygonClipper
                 sweepEvent = sweepEvent.OtherEvent;
                 int it = sweepEvent.PosSL;
                 prevEvent = statusLine.Prev(it);
-
-                statusLine.RemoveAt(it);
-
-                // Shift `next` to account for the removal
-                nextEvent = statusLine.Next(it - 1);
+                nextEvent = statusLine.Next(it);
 
                 // Check intersection between neighbors
                 if (prevEvent != null && nextEvent != null)
                 {
                     _ = PossibleIntersection(prevEvent, nextEvent, eventQueue);
                 }
+
+                statusLine.RemoveAt(it);
             }
         }
 
@@ -243,7 +241,7 @@ public class PolygonClipper
     /// <param name="operation">The boolean operation being performed.</param>
     /// <param name="result">The resulting polygon if the operation is trivial.</param>
     /// <returns>
-    /// <see langword="true"/> if the operation results in a trivial case due to zero contours; 
+    /// <see langword="true"/> if the operation results in a trivial case due to zero contours;
     /// otherwise, <see langword="false"/>.
     /// </returns>
     private static bool TryTrivialOperationForEmptyPolygons(
@@ -359,25 +357,13 @@ public class PolygonClipper
         e1.ContourId = e2.ContourId = contourId;
 
         // Determine which endpoint is the left endpoint
-        //if (s.Min == s.Source)
-        //{
-        //    e2.Left = false;
-        //}
-        //else if (s.Min == s.Target)
-        //{
-        //    e1.Left = false;
-        //}
-        //else
+        if (eventQueue.Comparer.Compare(e1, e2) < 0)
         {
-            // As a fallback, use the comparator for floating-point precision issues
-            if (eventQueue.Comparer.Compare(e1, e2) < 0)
-            {
-                e2.Left = false;
-            }
-            else
-            {
-                e1.Left = false;
-            }
+            e2.Left = false;
+        }
+        else
+        {
+            e1.Left = false;
         }
 
         min = Vertex.Min(min, s.Min);
@@ -706,7 +692,7 @@ public class PolygonClipper
         {
             // TODO: enabling this line makes a single test issue76.geojson fail.
             // The files are different in the two reference repositories but both fail.
-            // p = new Vertex(NextAfter(p.X, true), p.Y);
+            p = new Vertex(p.X.NextAfter(double.PositiveInfinity), p.Y);
         }
 
         // Create the right event for the left segment (new right endpoint)
@@ -733,34 +719,6 @@ public class PolygonClipper
         // Add the new events to the event queue
         eventQueue.Enqueue(l);
         eventQueue.Enqueue(r);
-    }
-
-    /// <summary>
-    /// Returns the next representable double-precision floating-point value in the given direction.
-    /// <see href="https://docs.rs/float_next_after/latest/float_next_after/trait.NextAfter.html"/>
-    /// </summary>
-    /// <param name="x">The starting double value.</param>
-    /// <param name="up">If true, moves towards positive infinity; otherwise, towards negative infinity.</param>
-    /// <returns>The next representable double in the given direction.</returns>
-    private static double NextAfter(double x, bool up)
-    {
-        if (double.IsNaN(x) || x == double.PositiveInfinity || x == double.NegativeInfinity)
-        {
-            return x; // NaN and infinity stay the same
-        }
-
-        // Convert double to its IEEE 754 bit representation
-        long bits = BitConverter.DoubleToInt64Bits(x);
-        if (up)
-        {
-            bits += (bits >= 0) ? 1 : -1; // Increase magnitude
-        }
-        else
-        {
-            bits += (bits > 0) ? -1 : 1; // Decrease magnitude
-        }
-
-        return BitConverter.Int64BitsToDouble(bits);
     }
 
     /// <summary>

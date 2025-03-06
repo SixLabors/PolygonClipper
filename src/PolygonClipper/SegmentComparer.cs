@@ -52,46 +52,62 @@ internal sealed class SegmentComparer : IComparer<SweepEvent>, IComparer
                 return x.Point.Y < y.Point.Y ? -1 : 1;
             }
 
-            // Has the line segment associated to "x" been inserted into the segment after the line
-            // segment associated to "y"?
-            // Use the sweep event order to determine the comparison
-            int compResult = this.eventComparer.Compare(x, y);
-            if (compResult == 1)
+            // If `x` and `y` lie on the same side of the reference segment,
+            // no intersection check is necessary.
+            if ((area1 > 0) == (area2 > 0))
             {
-                return y.Above(x.Point) ? -1 : 1;
+                return area1 > 0 ? -1 : 1;
             }
 
-            // The line segment associated with "y" has been inserted after "x"
-            return x.Below(y.Point) ? -1 : 1;
-        }
-
-        // JavaScript comparer is different to C++
-        if (x.PolygonType == y.PolygonType) // Same polygon
-        {
-            Vertex p1 = x.Point;
-            Vertex p2 = y.Point;
-
-            if (p1 == p2) // Points are the same
+            // If `x` lies on the reference segment, compare based on `y`.
+            if (area1 == 0)
             {
-                // Compare the other endpoints of the segments
-                p1 = x.OtherEvent.Point;
-                p2 = y.OtherEvent.Point;
+                return area2 > 0 ? -1 : 1;
+            }
 
-                if (p1 == p2) // Other endpoints are also the same
+            // Form segments from the events.
+            Segment seg0 = new(x.Point, x.OtherEvent.Point);
+            Segment seg1 = new(y.Point, y.OtherEvent.Point);
+
+            // Call the provided intersection method.
+            int interResult = PolygonUtilities.FindIntersection(seg0, seg1, out Vertex pi0, out Vertex _);
+
+            if (interResult == 0)
+            {
+                // No unique intersection found: decide based on area1.
+                return (area1 > 0) ? -1 : 1;
+            }
+            else if (interResult == 1)
+            {
+                // Unique intersection found.
+                if (pi0 == y.Point)
                 {
-                    return 0;
+                    return (area2 > 0) ? -1 : 1;
                 }
 
-                return x.ContourId > y.ContourId ? 1 : -1;
+                return (area1 > 0) ? -1 : 1;
             }
-        }
-        else // Segments are collinear but belong to separate polygons
-        {
-            return x.PolygonType == PolygonType.Subject ? -1 : 1;
+
+            // If interResult is neither 0 nor 1, fall through to collinear logic.
         }
 
-        // Fall back to the sweep event comparator for final comparison
-        return this.eventComparer.Compare(x, y) == 1 ? 1 : -1;
+        // Collinear branch – mimicking the Rust logic:
+        if (x.PolygonType == y.PolygonType)
+        {
+            // Both segments belong to the same polygon.
+            if (x.Point == y.Point)
+            {
+                // When left endpoints are identical, order by contour id.
+                return (x.ContourId < y.ContourId) ? -1 : 1;
+            }
+
+            // If left endpoints differ, the Rust version simply returns "less" (i.e. the one inserted earlier).
+            // Here we mimic that by always returning -1.
+            return -1;
+        }
+
+        // Segments are collinear but belong to different polygons.
+        return (x.PolygonType == PolygonType.Subject) ? -1 : 1;
     }
 
     /// <inheritdoc/>
