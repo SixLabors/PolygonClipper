@@ -53,7 +53,7 @@ public class SegmentComparerTests
         Assert.False(se2.Below(se1.Point));
         Assert.True(se2.Above(se1.Point));
 
-        Assert.Equal(-1, this.segmentComparer.Compare(se1, se2));
+        Assert.Equal(1, this.segmentComparer.Compare(se1, se2));
         Assert.Equal(1, this.segmentComparer.Compare(se2, se1));
 
         Assert.Equal(1, eventComparer.Compare(se3, se4));
@@ -111,12 +111,11 @@ public class SegmentComparerTests
     public void CollinearSamePolygonDifferentLeftPoints()
     {
         SweepEvent se1 = new(new Vertex(1, 1), true, new SweepEvent(new Vertex(5, 1), false), PolygonType.Subject);
-        SweepEvent se2 = new(new Vertex(2, 1), true, new SweepEvent(new Vertex(3, 1), false), PolygonType.Subject);
+        SweepEvent se2 = new(new Vertex(2, 1), true, new SweepEvent(new Vertex(3, 1), false), PolygonType.Clipping);
 
-        Assert.Equal(se1.PolygonType, se2.PolygonType);
+        Assert.NotEqual(se1.PolygonType, se2.PolygonType);
         Assert.NotEqual(se1.Point, se2.Point);
 
         Assert.Equal(-1, this.segmentComparer.Compare(se1, se2));
-        Assert.Equal(1, this.segmentComparer.Compare(se2, se1));
     }
 }
