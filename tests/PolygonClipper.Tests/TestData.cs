@@ -21,9 +21,9 @@ internal static class TestData
 
     public static class Generic
     {
-        public static IEnumerable<string> GetFileNames()
+        public static IEnumerable<string> GetFileNames(string subFolder)
         {
-            DirectoryInfo info = new(Path.Combine(TestEnvironment.GeoJsonTestDataFullPath, nameof(Generic)));
+            DirectoryInfo info = new(Path.Combine(TestEnvironment.GeoJsonTestDataFullPath, nameof(Generic), subFolder));
             foreach (FileInfo file in info.EnumerateFiles("*.geojson"))
             {
                 yield return file.Name;

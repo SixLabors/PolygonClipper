@@ -15,8 +15,10 @@ namespace PolygonClipper.Tests;
 
 public class GenericTestCases
 {
-    public static IEnumerable<object[]> GetTestCases()
-        => TestData.Generic.GetFileNames().Select(x => new object[] { x });
+    public static IEnumerable<object[]> GetTestCasesJs()
+        => TestData.Generic.GetFileNames("js").Select(x => new object[] { x });
+    public static IEnumerable<object[]> GetTestCasesRust()
+        => TestData.Generic.GetFileNames("rust").Select(x => new object[] { x });
 
     [Fact]
     public Polygon Profile()
@@ -34,8 +36,8 @@ public class GenericTestCases
     }
 
     [Theory]
-    [MemberData(nameof(GetTestCases))]
-    public void GenericTestCase(string testCaseFile)
+    [MemberData(nameof(GetTestCasesRust))]
+    public void GenericTestCaseRust(string testCaseFile)
     {
         // Arrange
         FeatureCollection data = TestData.Generic.GetFeatureCollection(testCaseFile);
@@ -51,6 +53,54 @@ public class GenericTestCases
 #pragma warning disable RCS1124 // Inline local variable
         List<ExpectedResult> expectedResults = ExtractExpectedResults(data.Features.Skip(2).ToList(), data.Type);
 #pragma warning restore RCS1124 // Inline local variable
+
+        // ExpectedResult result = expectedResults[1];
+        // Polygon actual = result.Operation(subject, clipping);
+        // Assert.Equal(result.Coordinates.ContourCount, actual.ContourCount);
+
+        foreach (ExpectedResult result in expectedResults)
+        {
+            Polygon expected = result.Coordinates;
+            Polygon actual = result.Operation(subject, clipping);
+
+            Assert.Equal(expected.ContourCount, actual.ContourCount);
+            for (int i = 0; i < expected.ContourCount; i++)
+            {
+                // We don't test for holes here as the reference tests do not do so.
+                Assert.Equal(expected[i].VertexCount, actual[i].VertexCount);
+                for (int j = 0; j < expected[i].VertexCount; j++)
+                {
+                    Vertex expectedVertex = expected[i].GetVertex(j);
+                    Vertex actualVertex = actual[i].GetVertex(j);
+                    Assert.Equal(expectedVertex.X, actualVertex.X, 3);
+                    Assert.Equal(expectedVertex.Y, actualVertex.Y, 3);
+                }
+            }
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(GetTestCasesJs))]
+    public void GenericTestCaseJs(string testCaseFile)
+    {
+        // Arrange
+        FeatureCollection data = TestData.Generic.GetFeatureCollection(testCaseFile);
+
+        Assert.True(data.Features.Count >= 2, "Test case file must contain at least two features.");
+
+        IGeometryObject subjectGeometry = data.Features[0].Geometry;
+        IGeometryObject clippingGeometry = data.Features[1].Geometry;
+
+        Polygon subject = ConvertToPolygon(subjectGeometry);
+        Polygon clipping = ConvertToPolygon(clippingGeometry);
+
+#pragma warning disable RCS1124 // Inline local variable
+        List<ExpectedResult> expectedResults = ExtractExpectedResults(data.Features.Skip(2).ToList(), data.Type);
+#pragma warning restore RCS1124 // Inline local variable
+
+        // ExpectedResult result = expectedResults[1];
+        // Polygon actual = result.Operation(subject, clipping);
+        // Assert.Equal(result.Coordinates.ContourCount, actual.ContourCount);
 
         foreach (ExpectedResult result in expectedResults)
         {
@@ -89,12 +139,10 @@ public class GenericTestCases
 
                 polygon.Push(contour);
 
-                bool isLinear = ring.IsLinearRing();
-
-                if (!ring.IsClosed())
-                {
-                      contour.AddVertex(contour.GetVertex(0));
-                }
+                // if (!ring.IsClosed())
+                // {
+                //     contour.AddVertex(contour.GetVertex(0));
+                // }
             }
 
             return polygon;
