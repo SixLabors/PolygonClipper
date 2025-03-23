@@ -88,6 +88,13 @@ public class GenericTestCases
                 }
 
                 polygon.Push(contour);
+
+                bool isLinear = ring.IsLinearRing();
+
+                if (!ring.IsClosed())
+                {
+                      contour.AddVertex(contour.GetVertex(0));
+                }
             }
 
             return polygon;
