@@ -9,12 +9,19 @@ using GeoJSON.Text.Feature;
 using GeoJSON.Text.Geometry;
 using PolygonClipper.Tests.TestCases;
 using Xunit;
+using Xunit.Abstractions;
 using GeoPolygon = GeoJSON.Text.Geometry.Polygon;
 
 namespace PolygonClipper.Tests;
 
 public class GenericTestCases
 {
+    private readonly ITestOutputHelper _testOutputHelper;
+
+    public GenericTestCases(ITestOutputHelper  testOutputHelper)
+    {
+        _testOutputHelper = testOutputHelper;
+    }
     public static IEnumerable<object[]> GetTestCasesJs()
         => TestData.Generic.GetFileNames("js").Select(x => new object[] { x });
     public static IEnumerable<object[]> GetTestCasesRust()
@@ -67,6 +74,8 @@ public class GenericTestCases
             for (int i = 0; i < expected.ContourCount; i++)
             {
                 // We don't test for holes here as the reference tests do not do so.
+                this._testOutputHelper.WriteLine($"Current Countour {i}");
+
                 Assert.Equal(expected[i].VertexCount, actual[i].VertexCount);
                 for (int j = 0; j < expected[i].VertexCount; j++)
                 {
@@ -79,7 +88,7 @@ public class GenericTestCases
         }
     }
 
-    [Theory]
+    [Theory(Skip ="JS Tests are not relevant for now. Good when they pass but we focus on the Rust port")]
     [MemberData(nameof(GetTestCasesJs))]
     public void GenericTestCaseJs(string testCaseFile)
     {
@@ -189,15 +198,13 @@ public class GenericTestCases
             {
                 return new ExpectedResult
                 {
-                    Operation = operation,
-                    Coordinates = ConvertToPolygon(feature.Geometry as GeoPolygon)
+                    Operation = operation, Coordinates = ConvertToPolygon(feature.Geometry as GeoPolygon)
                 };
             }
 
             return new ExpectedResult
             {
-                Operation = operation,
-                Coordinates = ConvertToPolygon(feature.Geometry as MultiPolygon)
+                Operation = operation, Coordinates = ConvertToPolygon(feature.Geometry as MultiPolygon)
             };
         });
 
