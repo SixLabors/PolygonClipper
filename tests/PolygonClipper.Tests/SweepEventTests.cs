@@ -49,7 +49,7 @@ public class SweepEventTests
     public void IsVertical()
     {
         // Act & Assert
-        Assert.True(new SweepEvent(new Vertex(0, 0), true, new SweepEvent(new Vertex(0, 1), false)).Vertical());
-        Assert.False(new SweepEvent(new Vertex(0, 0), true, new SweepEvent(new Vertex(0.0001F, 1), false)).Vertical());
+        Assert.True(new SweepEvent(new Vertex(0, 0), true, new SweepEvent(new Vertex(0, 1), false)).Vertical);
+        Assert.False(new SweepEvent(new Vertex(0, 0), true, new SweepEvent(new Vertex(0.0001F, 1), false)).Vertical);
     }
 }

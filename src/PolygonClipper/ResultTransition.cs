@@ -9,17 +9,17 @@ namespace PolygonClipper;
 public enum ResultTransition
 {
     /// <summary>
-    /// The event does not contribute to the result.
-    /// </summary>
-    NonContributing = -1,
-
-    /// <summary>
     /// The event transitions within the result.
     /// </summary>
     Neutral = 0,
 
     /// <summary>
+    /// The event does not contribute to the result.
+    /// </summary>
+    NonContributing = 1,
+
+    /// <summary>
     /// The event contributes to the result.
     /// </summary>
-    Contributing = 1
+    Contributing = 2
 }
