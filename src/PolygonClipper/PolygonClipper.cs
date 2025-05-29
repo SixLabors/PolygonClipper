@@ -153,8 +153,7 @@ public class PolygonClipper
         }
 
         Box2 clippingBB = new(min, max);
-        if (TryTrivialOperationForNonOverlappingBoundingBoxes(subject, clipping, subjectBB, clippingBB, operation,
-                out result))
+        if (TryTrivialOperationForNonOverlappingBoundingBoxes(subject, clipping, subjectBB, clippingBB, operation, out result))
         {
             return result;
         }
@@ -742,7 +741,7 @@ public class PolygonClipper
         for (int i = 0; i < sortedEvents.Count; i++)
         {
             SweepEvent se = sortedEvents[i];
-            if ((se.Left && se.InResult))
+            if (se.Left && se.InResult)
             {
                 resultEvents.Add(se);
             }
@@ -830,7 +829,6 @@ public class PolygonClipper
         }
 
         Polygon polygon = new();
-
 
         for (int i = 0; i < result.ContourCount; i++)
         {
