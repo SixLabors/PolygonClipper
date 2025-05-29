@@ -130,14 +130,6 @@ internal sealed class SweepEvent
     public bool InResult => this.ResultTransition != ResultTransition.Neutral;
 
     /// <summary>
-    /// Gets a value indicating whether the line segment (point, otherEvent->point) is a vertical line segment.
-    /// </summary>
-    /// <returns>
-    /// <see langword="true"/> if the line segment is vertical; otherwise <see langword="false"/>.
-    /// </returns>
-    public bool Vertical => this.Point.X == this.OtherEvent.Point.X;
-
-    /// <summary>
     /// Gets or sets the position of the event in the sorted events.
     /// </summary>
     public int Pos { get; set; }
@@ -174,6 +166,15 @@ internal sealed class SweepEvent
     /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Above(Vertex p) => !this.Below(p);
+
+    /// <summary>
+    /// Is the line segment (point, otherEvent->point) a vertical line segment.
+    /// </summary>
+    /// <returns>
+    /// <see langword="true"/> if the line segment is vertical; otherwise <see langword="false"/>.
+    /// </returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool Vertical() => this.Point.X == this.OtherEvent.Point.X;
 
     /// <summary>
     /// Returns the segment associated with the sweep event.

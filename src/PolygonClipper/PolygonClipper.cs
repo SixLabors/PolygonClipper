@@ -137,11 +137,11 @@ public class PolygonClipper
         // Process all segments in the clipping polygon
         min = new Vertex(double.PositiveInfinity);
         max = new Vertex(double.NegativeInfinity);
-
         for (int i = 0; i < clipping.ContourCount; i++)
         {
             Contour contour = clipping[i];
-            if (operation != BooleanOperation.Difference)
+            bool exterior = operation != BooleanOperation.Difference;
+            if (exterior)
             {
                 contourId++;
             }
@@ -153,7 +153,8 @@ public class PolygonClipper
         }
 
         Box2 clippingBB = new(min, max);
-        if (TryTrivialOperationForNonOverlappingBoundingBoxes(subject, clipping, subjectBB, clippingBB, operation, out result))
+        if (TryTrivialOperationForNonOverlappingBoundingBoxes(subject, clipping, subjectBB, clippingBB, operation,
+                out result))
         {
             return result;
         }
@@ -392,10 +393,6 @@ public class PolygonClipper
         {
             le.InOut = false;
             le.OtherInOut = true;
-
-            // Clearing the previous result is necessary for recomputing the result.
-            // if the first computation has set the result it is not valid anymore.
-            le.PrevInResult = null;
         }
         else if (le.PolygonType == prev.PolygonType)
         {
@@ -407,28 +404,15 @@ public class PolygonClipper
         {
             // Previous line segment in sl belongs to a different polygon that "se" belongs to.
             le.InOut = !prev.OtherInOut;
-            le.OtherInOut = prev.Vertical ? !prev.InOut : prev.InOut;
+            le.OtherInOut = prev.Vertical() ? !prev.InOut : prev.InOut;
         }
 
-        // Connect to previous in result: Only use the given `prev` if it is
-        // part of the result and not a vertical segment. Otherwise connect
-        // to its previous in result if any.
+        // Compute PrevInResult field
         if (prev != null)
         {
-            if (prev.InResult && !prev.Vertical)
-            {
-                le.PrevInResult = prev;
-            }
-            else if (prev.PrevInResult != null)
-            {
-                le.PrevInResult = prev.PrevInResult;
-            }
-            else
-            {
-                // Clearing the previous result is necessary for recomputing the result.
-                // if the first computation has set the result it is not valid anymore.
-                le.PrevInResult = null;
-            }
+            le.PrevInResult = (!InResult(prev, operation) || prev.Vertical())
+                ? prev.PrevInResult
+                : prev;
         }
 
         // Check if the line segment belongs to the Boolean operation
@@ -758,9 +742,11 @@ public class PolygonClipper
         for (int i = 0; i < sortedEvents.Count; i++)
         {
             SweepEvent se = sortedEvents[i];
-            bool include = (se.Left && se.InResult) || (!se.Left && se.OtherEvent.InResult);
-
-            if (include)
+            if ((se.Left && se.InResult))
+            {
+                resultEvents.Add(se);
+            }
+            else if (!se.Left && se.OtherEvent.InResult)
             {
                 resultEvents.Add(se);
             }
@@ -844,6 +830,7 @@ public class PolygonClipper
         }
 
         Polygon polygon = new();
+
 
         for (int i = 0; i < result.ContourCount; i++)
         {
