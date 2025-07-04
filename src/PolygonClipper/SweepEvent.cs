@@ -177,6 +177,26 @@ internal sealed class SweepEvent
     public bool Vertical() => this.Point.X == this.OtherEvent.Point.X;
 
     /// <summary>
+    /// Determines if this sweep event comes before another sweep event.
+    /// </summary>
+    /// <param name="other">The other sweep event to compare with.</param>
+    /// <returns>
+    /// <see langword="true"/> if this event comes before the other; otherwise <see langword="false"/>.
+    /// </returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool IsBefore(SweepEvent other)
+    {
+        // Compare by x-coordinate first
+        if (this.Point.X != other.Point.X)
+        {
+            return this.Point.X < other.Point.X;
+        }
+
+        // If x-coordinates are equal, compare by y-coordinate
+        return this.Point.Y < other.Point.Y;
+    }
+
+    /// <summary>
     /// Returns the segment associated with the sweep event.
     /// </summary>
     /// <returns>The <see cref="Segment"/>.</returns>

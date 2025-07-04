@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using Xunit;
 
 namespace PolygonClipper.Tests;
+
 public class SegmentComparerTests
 {
     private readonly SegmentComparer segmentComparer = new();
@@ -53,8 +54,7 @@ public class SegmentComparerTests
         Assert.False(se2.Below(se1.Point));
         Assert.True(se2.Above(se1.Point));
 
-        Assert.Equal(1, this.segmentComparer.Compare(se1, se2));
-        Assert.Equal(1, this.segmentComparer.Compare(se2, se1));
+        AssertOrder(se1,se2, Ordering.Less);
 
         Assert.Equal(1, eventComparer.Compare(se3, se4));
         Assert.False(se4.Above(se3.Point));
@@ -117,5 +117,86 @@ public class SegmentComparerTests
         Assert.NotEqual(se1.Point, se2.Point);
 
         Assert.Equal(-1, this.segmentComparer.Compare(se1, se2));
+    }
+
+    [Fact]
+    public void TShapedCases()
+    {
+        // shape:  /
+        //        /\
+        var (se1, _) = this.MakeSimple(0, 0.0, 0.0, 1.0, 1.0, true);
+        var (se2, _) = this.MakeSimple(0, 0.5, 0.5, 1.0, 0.0, true);
+        this.AssertOrder(se1, se2, Ordering.Greater);
+
+        // shape: \/
+        //         \
+        (se1, _) = this.MakeSimple(0, 0.0, 1.0, 1.0, 0.0, true);
+        (se2, _) = this.MakeSimple(0, 0.5, 0.5, 1.0, 1.0, true);
+        this.AssertOrder(se1, se2, Ordering.Less);
+
+        // shape: T
+        (se1, _) = this.MakeSimple(0, 0.0, 1.0, 1.0, 1.0, true);
+        (se2, _) = this.MakeSimple(0, 0.5, 0.0, 0.5, 1.0, true);
+        this.AssertOrder(se1, se2, Ordering.Greater);
+
+        // shape: T upside down
+        (se1, _) = this.MakeSimple(0, 0.0, 0.0, 1.0, 0.0, true);
+        (se2, _) = this.MakeSimple(0, 0.5, 0.0, 0.5, 1.0, true);
+        this.AssertOrder(se1, se2, Ordering.Less);
+    }
+
+    [Fact]
+    public void VerticalSegment()
+    {
+        // Vertikales Referenzsegment bei x = 0, von y = -1 bis +1
+        var (se1, _) = this.MakeSimple(0, 0.0, -1.0, 0.0, 1.0, true);
+
+        // "above" Fälle
+        this.AssertOrder(se1, this.MakeSimple(0, -1.0, 1.0, 0.0, 1.0, true).se1, Ordering.Less);
+        this.AssertOrder(se1, this.MakeSimple(0, 0.0, 1.0, 1.0, 1.0, true).se1, Ordering.Less);
+        this.AssertOrder(se1, this.MakeSimple(0, -1.0, 2.0, 0.0, 2.0, true).se1, Ordering.Less);
+        this.AssertOrder(se1, this.MakeSimple(0, 0.0, 2.0, 1.0, 2.0, true).se1, Ordering.Less);
+        this.AssertOrder(se1, this.MakeSimple(0, 0.0, 1.0, 0.0, 2.0, true).se1, Ordering.Less);
+
+        // "below" Fälle
+        this.AssertOrder(se1, this.MakeSimple(0, -1.0, -1.0, 0.0, -1.0, true).se1, Ordering.Greater);
+        this.AssertOrder(se1, this.MakeSimple(0, 0.0, -1.0, 1.0, -1.0, true).se1, Ordering.Greater);
+        this.AssertOrder(se1, this.MakeSimple(0, -1.0, -2.0, 0.0, -2.0, true).se1, Ordering.Greater);
+        this.AssertOrder(se1, this.MakeSimple(0, 0.0, -2.0, 1.0, -2.0, true).se1, Ordering.Greater);
+        this.AssertOrder(se1, this.MakeSimple(0, 0.0, -2.0, 0.0, -1.0, true).se1, Ordering.Greater);
+
+        // Überlappungen
+        this.AssertOrder(se1, this.MakeSimple(0, 0.0, -0.5, 0.0, 0.5, true).se1, Ordering.Less);
+        // Der folgende Fall ist im Rust-Test auskommentiert, da die Ordnung nicht anti-symmetrisch ist.
+        // this.AssertOrder(se1, this.MakeSimple(0, 0.0, -1.0, 0.0, 0.0, true).se1, Ordering.Less);
+    }
+
+    private (SweepEvent se1, SweepEvent se2) MakeSimple(int contourId, double x1, double y1, double x2, double y2,
+        bool left)
+    {
+        Vertex v1 = new Vertex(x1, y1);
+        Vertex v2 = new Vertex(x2, y2);
+        SweepEvent se2 = new SweepEvent(v2, !left);
+        SweepEvent se1 = new SweepEvent(v1, left, se2) { ContourId = contourId };
+        se2.OtherEvent = se1;
+        se2.ContourId = contourId;
+
+
+
+
+        return (se1, se2);
+    }
+
+    private void AssertOrder(SweepEvent se1, SweepEvent se2, Ordering order)
+    {
+        Ordering inverseOrder = order == Ordering.Less ? Ordering.Greater : Ordering.Less;
+        Assert.Equal((int)order, this.segmentComparer.Compare(se1, se2));
+        Assert.Equal((int)inverseOrder, this.segmentComparer.Compare(se2, se1));
+    }
+
+    public enum Ordering
+    {
+        Less = -1,
+        Greater = 1,
     }
 }
