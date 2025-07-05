@@ -33,57 +33,57 @@ internal sealed class SegmentComparer : IComparer<SweepEvent>, IComparer
             return 1;
         }
 
-        SweepEvent se_old_l, se_new_l;
-        Func<bool, int> less_if;
+        SweepEvent perhapsInversedX, perhapsInversedY;
+        Func<bool, int> lessIf;
 
         if (x.IsBefore(y))
         {
-            se_old_l = x;
-            se_new_l = y;
-            less_if = Helper.LessIf;
+            perhapsInversedX = x;
+            perhapsInversedY = y;
+            lessIf = LessIf;
         }
         else
         {
-            se_old_l = y;
-            se_new_l = x;
-            less_if = Helper.LessIfInversed;
+            perhapsInversedX = y;
+            perhapsInversedY = x;
+            lessIf = LessIfInversed;
         }
 
         // Check if the segments are collinear by comparing their signed areas
-        double area1 = PolygonUtilities.SignedArea(se_old_l.Point, se_old_l.OtherEvent.Point, se_new_l.Point);
-        double area2 = PolygonUtilities.SignedArea(se_old_l.Point, se_old_l.OtherEvent.Point, se_new_l.OtherEvent.Point);
+        double area1 = PolygonUtilities.SignedArea(perhapsInversedX.Point, perhapsInversedX.OtherEvent.Point, perhapsInversedY.Point);
+        double area2 = PolygonUtilities.SignedArea(perhapsInversedX.Point, perhapsInversedX.OtherEvent.Point, perhapsInversedY.OtherEvent.Point);
 
         if (area1 != 0 || area2 != 0)
         {
             // Segments are not collinear
             // If they share their left endpoint, use the right endpoint to sort
-            if (se_old_l.Point == se_new_l.Point)
+            if (perhapsInversedX.Point == perhapsInversedY.Point)
             {
-                return less_if(se_old_l.Below(se_new_l.OtherEvent.Point));
+                return lessIf(perhapsInversedX.Below(perhapsInversedY.OtherEvent.Point));
             }
 
             // Different left endpoints: use the y-coordinate to sort if x-coordinates are the same
-            if (se_old_l.Point.X == se_new_l.Point.X)
+            if (perhapsInversedX.Point.X == perhapsInversedY.Point.X)
             {
-                return less_if(se_old_l.Point.Y < se_new_l.Point.Y);
+                return lessIf(perhapsInversedX.Point.Y < perhapsInversedY.Point.Y);
             }
 
             // If `x` and `y` lie on the same side of the reference segment,
             // no intersection check is necessary.
             if ((area1 > 0) == (area2 > 0))
             {
-                return less_if(area1 > 0);
+                return lessIf(area1 > 0);
             }
 
             // If `x` lies on the reference segment, compare based on `y`.
             if (area1 == 0)
             {
-                return less_if(area2 > 0);
+                return lessIf(area2 > 0);
             }
 
             // Form segments from the events.
-            Segment seg0 = new(se_old_l.Point, se_old_l.OtherEvent.Point);
-            Segment seg1 = new(se_new_l.Point, se_new_l.OtherEvent.Point);
+            Segment seg0 = new(perhapsInversedX.Point, perhapsInversedX.OtherEvent.Point);
+            Segment seg1 = new(perhapsInversedY.Point, perhapsInversedY.OtherEvent.Point);
 
             // Call the provided intersection method.
             int interResult = PolygonUtilities.FindIntersection(seg0, seg1, out Vertex pi0, out Vertex _);
@@ -91,39 +91,39 @@ internal sealed class SegmentComparer : IComparer<SweepEvent>, IComparer
             if (interResult == 0)
             {
                 // No unique intersection found: decide based on area1.
-                return less_if(area1 > 0);
+                return lessIf(area1 > 0);
             }
             else if (interResult == 1)
             {
                 // Unique intersection found.
                 if (pi0 == y.Point)
                 {
-                    return less_if(area2 > 0);
+                    return lessIf(area2 > 0);
                 }
 
-                return less_if(area1 > 0);
+                return lessIf(area1 > 0);
             }
 
             // If interResult is neither 0 nor 1, fall through to collinear logic.
         }
 
         // Collinear branch – mimicking the Rust logic:
-        if (se_old_l.PolygonType == se_new_l.PolygonType)
+        if (perhapsInversedX.PolygonType == perhapsInversedY.PolygonType)
         {
             // Both segments belong to the same polygon.
-            if (se_old_l.Point == se_new_l.Point)
+            if (perhapsInversedX.Point == perhapsInversedY.Point)
             {
                 // When left endpoints are identical, order by contour id.
-                return less_if(se_old_l.ContourId < se_new_l.ContourId);
+                return lessIf(perhapsInversedX.ContourId < perhapsInversedY.ContourId);
             }
 
             // If left endpoints differ, the Rust version simply returns "less" (i.e. the one inserted earlier).
             // Here we mimic that by always returning -1.
-            return less_if(true);
+            return lessIf(true);
         }
 
         // Segments are collinear but belong to different polygons.
-        return less_if(se_old_l.PolygonType == PolygonType.Subject);
+        return lessIf(perhapsInversedX.PolygonType == PolygonType.Subject);
     }
 
     /// <inheritdoc/>
@@ -146,4 +146,20 @@ internal sealed class SegmentComparer : IComparer<SweepEvent>, IComparer
 
         throw new ArgumentException("Both arguments must be of type SweepEvent.", nameof(x));
     }
+
+    /// <summary>
+    /// Converts a boolean comparison result to an ordering value.
+    /// Returns -1 if the condition is true, 1 if false.
+    /// </summary>
+    /// <param name="condition">The boolean condition to evaluate.</param>
+    /// <returns>-1 if condition is true, 1 if false.</returns>
+    public static int LessIf(bool condition) => condition ? -1 : 1;
+
+    /// <summary>
+    /// Converts a boolean comparison result to an inversed ordering value.
+    /// Returns 1 if the condition is true, -1 if false.
+    /// </summary>
+    /// <param name="condition">The boolean condition to evaluate.</param>
+    /// <returns>1 if condition is true, -1 if false.</returns>
+    public static int LessIfInversed(bool condition) => condition ? 1 : -1;
 }
