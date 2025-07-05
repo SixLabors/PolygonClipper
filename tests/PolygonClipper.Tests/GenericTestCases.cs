@@ -148,10 +148,10 @@ public class GenericTestCases
 
                 polygon.Push(contour);
 
-                // if (!ring.IsClosed())
-                // {
-                //     contour.AddVertex(contour.GetVertex(0));
-                // }
+                if (!ring.IsClosed())
+                {
+                    contour.AddVertex(contour.GetVertex(0));
+                }
             }
 
             return polygon;
