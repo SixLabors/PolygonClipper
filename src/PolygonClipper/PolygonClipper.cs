@@ -120,7 +120,11 @@ public class PolygonClipper
         // Process all segments in the subject polygon
         Vertex min = new(double.PositiveInfinity);
         Vertex max = new(double.NegativeInfinity);
-        StablePriorityQueue<SweepEvent, SweepEventComparer> eventQueue = new(new SweepEventComparer());
+
+        int subjectSegments = subject.ContourCount > 0 ? subject[0].VertexCount - 1 : 0;
+        int clippingSegments = clipping.ContourCount > 0 ? clipping[0].VertexCount - 1 : 0;
+        int estimatedEventCount = 2 * (subjectSegments + clippingSegments);
+        StablePriorityQueue<SweepEvent, SweepEventComparer> eventQueue = new(new SweepEventComparer(), estimatedEventCount);
         int contourId = 0;
         for (int i = 0; i < subject.ContourCount; i++)
         {

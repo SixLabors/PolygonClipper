@@ -4,6 +4,8 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace PolygonClipper;
 
@@ -16,19 +18,25 @@ namespace PolygonClipper;
 internal sealed class StablePriorityQueue<T, TComparer>
     where TComparer : IComparer<T>
 {
-    private readonly List<T> heap = [];
+    private T[] heap;
+    private int count;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="StablePriorityQueue{T, TComparer}"/> class with a specified comparer.
+    /// Initializes a new instance of the <see cref="StablePriorityQueue{T, TComparer}"/> class with a specified comparer and initial capacity.
     /// </summary>
     /// <param name="comparer">The comparer to determine the priority of the elements.</param>
-    public StablePriorityQueue(TComparer comparer)
-        => this.Comparer = comparer ?? throw new ArgumentNullException(nameof(comparer));
+    /// <param name="capacity">The initial capacity of the priority queue.</param>
+    public StablePriorityQueue(TComparer comparer, int capacity = 4)
+    {
+        this.Comparer = comparer ?? throw new ArgumentNullException(nameof(comparer));
+        this.heap = new T[Math.Max(capacity, 4)];
+        this.count = 0;
+    }
 
     /// <summary>
     /// Gets the number of elements in the priority queue.
     /// </summary>
-    public int Count => this.heap.Count;
+    public int Count => this.count;
 
     /// <summary>
     /// Gets the comparer used to determine the priority of the elements.
@@ -39,10 +47,18 @@ internal sealed class StablePriorityQueue<T, TComparer>
     /// Adds an item to the priority queue, maintaining the heap property.
     /// </summary>
     /// <param name="item">The item to add.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void Enqueue(T item)
     {
-        this.heap.Add(item);
-        this.Up(this.heap.Count - 1);
+        if (this.count == this.heap.Length)
+        {
+            this.Resize();
+        }
+
+        // Direct array access without bounds checking
+        Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(this.heap), this.count) = item;
+        this.Up(this.count);
+        this.count++;
     }
 
     /// <summary>
@@ -50,76 +66,73 @@ internal sealed class StablePriorityQueue<T, TComparer>
     /// </summary>
     /// <returns>The item with the highest priority.</returns>
     /// <exception cref="InvalidOperationException">Thrown if the priority queue is empty.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public T Dequeue()
     {
-        if (this.heap.Count == 0)
+        if (this.count == 0)
         {
             throw new InvalidOperationException("Queue is empty.");
         }
 
-        T top = this.heap[0];
-        T bottom = this.heap[^1];
-        this.heap.RemoveAt(this.heap.Count - 1);
+        ref T heapRef = ref MemoryMarshal.GetArrayDataReference(this.heap);
+        T top = heapRef; // Get root element
+        this.count--;
 
-        if (this.heap.Count > 0)
+        if (this.count > 0)
         {
-            this.heap[0] = bottom;
+            // Move last element to root
+            heapRef = Unsafe.Add(ref heapRef, this.count);
+
+            // Clear the last position to avoid holding references
+            Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(this.heap), this.count) = default(T)!;
             this.Down(0);
+        }
+        else
+        {
+            // Clear the last remaining element
+            heapRef = default(T)!;
         }
 
         return top;
     }
 
     /// <summary>
-    /// Returns the item with the highest priority (lowest value) without removing it.
-    /// </summary>
-    /// <returns>The item with the highest priority.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if the priority queue is empty.</exception>
-    public T Peek()
-    {
-        if (this.heap.Count == 0)
-        {
-            throw new InvalidOperationException("Queue is empty.");
-        }
-
-        return this.heap[0];
-    }
-
-    /// <summary>
     /// Restores the heap property by moving the item at the specified index upward.
     /// </summary>
     /// <param name="index">The index of the item to move upward.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void Up(int index)
     {
-        List<T> data = this.heap;
-        T item = data[index];
+        ref T heapRef = ref MemoryMarshal.GetArrayDataReference(this.heap);
+        T item = Unsafe.Add(ref heapRef, index);
         TComparer comparer = this.Comparer;
 
         while (index > 0)
         {
             int parent = (index - 1) >> 1;
-            T current = data[parent];
-            if (comparer.Compare(item, current) >= 0)
+            ref T currentRef = ref Unsafe.Add(ref heapRef, parent);
+            if (comparer.Compare(item, currentRef) >= 0)
             {
                 break;
             }
 
-            data[index] = current;
+            Unsafe.Add(ref heapRef, index) = currentRef;
             index = parent;
         }
 
-        data[index] = item;
+        Unsafe.Add(ref heapRef, index) = item;
     }
 
     /// <summary>
     /// Restores the heap property by moving the item at the specified index downward.
     /// </summary>
     /// <param name="index">The index of the item to move downward.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void Down(int index)
     {
-        List<T> data = this.heap;
-        int halfLength = data.Count >> 1;
-        T item = data[index];
+        ref T heapRef = ref MemoryMarshal.GetArrayDataReference(this.heap);
+        int halfLength = this.count >> 1;
+        T item = Unsafe.Add(ref heapRef, index);
         TComparer comparer = this.Comparer;
 
         while (index < halfLength)
@@ -127,20 +140,31 @@ internal sealed class StablePriorityQueue<T, TComparer>
             int bestChild = (index << 1) + 1; // Initially left child
             int right = bestChild + 1;
 
-            if (right < data.Count && comparer.Compare(data[right], data[bestChild]) < 0)
+            if (right < this.count && comparer.Compare(Unsafe.Add(ref heapRef, right), Unsafe.Add(ref heapRef, bestChild)) < 0)
             {
                 bestChild = right;
             }
 
-            if (comparer.Compare(data[bestChild], item) >= 0)
+            ref T bestChildRef = ref Unsafe.Add(ref heapRef, bestChild);
+            if (comparer.Compare(bestChildRef, item) >= 0)
             {
                 break;
             }
 
-            data[index] = data[bestChild];
+            Unsafe.Add(ref heapRef, index) = bestChildRef;
             index = bestChild;
         }
 
-        data[index] = item;
+        Unsafe.Add(ref heapRef, index) = item;
+    }
+
+    /// <summary>
+    /// Resizes the internal array when capacity is exceeded.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void Resize()
+    {
+        int newCapacity = this.heap.Length * 2;
+        Array.Resize(ref this.heap, newCapacity);
     }
 }
