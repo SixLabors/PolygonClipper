@@ -9,12 +9,17 @@ using GeoJSON.Text.Feature;
 using GeoJSON.Text.Geometry;
 using PolygonClipper.Tests.TestCases;
 using Xunit;
+using Xunit.Abstractions;
 using GeoPolygon = GeoJSON.Text.Geometry.Polygon;
 
 namespace PolygonClipper.Tests;
 
 public class GenericTestCases
 {
+    private readonly ITestOutputHelper testOutputHelper;
+
+    public GenericTestCases(ITestOutputHelper testOutputHelper) => this.testOutputHelper = testOutputHelper;
+
     public static IEnumerable<object[]> GetTestCases()
         => TestData.Generic.GetFileNames().Select(x => new object[] { x });
 
@@ -52,6 +57,10 @@ public class GenericTestCases
         List<ExpectedResult> expectedResults = ExtractExpectedResults(data.Features.Skip(2).ToList(), data.Type);
 #pragma warning restore RCS1124 // Inline local variable
 
+        // ExpectedResult result = expectedResults[1];
+        // Polygon actual = result.Operation(subject, clipping);
+        // Assert.Equal(result.Coordinates.ContourCount, actual.ContourCount);
+
         foreach (ExpectedResult result in expectedResults)
         {
             Polygon expected = result.Coordinates;
@@ -61,6 +70,8 @@ public class GenericTestCases
             for (int i = 0; i < expected.ContourCount; i++)
             {
                 // We don't test for holes here as the reference tests do not do so.
+                this.testOutputHelper.WriteLine($"Current Countour {i}");
+
                 Assert.Equal(expected[i].VertexCount, actual[i].VertexCount);
                 for (int j = 0; j < expected[i].VertexCount; j++)
                 {
@@ -88,6 +99,11 @@ public class GenericTestCases
                 }
 
                 polygon.Push(contour);
+
+                if (!ring.IsClosed())
+                {
+                    contour.AddVertex(contour.GetVertex(0));
+                }
             }
 
             return polygon;
@@ -141,8 +157,7 @@ public class GenericTestCases
 
             return new ExpectedResult
             {
-                Operation = operation,
-                Coordinates = ConvertToPolygon(feature.Geometry as MultiPolygon)
+                Operation = operation, Coordinates = ConvertToPolygon(feature.Geometry as MultiPolygon)
             };
         });
 

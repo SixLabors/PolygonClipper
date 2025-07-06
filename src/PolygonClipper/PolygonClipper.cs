@@ -140,7 +140,7 @@ public class PolygonClipper
         for (int i = 0; i < clipping.ContourCount; i++)
         {
             Contour contour = clipping[i];
-            contourId++;
+
             for (int j = 0; j < contour.VertexCount - 1; j++)
             {
                 ProcessSegment(contourId, contour.Segment(j), PolygonType.Clipping, eventQueue, ref min, ref max);
@@ -162,13 +162,10 @@ public class PolygonClipper
 
         SweepEvent? prevEvent;
         SweepEvent? nextEvent;
-        int ii = 0;
         while (eventQueue.Count > 0)
         {
             SweepEvent sweepEvent = eventQueue.Dequeue();
-
             sortedEvents.Add(sweepEvent);
-            ii++;
 
             // Optimization: skip further processing if intersection is impossible
             if ((operation == BooleanOperation.Intersection && sweepEvent.Point.X > minMaxX) ||
@@ -216,17 +213,15 @@ public class PolygonClipper
                 sweepEvent = sweepEvent.OtherEvent;
                 int it = sweepEvent.PosSL;
                 prevEvent = statusLine.Prev(it);
-
-                statusLine.RemoveAt(it);
-
-                // Shift `next` to account for the removal
-                nextEvent = statusLine.Next(it - 1);
+                nextEvent = statusLine.Next(it);
 
                 // Check intersection between neighbors
                 if (prevEvent != null && nextEvent != null)
                 {
                     _ = PossibleIntersection(prevEvent, nextEvent, eventQueue);
                 }
+
+                statusLine.RemoveAt(it);
             }
         }
 
@@ -243,7 +238,7 @@ public class PolygonClipper
     /// <param name="operation">The boolean operation being performed.</param>
     /// <param name="result">The resulting polygon if the operation is trivial.</param>
     /// <returns>
-    /// <see langword="true"/> if the operation results in a trivial case due to zero contours; 
+    /// <see langword="true"/> if the operation results in a trivial case due to zero contours;
     /// otherwise, <see langword="false"/>.
     /// </returns>
     private static bool TryTrivialOperationForEmptyPolygons(
@@ -359,25 +354,13 @@ public class PolygonClipper
         e1.ContourId = e2.ContourId = contourId;
 
         // Determine which endpoint is the left endpoint
-        //if (s.Min == s.Source)
-        //{
-        //    e2.Left = false;
-        //}
-        //else if (s.Min == s.Target)
-        //{
-        //    e1.Left = false;
-        //}
-        //else
+        if (eventQueue.Comparer.Compare(e1, e2) < 0)
         {
-            // As a fallback, use the comparator for floating-point precision issues
-            if (eventQueue.Comparer.Compare(e1, e2) < 0)
-            {
-                e2.Left = false;
-            }
-            else
-            {
-                e1.Left = false;
-            }
+            e2.Left = false;
+        }
+        else
+        {
+            e1.Left = false;
         }
 
         min = Vertex.Min(min, s.Min);
@@ -498,8 +481,9 @@ public class PolygonClipper
             {
                 BooleanOperation.Intersection => !sweepEvent.OtherInOut,
                 BooleanOperation.Union => sweepEvent.OtherInOut,
-                BooleanOperation.Difference => (sweepEvent.OtherInOut && sweepEvent.PolygonType == PolygonType.Subject) ||
-                                            (!sweepEvent.OtherInOut && sweepEvent.PolygonType == PolygonType.Clipping),
+                BooleanOperation.Difference =>
+                    (sweepEvent.OtherInOut && sweepEvent.PolygonType == PolygonType.Subject) ||
+                    (!sweepEvent.OtherInOut && sweepEvent.PolygonType == PolygonType.Clipping),
                 BooleanOperation.Xor => true,
                 _ => false,
             },
@@ -704,9 +688,8 @@ public class PolygonClipper
         // Prevent from corner case 1
         if (p.X == le.Point.X && p.Y < le.Point.Y)
         {
-            // TODO: enabling this line makes a single test issue76.geojson fail.
             // The files are different in the two reference repositories but both fail.
-            // p = new Vertex(NextAfter(p.X, true), p.Y);
+            p = new Vertex(p.X.NextAfter(double.PositiveInfinity), p.Y);
         }
 
         // Create the right event for the left segment (new right endpoint)
@@ -736,34 +719,6 @@ public class PolygonClipper
     }
 
     /// <summary>
-    /// Returns the next representable double-precision floating-point value in the given direction.
-    /// <see href="https://docs.rs/float_next_after/latest/float_next_after/trait.NextAfter.html"/>
-    /// </summary>
-    /// <param name="x">The starting double value.</param>
-    /// <param name="up">If true, moves towards positive infinity; otherwise, towards negative infinity.</param>
-    /// <returns>The next representable double in the given direction.</returns>
-    private static double NextAfter(double x, bool up)
-    {
-        if (double.IsNaN(x) || x == double.PositiveInfinity || x == double.NegativeInfinity)
-        {
-            return x; // NaN and infinity stay the same
-        }
-
-        // Convert double to its IEEE 754 bit representation
-        long bits = BitConverter.DoubleToInt64Bits(x);
-        if (up)
-        {
-            bits += (bits >= 0) ? 1 : -1; // Increase magnitude
-        }
-        else
-        {
-            bits += (bits > 0) ? -1 : 1; // Decrease magnitude
-        }
-
-        return BitConverter.Int64BitsToDouble(bits);
-    }
-
-    /// <summary>
     /// Connects edges in the result polygon by processing the sweep events
     /// and constructing contours for the final result.
     /// </summary>
@@ -777,7 +732,11 @@ public class PolygonClipper
         for (int i = 0; i < sortedEvents.Count; i++)
         {
             SweepEvent se = sortedEvents[i];
-            if ((se.Left && se.InResult) || (!se.Left && se.OtherEvent.InResult))
+            if (se.Left && se.InResult)
+            {
+                resultEvents.Add(se);
+            }
+            else if (!se.Left && se.OtherEvent.InResult)
             {
                 resultEvents.Add(se);
             }
@@ -812,11 +771,13 @@ public class PolygonClipper
         for (int i = 0; i < resultEvents.Count; i++)
         {
             SweepEvent sweepEvent = resultEvents[i];
-            if (!sweepEvent.Left)
+            if (sweepEvent.Left)
             {
                 (sweepEvent.OtherEvent.Pos, sweepEvent.Pos) = (sweepEvent.Pos, sweepEvent.OtherEvent.Pos);
             }
         }
+
+        ReadOnlySpan<int> iterationMap = PrecomputeIterationOrder(resultEvents);
 
         Polygon result = new();
         Span<bool> processed = new bool[resultEvents.Count];
@@ -831,37 +792,142 @@ public class PolygonClipper
             Contour contour = InitializeContourFromContext(resultEvents[i], result, contourId);
 
             int pos = i;
-            int originalPos = i;
             Vertex initial = resultEvents[i].Point;
             contour.AddVertex(initial);
 
             // Main loop to process the contour
-            do
+            while (true)
             {
-                processed[pos] = true;
-                resultEvents[pos].OutputContourId = contourId;
-
-                if (resultEvents[pos].Left)
-                {
-                    resultEvents[pos].ResultInOut = false;
-                }
-                else
-                {
-                    resultEvents[pos].OtherEvent.ResultInOut = true;
-                }
-
+                MarkProcessed(resultEvents[pos], processed, pos, contourId);
                 pos = resultEvents[pos].Pos;
-                processed[pos] = true;
-                resultEvents[pos].OutputContourId = contourId;
+
+                MarkProcessed(resultEvents[pos], processed, pos, contourId);
+
                 contour.AddVertex(resultEvents[pos].Point);
-                pos = NextPos(pos, resultEvents, processed, originalPos);
+                pos = NextPos(pos, processed, iterationMap, out bool found);
+                if (!found)
+                {
+                    break;
+                }
+
+                if (resultEvents[pos].Point == initial)
+                {
+                    break;
+                }
             }
-            while (pos != originalPos && pos < resultEvents.Count);
 
             result.Push(contour);
         }
 
-        return result;
+        Polygon polygon = new();
+
+        for (int i = 0; i < result.ContourCount; i++)
+        {
+            Contour contour = result[i];
+            if (contour.IsExternal)
+            {
+                // The exterior ring goes first
+                polygon.Push(contour);
+
+                // Followed by holes if any
+                for (int j = 0; j < contour.HoleCount; j++)
+                {
+                    int holeId = contour.GetHoleIndex(j);
+                    polygon.Push(result[holeId]);
+                }
+            }
+        }
+
+        return polygon;
+    }
+
+    private static ReadOnlySpan<int> PrecomputeIterationOrder(List<SweepEvent> data)
+    {
+        Span<int> map = new Span<int>(new int[data.Count]);
+
+        int i = 0;
+        while (i < data.Count)
+        {
+            SweepEvent xRef = data[i];
+
+            // Find index range of R events
+            int rFrom = i;
+            while (i < data.Count && xRef.Point == data[i].Point && !data[i].Left)
+            {
+                i++;
+            }
+
+            int rUptoExclusive = i;
+
+            // Find index range of L events
+            int lFrom = i;
+            while (i < data.Count && xRef.Point == data[i].Point)
+            {
+                if (!data[i].Left)
+                {
+                    throw new InvalidOperationException("Expected left event");
+                }
+
+                i++;
+            }
+
+            int lUptoExclusive = i;
+
+            bool hasREvents = rUptoExclusive > rFrom;
+            bool hasLEvents = lUptoExclusive > lFrom;
+
+            if (hasREvents)
+            {
+                int rUpto = rUptoExclusive - 1;
+
+                // Connect elements in [rFrom, rUpto) to larger index
+                for (int j = rFrom; j < rUpto; j++)
+                {
+                    map[j] = j + 1;
+                }
+
+                // Special handling of *last* element: Connect either the last L event
+                // or loop back to start of R events (if no L events).
+                if (hasLEvents)
+                {
+                    map[rUpto] = lUptoExclusive - 1;
+                }
+                else
+                {
+                    map[rUpto] = rFrom;
+                }
+            }
+
+            if (hasLEvents)
+            {
+                int lUpto = lUptoExclusive - 1;
+
+                // Connect elements in (lFrom, lUpto] to lower index
+                for (int j = lFrom + 1; j <= lUpto; j++)
+                {
+                    map[j] = j - 1;
+                }
+
+                // Special handling of *first* element: Connect either to the first R event
+                // or loop back to end of L events (if no R events).
+                if (hasREvents)
+                {
+                    map[lFrom] = rFrom;
+                }
+                else
+                {
+                    map[lFrom] = lUpto;
+                }
+            }
+        }
+
+        return map;
+    }
+
+    private static void MarkProcessed(SweepEvent sweepEvent, Span<bool> processed, int pos, int contourId)
+    {
+        processed[pos] = true;
+        sweepEvent.OutputContourId = contourId;
     }
 
     /// <summary>
@@ -931,6 +997,8 @@ public class PolygonClipper
     /// <param name="resultEvents">The list of sweep events representing result segments.</param>
     /// <param name="processed">A list indicating whether each event at the corresponding index has been processed.</param>
     /// <param name="originalPos">The original position to return if no unprocessed event is found.</param>
+    /// <param name="iterationMap"></param>
+    /// <param name="found"></param>
     /// <returns>The index of the next unprocessed position.</returns>
     /// <remarks>
     /// This method searches forward from the current position until it finds an unprocessed event with
@@ -939,41 +1007,27 @@ public class PolygonClipper
     /// </remarks>
     private static int NextPos(
         int pos,
-        List<SweepEvent> resultEvents,
         ReadOnlySpan<bool> processed,
-        int originalPos)
+        ReadOnlySpan<int> iterationMap,
+        out bool found)
     {
-        int newPos = pos + 1;
-        Vertex initial = resultEvents[pos].Point;
-        Vertex next = default;
+        int startPos = pos;
 
-        if (newPos < resultEvents.Count)
+        while (true)
         {
-            next = resultEvents[newPos].Point;
-        }
-
-        // Search forward for the next unprocessed event with a different point
-        while (newPos < resultEvents.Count && initial == next)
-        {
-            if (!processed[newPos])
+            pos = iterationMap[pos];
+            if (pos == startPos)
             {
-                return newPos;
+                // Entire group is already processed?
+                found = false;
+                return int.MinValue;
             }
 
-            newPos++;
-            if (newPos < resultEvents.Count)
+            if (!processed[pos])
             {
-                next = resultEvents[newPos].Point;
+                found = true;
+                return pos;
             }
         }
-
-        // If not found, search backward for an unprocessed event
-        newPos = pos - 1;
-        while (newPos > originalPos && processed[newPos])
-        {
-            newPos--;
-        }
-
-        return newPos;
     }
 }

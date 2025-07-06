@@ -70,8 +70,8 @@ namespace GeoJSON.Text.Geometry
         /// </returns>
         public bool IsClosed()
         {
-            IPosition? firstCoordinate = Coordinates[0];
-            IPosition? lastCoordinate = Coordinates[Coordinates.Count - 1];
+            IPosition firstCoordinate = Coordinates[0];
+            IPosition lastCoordinate = Coordinates[Coordinates.Count - 1];
 
             return firstCoordinate.Longitude.Equals(lastCoordinate.Longitude)
                    && firstCoordinate.Latitude.Equals(lastCoordinate.Latitude)

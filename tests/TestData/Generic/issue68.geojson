@@ -68,7 +68,9 @@
         ],
         "type": "MultiPolygon"
       },
-      "properties": {"operation": "diff"},
+      "properties": {
+        "operation": "diff"
+      },
       "type": "Feature"
     }
   ],

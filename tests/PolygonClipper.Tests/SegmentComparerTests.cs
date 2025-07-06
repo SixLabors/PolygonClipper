@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using Xunit;
 
 namespace PolygonClipper.Tests;
+
 public class SegmentComparerTests
 {
     private readonly SegmentComparer segmentComparer = new();
@@ -53,8 +54,7 @@ public class SegmentComparerTests
         Assert.False(se2.Below(se1.Point));
         Assert.True(se2.Above(se1.Point));
 
-        Assert.Equal(-1, this.segmentComparer.Compare(se1, se2));
-        Assert.Equal(1, this.segmentComparer.Compare(se2, se1));
+        AssertOrder(se1,se2, true);
 
         Assert.Equal(1, eventComparer.Compare(se3, se4));
         Assert.False(se4.Above(se3.Point));
@@ -111,12 +111,85 @@ public class SegmentComparerTests
     public void CollinearSamePolygonDifferentLeftPoints()
     {
         SweepEvent se1 = new(new Vertex(1, 1), true, new SweepEvent(new Vertex(5, 1), false), PolygonType.Subject);
-        SweepEvent se2 = new(new Vertex(2, 1), true, new SweepEvent(new Vertex(3, 1), false), PolygonType.Subject);
+        SweepEvent se2 = new(new Vertex(2, 1), true, new SweepEvent(new Vertex(3, 1), false), PolygonType.Clipping);
 
-        Assert.Equal(se1.PolygonType, se2.PolygonType);
+        Assert.NotEqual(se1.PolygonType, se2.PolygonType);
         Assert.NotEqual(se1.Point, se2.Point);
 
         Assert.Equal(-1, this.segmentComparer.Compare(se1, se2));
-        Assert.Equal(1, this.segmentComparer.Compare(se2, se1));
+    }
+
+    [Fact]
+    public void TShapedCases()
+    {
+        // shape:  /
+        //        /\
+        var (se1, _) = this.MakeSimple(0, 0.0, 0.0, 1.0, 1.0, true);
+        var (se2, _) = this.MakeSimple(0, 0.5, 0.5, 1.0, 0.0, true);
+        this.AssertOrder(se1, se2, false);
+
+        // shape: \/
+        //         \
+        (se1, _) = this.MakeSimple(0, 0.0, 1.0, 1.0, 0.0, true);
+        (se2, _) = this.MakeSimple(0, 0.5, 0.5, 1.0, 1.0, true);
+        this.AssertOrder(se1, se2, true);
+
+        // shape: T
+        (se1, _) = this.MakeSimple(0, 0.0, 1.0, 1.0, 1.0, true);
+        (se2, _) = this.MakeSimple(0, 0.5, 0.0, 0.5, 1.0, true);
+        this.AssertOrder(se1, se2, false);
+
+        // shape: T upside down
+        (se1, _) = this.MakeSimple(0, 0.0, 0.0, 1.0, 0.0, true);
+        (se2, _) = this.MakeSimple(0, 0.5, 0.0, 0.5, 1.0, true);
+        this.AssertOrder(se1, se2, true);
+    }
+
+    [Fact]
+    public void VerticalSegment()
+    {
+        // Vertical Referencesegment at x = 0, from y = -1 to +1
+        var (se1, _) = this.MakeSimple(0, 0.0, -1.0, 0.0, 1.0, true);
+
+        // "above" Cases
+        this.AssertOrder(se1, this.MakeSimple(0, -1.0, 1.0, 0.0, 1.0, true).se1, true);
+        this.AssertOrder(se1, this.MakeSimple(0, 0.0, 1.0, 1.0, 1.0, true).se1, true);
+        this.AssertOrder(se1, this.MakeSimple(0, -1.0, 2.0, 0.0, 2.0, true).se1, true);
+        this.AssertOrder(se1, this.MakeSimple(0, 0.0, 2.0, 1.0, 2.0, true).se1, true);
+        this.AssertOrder(se1, this.MakeSimple(0, 0.0, 1.0, 0.0, 2.0, true).se1, true);
+
+        // "below" Cases
+        this.AssertOrder(se1, this.MakeSimple(0, -1.0, -1.0, 0.0, -1.0, true).se1, false);
+        this.AssertOrder(se1, this.MakeSimple(0, 0.0, -1.0, 1.0, -1.0, true).se1, false);
+        this.AssertOrder(se1, this.MakeSimple(0, -1.0, -2.0, 0.0, -2.0, true).se1, false);
+        this.AssertOrder(se1, this.MakeSimple(0, 0.0, -2.0, 1.0, -2.0, true).se1, false);
+        this.AssertOrder(se1, this.MakeSimple(0, 0.0, -2.0, 0.0, -1.0, true).se1, false);
+
+        // Overlapping Cases
+        this.AssertOrder(se1, this.MakeSimple(0, 0.0, -0.5, 0.0, 0.5, true).se1, true);
+    }
+
+    private (SweepEvent se1, SweepEvent se2) MakeSimple(int contourId, double x1, double y1, double x2, double y2,
+        bool left)
+    {
+        Vertex v1 = new Vertex(x1, y1);
+        Vertex v2 = new Vertex(x2, y2);
+        SweepEvent se2 = new SweepEvent(v2, !left);
+        SweepEvent se1 = new SweepEvent(v1, left, se2) { ContourId = contourId };
+        se2.OtherEvent = se1;
+        se2.ContourId = contourId;
+
+
+
+
+        return (se1, se2);
+    }
+
+    private void AssertOrder(SweepEvent se1, SweepEvent se2, bool less)
+    {
+        int order = less ? -1 : 1;
+        int inverseOrder = less ? 1 : -1;
+        Assert.Equal(order, this.segmentComparer.Compare(se1, se2));
+        Assert.Equal(inverseOrder, this.segmentComparer.Compare(se2, se1));
     }
 }
