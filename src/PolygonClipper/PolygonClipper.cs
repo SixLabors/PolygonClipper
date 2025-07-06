@@ -569,8 +569,12 @@ public class PolygonClipper
         }
 
         // The line segments associated with le1 and le2 overlap.
-        // TODO: Rewrite this to avoid allocation.
-        List<SweepEvent> events = new(4);
+        SweepEvent? first = null;
+        SweepEvent? second = null;
+        SweepEvent? third = null;
+        SweepEvent? fourth = null;
+        bool firstSet = false;
+
         bool leftCoincide = le1.Point == le2.Point;
         bool rightCoincide = le1.OtherEvent.Point == le2.OtherEvent.Point;
 
@@ -579,27 +583,33 @@ public class PolygonClipper
         {
             if (comparer.Compare(le1, le2) > 0)
             {
-                events.Add(le2);
-                events.Add(le1);
+                first = le2;
+                second = le1;
             }
             else
             {
-                events.Add(le1);
-                events.Add(le2);
+                first = le1;
+                second = le2;
             }
+
+            firstSet = true;
         }
 
         if (!rightCoincide)
         {
-            if (comparer.Compare(le1.OtherEvent, le2.OtherEvent) > 0)
+            (SweepEvent? rightFirst, SweepEvent? rightSecond) = comparer.Compare(le1.OtherEvent, le2.OtherEvent) > 0
+                ? (le2.OtherEvent, le1.OtherEvent)
+                : (le1.OtherEvent, le2.OtherEvent);
+
+            if (!firstSet)
             {
-                events.Add(le2.OtherEvent);
-                events.Add(le1.OtherEvent);
+                first = rightFirst;
+                second = rightSecond;
             }
             else
             {
-                events.Add(le1.OtherEvent);
-                events.Add(le2.OtherEvent);
+                third = rightFirst;
+                fourth = rightSecond;
             }
         }
 
@@ -613,7 +623,10 @@ public class PolygonClipper
 
             if (leftCoincide && !rightCoincide)
             {
-                DivideSegment(events[1].OtherEvent, events[0].Point, eventQueue, comparer);
+                ArgumentNullException.ThrowIfNull(first);
+                ArgumentNullException.ThrowIfNull(second);
+
+                DivideSegment(second.OtherEvent, first.Point, eventQueue, comparer);
             }
 
             return 2;
@@ -622,21 +635,33 @@ public class PolygonClipper
         // Handle the rightCoincide case
         if (rightCoincide)
         {
-            DivideSegment(events[0], events[1].Point, eventQueue, comparer);
+            ArgumentNullException.ThrowIfNull(first);
+            ArgumentNullException.ThrowIfNull(second);
+
+            DivideSegment(first, second.Point, eventQueue, comparer);
             return 3;
         }
+
+        ArgumentNullException.ThrowIfNull(fourth);
 
         // Handle general overlapping case
-        if (events[0] != events[3].OtherEvent)
+        if (first != fourth.OtherEvent)
         {
-            DivideSegment(events[0], events[1].Point, eventQueue, comparer);
-            DivideSegment(events[1], events[2].Point, eventQueue, comparer);
+            ArgumentNullException.ThrowIfNull(first);
+            ArgumentNullException.ThrowIfNull(second);
+            ArgumentNullException.ThrowIfNull(third);
+
+            DivideSegment(first, second.Point, eventQueue, comparer);
+            DivideSegment(second, third.Point, eventQueue, comparer);
             return 3;
         }
 
+        ArgumentNullException.ThrowIfNull(second);
+        ArgumentNullException.ThrowIfNull(third);
+
         // One segment fully contains the other
-        DivideSegment(events[0], events[1].Point, eventQueue, comparer);
-        DivideSegment(events[3].OtherEvent, events[2].Point, eventQueue, comparer);
+        DivideSegment(first, second.Point, eventQueue, comparer);
+        DivideSegment(fourth.OtherEvent, third.Point, eventQueue, comparer);
         return 3;
     }
 
