@@ -162,13 +162,10 @@ public class PolygonClipper
 
         SweepEvent? prevEvent;
         SweepEvent? nextEvent;
-        int ii = 0;
         while (eventQueue.Count > 0)
         {
             SweepEvent sweepEvent = eventQueue.Dequeue();
-
             sortedEvents.Add(sweepEvent);
-            ii++;
 
             // Optimization: skip further processing if intersection is impossible
             if ((operation == BooleanOperation.Intersection && sweepEvent.Point.X > minMaxX) ||
