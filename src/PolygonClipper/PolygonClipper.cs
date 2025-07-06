@@ -140,11 +140,6 @@ public class PolygonClipper
         for (int i = 0; i < clipping.ContourCount; i++)
         {
             Contour contour = clipping[i];
-            bool exterior = operation != BooleanOperation.Difference;
-            if (exterior)
-            {
-                contourId++;
-            }
 
             for (int j = 0; j < contour.VertexCount - 1; j++)
             {
@@ -696,7 +691,6 @@ public class PolygonClipper
         // Prevent from corner case 1
         if (p.X == le.Point.X && p.Y < le.Point.Y)
         {
-            // TODO: enabling this line makes a single test issue76.geojson fail.
             // The files are different in the two reference repositories but both fail.
             p = new Vertex(p.X.NextAfter(double.PositiveInfinity), p.Y);
         }
@@ -1029,7 +1023,7 @@ public class PolygonClipper
             {
                 // Entire group is already processed?
                 found = false;
-                return Int32.MinValue;
+                return int.MinValue;
             }
 
             if (!processed[pos])

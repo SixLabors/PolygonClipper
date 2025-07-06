@@ -16,12 +16,9 @@ namespace PolygonClipper.Tests;
 
 public class GenericTestCases
 {
-    private readonly ITestOutputHelper _testOutputHelper;
+    private readonly ITestOutputHelper testOutputHelper;
 
-    public GenericTestCases(ITestOutputHelper testOutputHelper)
-    {
-        _testOutputHelper = testOutputHelper;
-    }
+    public GenericTestCases(ITestOutputHelper testOutputHelper) => this.testOutputHelper = testOutputHelper;
 
     public static IEnumerable<object[]> GetTestCases()
         => TestData.Generic.GetFileNames().Select(x => new object[] { x });
@@ -73,7 +70,7 @@ public class GenericTestCases
             for (int i = 0; i < expected.ContourCount; i++)
             {
                 // We don't test for holes here as the reference tests do not do so.
-                this._testOutputHelper.WriteLine($"Current Countour {i}");
+                this.testOutputHelper.WriteLine($"Current Countour {i}");
 
                 Assert.Equal(expected[i].VertexCount, actual[i].VertexCount);
                 for (int j = 0; j < expected[i].VertexCount; j++)
@@ -153,7 +150,8 @@ public class GenericTestCases
             {
                 return new ExpectedResult
                 {
-                    Operation = operation, Coordinates = ConvertToPolygon(feature.Geometry as GeoPolygon)
+                    Operation = operation,
+                    Coordinates = ConvertToPolygon(feature.Geometry as GeoPolygon)
                 };
             }
 
