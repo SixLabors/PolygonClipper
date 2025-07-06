@@ -1,9 +1,11 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace PolygonClipper;
 
@@ -26,8 +28,18 @@ namespace PolygonClipper;
 [DebuggerDisplay("Count = {Count}")]
 internal sealed class StatusLine
 {
-    private readonly List<SweepEvent> sortedEvents = [];
+    private SweepEvent[] events;
+    private int count;
     private readonly SegmentComparer comparer = new();
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StatusLine"/> class.
+    /// </summary>
+    public StatusLine()
+    {
+        this.events = new SweepEvent[16]; // Start with reasonable capacity
+        this.count = 0;
+    }
 
     /// <summary>
     /// Gets the number of events in the status line.
@@ -35,7 +47,7 @@ internal sealed class StatusLine
     public int Count
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => this.sortedEvents.Count;
+        get => this.count;
     }
 
     /// <summary>
@@ -46,7 +58,7 @@ internal sealed class StatusLine
     public SweepEvent this[int index]
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => this.sortedEvents[index];
+        get => Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(this.events), index);
     }
 
     /// <summary>
@@ -54,31 +66,53 @@ internal sealed class StatusLine
     /// </summary>
     /// <param name="e">The sweep event to insert.</param>
     /// <returns>The index where the event was inserted.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int Insert(SweepEvent e)
     {
-        int index = this.sortedEvents.BinarySearch(e, this.comparer);
-        if (index < 0)
+        // Ensure capacity
+        if (this.count == this.events.Length)
         {
-            index = ~index; // Get the correct insertion point
+            this.Resize();
         }
 
-        this.sortedEvents.Insert(index, e);
-        this.Up(index);
-        return index;
+        // Binary search to find insertion point
+        int insertIndex = this.BinarySearchInsertionPoint(e);
+
+        // Fast array shift using Unsafe operations (without pointers)
+        ref SweepEvent eventsRef = ref MemoryMarshal.GetArrayDataReference(this.events);
+
+        if (insertIndex < this.count)
+        {
+            // Shift elements to the right using Array.Copy (optimized by runtime)
+            Array.Copy(this.events, insertIndex, this.events, insertIndex + 1, this.count - insertIndex);
+        }
+
+        // Insert the new element using unsafe access
+        Unsafe.Add(ref eventsRef, insertIndex) = e;
+        this.count++;
+        this.UpdatePositionsFrom(insertIndex);
+        return insertIndex;
     }
 
     /// <summary>
     /// Removes a sweep event from the status line.
     /// </summary>
     /// <param name="index">The index of the event to remove.</param>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// Thrown if <paramref name="index"/> is less than 0 or greater than or equal to the number of events.
-    /// </exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void RemoveAt(int index)
     {
-        this.sortedEvents.RemoveAt(index);
-        this.Down(index);
+        // Shift elements to the left using Array.Copy
+        if (index < this.count - 1)
+        {
+            Array.Copy(this.events, index + 1, this.events, index, this.count - index - 1);
+        }
+
+        // Clear the last element to avoid holding references
+        ref SweepEvent eventsRef = ref MemoryMarshal.GetArrayDataReference(this.events);
+        Unsafe.Add(ref eventsRef, this.count - 1) = null!;
+
+        this.count--;
+        this.UpdatePositionsFrom(index);
     }
 
     /// <summary>
@@ -89,11 +123,10 @@ internal sealed class StatusLine
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public SweepEvent? Next(int index)
     {
-        if (index >= 0 && index < this.sortedEvents.Count - 1)
+        if ((uint)index < (uint)(this.count - 1))
         {
-            return this.sortedEvents[index + 1];
+            return Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(this.events), index + 1);
         }
-
         return null;
     }
 
@@ -105,31 +138,68 @@ internal sealed class StatusLine
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public SweepEvent? Prev(int index)
     {
-        if (index > 0 && index < this.sortedEvents.Count)
+        if ((uint)(index - 1) < (uint)this.count)
         {
-            return this.sortedEvents[index - 1];
+            return Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(this.events), index - 1);
         }
-
         return null;
     }
 
-    private void Up(int index)
+    /// <summary>
+    /// Updates position indices from the given starting index using unsafe operations.
+    /// </summary>
+    /// <param name="startIndex">The index to start updating from.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void UpdatePositionsFrom(int startIndex)
     {
-        List<SweepEvent> e = this.sortedEvents;
+        ref SweepEvent eventsRef = ref MemoryMarshal.GetArrayDataReference(this.events);
 
-        for (int i = index + 1; i < e.Count; i++)
+        for (int i = startIndex; i < this.count; i++)
         {
-            e[i].PosSL = i;
+            Unsafe.Add(ref eventsRef, i).PosSL = i;
         }
     }
 
-    private void Down(int index)
+    /// <summary>
+    /// Performs binary search to find the correct insertion point.
+    /// </summary>
+    /// <param name="item">The item to find insertion point for.</param>
+    /// <returns>The index where the item should be inserted.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private int BinarySearchInsertionPoint(SweepEvent item)
     {
-        List<SweepEvent> e = this.sortedEvents;
+        ref SweepEvent eventsRef = ref MemoryMarshal.GetArrayDataReference(this.events);
+        int left = 0;
+        int right = this.count - 1;
 
-        for (int i = index; i < e.Count; i++)
+        while (left <= right)
         {
-            e[i].PosSL = i;
+            int mid = left + ((right - left) >> 1);
+            int comparison = this.comparer.Compare(Unsafe.Add(ref eventsRef, mid), item);
+
+            if (comparison < 0)
+            {
+                left = mid + 1;
+            }
+            else
+            {
+                right = mid - 1;
+            }
         }
+
+        return left;
+    }
+
+    /// <summary>
+    /// Resizes the internal array when capacity is exceeded.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void Resize()
+    {
+        // TODO: Is this the best growth strategy?
+        int newCapacity = this.events.Length + 16;
+        SweepEvent[] newEvents = new SweepEvent[newCapacity];
+        Array.Copy(this.events, newEvents, this.count);
+        this.events = newEvents;
     }
 }
