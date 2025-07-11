@@ -15,7 +15,7 @@ namespace GeoJSON.Text.Converters
     /// </summary>
     public class FeatureConverter : JsonConverter<object>
     {
-        private static readonly GeometryConverter geometryConverter = new GeometryConverter();
+        private static readonly GeometryConverter geometryConverter = new();
         /// <summary>
         ///     Determines whether this instance can convert the specified object type.
         /// </summary>

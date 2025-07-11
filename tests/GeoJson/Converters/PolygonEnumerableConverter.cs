@@ -18,7 +18,7 @@ namespace GeoJSON.Text.Converters
     public class PolygonEnumerableConverter : JsonConverter<IReadOnlyCollection<Polygon>>
     {
 
-        private static readonly LineStringEnumerableConverter PolygonConverter = new LineStringEnumerableConverter();
+        private static readonly LineStringEnumerableConverter PolygonConverter = new();
         /// <summary>
         ///     Determines whether this instance can convert the specified object type.
         /// </summary>
@@ -58,7 +58,7 @@ namespace GeoJSON.Text.Converters
             }
 
             int startDepth = reader.CurrentDepth;
-            List<Polygon>? result = new List<Polygon>();
+            List<Polygon>? result = new();
             while (reader.Read())
             {
                 if (JsonTokenType.EndArray == reader.TokenType && reader.CurrentDepth == startDepth)

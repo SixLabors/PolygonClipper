@@ -172,10 +172,10 @@ public class SegmentComparerTests
     private (SweepEvent se1, SweepEvent se2) MakeSimple(int contourId, double x1, double y1, double x2, double y2,
         bool left)
     {
-        Vertex v1 = new Vertex(x1, y1);
-        Vertex v2 = new Vertex(x2, y2);
-        SweepEvent se2 = new SweepEvent(v2, !left);
-        SweepEvent se1 = new SweepEvent(v1, left, se2) { ContourId = contourId };
+        Vertex v1 = new(x1, y1);
+        Vertex v2 = new(x2, y2);
+        SweepEvent se2 = new(v2, !left);
+        SweepEvent se1 = new(v1, left, se2) { ContourId = contourId };
         se2.OtherEvent = se1;
         se2.ContourId = contourId;
 

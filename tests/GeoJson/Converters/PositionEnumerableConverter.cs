@@ -54,7 +54,7 @@ namespace GeoJSON.Text.Converters
             }
 
             int startDepth = reader.CurrentDepth;
-            List<IPosition>? result = new List<IPosition>();
+            List<IPosition>? result = new();
             while (reader.Read())
             {
                 if (JsonTokenType.EndArray == reader.TokenType && reader.CurrentDepth == startDepth)

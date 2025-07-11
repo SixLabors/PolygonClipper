@@ -14,7 +14,7 @@ namespace GeoJSON.Text.Converters
     /// </summary>
     public class GeometryEnumerableConverter : JsonConverter<ReadOnlyCollection<IGeometryObject>>
     {
-        private static readonly GeometryConverter GeometryConverter = new GeometryConverter();
+        private static readonly GeometryConverter GeometryConverter = new();
 
         /// <summary>
         ///     Determines whether this instance can convert the specified object type.
@@ -52,7 +52,7 @@ namespace GeoJSON.Text.Converters
             }
 
             int startDepth = reader.CurrentDepth;
-            List<IGeometryObject>? result = new List<IGeometryObject>();
+            List<IGeometryObject>? result = new();
             while (reader.Read())
             {
                 if (JsonTokenType.EndArray == reader.TokenType && reader.CurrentDepth == startDepth)

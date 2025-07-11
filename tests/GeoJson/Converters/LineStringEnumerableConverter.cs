@@ -14,7 +14,7 @@ namespace GeoJSON.Text.Converters
     /// </summary>
     public class LineStringEnumerableConverter : JsonConverter<IReadOnlyCollection<LineString>>
     {
-        private static readonly PositionEnumerableConverter LineStringConverter = new PositionEnumerableConverter();
+        private static readonly PositionEnumerableConverter LineStringConverter = new();
 
         /// <summary>
         /// Determines whether this instance can convert the specified object type.
@@ -54,7 +54,7 @@ namespace GeoJSON.Text.Converters
             }
 
             int startDepth = reader.CurrentDepth;
-            List<LineString>? result = new List<LineString>();
+            List<LineString>? result = new();
             while (reader.Read())
             {
                 if(JsonTokenType.EndArray == reader.TokenType && reader.CurrentDepth == startDepth)

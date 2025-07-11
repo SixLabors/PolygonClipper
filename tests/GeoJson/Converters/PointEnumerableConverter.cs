@@ -14,7 +14,7 @@ namespace GeoJSON.Text.Converters
     /// </summary>
     public class PointEnumerableConverter : JsonConverter<ReadOnlyCollection<Point>>
     {
-        private static readonly PositionConverter PositionConverter = new PositionConverter();
+        private static readonly PositionConverter PositionConverter = new();
         /// <inheritdoc />
         public override void Write(
             Utf8JsonWriter writer,
@@ -47,8 +47,8 @@ namespace GeoJSON.Text.Converters
             }
 
             int startDepth = reader.CurrentDepth;
-            List<Point>? result = new List<Point>();
-            List<double> numbers = new List<double>();
+            List<Point>? result = new();
+            List<double> numbers = new();
             while (reader.Read())
             {
                 if (JsonTokenType.EndArray == reader.TokenType && reader.CurrentDepth == startDepth)
