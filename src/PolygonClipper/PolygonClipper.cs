@@ -162,6 +162,7 @@ public class PolygonClipper
 
         SweepEvent? prevEvent;
         SweepEvent? nextEvent;
+        Span<SweepEvent> lineSegmentsList = new SweepEvent[4].AsSpan();
         while (eventQueue.Count > 0)
         {
             SweepEvent sweepEvent = eventQueue.Dequeue();
@@ -188,7 +189,7 @@ public class PolygonClipper
                 if (nextEvent != null)
                 {
                     // Check intersection with the next neighbor
-                    if (PossibleIntersection(sweepEvent, nextEvent, eventQueue) == 2)
+                    if (PossibleIntersection(sweepEvent, nextEvent, eventQueue, lineSegmentsList) == 2)
                     {
                         ComputeFields(sweepEvent, prevEvent, operation);
                         ComputeFields(nextEvent, sweepEvent, operation);
@@ -199,7 +200,7 @@ public class PolygonClipper
                 if (prevEvent != null)
                 {
                     // Check intersection with the previous neighbor
-                    if (PossibleIntersection(prevEvent, sweepEvent, eventQueue) == 2)
+                    if (PossibleIntersection(prevEvent, sweepEvent, eventQueue, lineSegmentsList) == 2)
                     {
                         SweepEvent? prevPrevEvent = statusLine.Prev(prevEvent.PosSL);
                         ComputeFields(prevEvent, prevPrevEvent, operation);
@@ -218,7 +219,7 @@ public class PolygonClipper
                 // Check intersection between neighbors
                 if (prevEvent != null && nextEvent != null)
                 {
-                    _ = PossibleIntersection(prevEvent, nextEvent, eventQueue);
+                    _ = PossibleIntersection(prevEvent, nextEvent, eventQueue, lineSegmentsList);
                 }
 
                 statusLine.RemoveAt(it);
@@ -499,6 +500,7 @@ public class PolygonClipper
     /// <param name="le1">The first sweep event representing a line segment.</param>
     /// <param name="le2">The second sweep event representing a line segment.</param>
     /// <param name="eventQueue">The event queue to add new events to.</param>
+    /// <param name="lineSegmentsList">A Span which will be used to store the associations between the line segments</param>
     /// <returns>
     /// An integer indicating the result of the intersection:
     /// <list type="bullet">
@@ -514,7 +516,8 @@ public class PolygonClipper
     private static int PossibleIntersection(
         SweepEvent le1,
         SweepEvent le2,
-        StablePriorityQueue<SweepEvent, SweepEventComparer> eventQueue)
+        StablePriorityQueue<SweepEvent, SweepEventComparer> eventQueue,
+        Span<SweepEvent> lineSegmentsList)
     {
         if (le1.OtherEvent == null || le2.OtherEvent == null)
         {
@@ -569,8 +572,12 @@ public class PolygonClipper
         }
 
         // The line segments associated with le1 and le2 overlap.
-        // TODO: Rewrite this to avoid allocation.
-        List<SweepEvent> events = new(4);
+        // lineSegmentsList[0] = null;
+        // lineSegmentsList[1] = null;
+        // lineSegmentsList[2] = null;
+        // lineSegmentsList[3] = null;
+        bool firstSet = false;
+
         bool leftCoincide = le1.Point == le2.Point;
         bool rightCoincide = le1.OtherEvent.Point == le2.OtherEvent.Point;
 
@@ -579,27 +586,33 @@ public class PolygonClipper
         {
             if (comparer.Compare(le1, le2) > 0)
             {
-                events.Add(le2);
-                events.Add(le1);
+                lineSegmentsList[0] = le2;
+                lineSegmentsList[1] = le1;
             }
             else
             {
-                events.Add(le1);
-                events.Add(le2);
+                lineSegmentsList[0] = le1;
+                lineSegmentsList[1] = le2;
             }
+
+            firstSet = true;
         }
 
         if (!rightCoincide)
         {
-            if (comparer.Compare(le1.OtherEvent, le2.OtherEvent) > 0)
+            (SweepEvent? rightFirst, SweepEvent? rightSecond) = comparer.Compare(le1.OtherEvent, le2.OtherEvent) > 0
+                ? (le2.OtherEvent, le1.OtherEvent)
+                : (le1.OtherEvent, le2.OtherEvent);
+
+            if (!firstSet)
             {
-                events.Add(le2.OtherEvent);
-                events.Add(le1.OtherEvent);
+                lineSegmentsList[0] = rightFirst;
+                lineSegmentsList[1] = rightSecond;
             }
             else
             {
-                events.Add(le1.OtherEvent);
-                events.Add(le2.OtherEvent);
+                lineSegmentsList[2] = rightFirst;
+                lineSegmentsList[3] = rightSecond;
             }
         }
 
@@ -613,7 +626,8 @@ public class PolygonClipper
 
             if (leftCoincide && !rightCoincide)
             {
-                DivideSegment(events[1].OtherEvent, events[0].Point, eventQueue, comparer);
+
+                DivideSegment(lineSegmentsList[1].OtherEvent, lineSegmentsList[0].Point, eventQueue, comparer);
             }
 
             return 2;
@@ -622,21 +636,22 @@ public class PolygonClipper
         // Handle the rightCoincide case
         if (rightCoincide)
         {
-            DivideSegment(events[0], events[1].Point, eventQueue, comparer);
+            DivideSegment(lineSegmentsList[0], lineSegmentsList[1].Point, eventQueue, comparer);
             return 3;
         }
 
         // Handle general overlapping case
-        if (events[0] != events[3].OtherEvent)
+        if (lineSegmentsList[0] != lineSegmentsList[3].OtherEvent)
         {
-            DivideSegment(events[0], events[1].Point, eventQueue, comparer);
-            DivideSegment(events[1], events[2].Point, eventQueue, comparer);
+
+            DivideSegment(lineSegmentsList[0], lineSegmentsList[1].Point, eventQueue, comparer);
+            DivideSegment(lineSegmentsList[1], lineSegmentsList[2].Point, eventQueue, comparer);
             return 3;
         }
 
         // One segment fully contains the other
-        DivideSegment(events[0], events[1].Point, eventQueue, comparer);
-        DivideSegment(events[3].OtherEvent, events[2].Point, eventQueue, comparer);
+        DivideSegment(lineSegmentsList[0], lineSegmentsList[1].Point, eventQueue, comparer);
+        DivideSegment(lineSegmentsList[3].OtherEvent, lineSegmentsList[2].Point, eventQueue, comparer);
         return 3;
     }
 
