@@ -28,6 +28,6 @@ namespace GeoJSON.Text.CoordinateReferenceSystem
         /// <value>
         /// The instance.
         /// </value>
-        public static DefaultCRS Instance { get; } = new DefaultCRS();
+        public static DefaultCRS Instance { get; } = new();
     }
 }

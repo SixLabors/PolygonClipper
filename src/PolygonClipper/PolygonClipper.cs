@@ -254,7 +254,7 @@ public class PolygonClipper
         {
             if (operation == BooleanOperation.Intersection)
             {
-                result = new();
+                result = new Polygon();
                 return true;
             }
 
@@ -303,7 +303,7 @@ public class PolygonClipper
         {
             if (operation == BooleanOperation.Intersection)
             {
-                result = new();
+                result = new Polygon();
                 return true;
             }
 
@@ -858,7 +858,7 @@ public class PolygonClipper
 
     private static ReadOnlySpan<int> PrecomputeIterationOrder(List<SweepEvent> data)
     {
-        Span<int> map = new Span<int>(new int[data.Count]);
+        Span<int> map = new(new int[data.Count]);
 
         int i = 0;
         while (i < data.Count)

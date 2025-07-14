@@ -70,7 +70,7 @@ namespace GeoJSON.Text.Converters
                 {
                     string? name = properties.GetProperty("name").GetString();
 
-                    NamedCRS? target = new NamedCRS(name);
+                    NamedCRS? target = new(name);
                     NamedCRS? converted = jObject.Deserialize<NamedCRS>();
 
                     if (converted.Properties != null)
@@ -90,7 +90,7 @@ namespace GeoJSON.Text.Converters
                 {
                     string? href = properties.GetProperty("href").GetString();
 
-                    LinkedCRS? target = new LinkedCRS(href);
+                    LinkedCRS? target = new(href);
 
                     LinkedCRS? converted = jObject.Deserialize<LinkedCRS>();
 
