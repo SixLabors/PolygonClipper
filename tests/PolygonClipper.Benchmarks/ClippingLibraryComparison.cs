@@ -23,6 +23,7 @@ namespace PolygonClipper.Benchmarks;
 /// of <c>PolygonClipper</c> in isolation.
 /// </para>
 /// </summary>
+[MemoryDiagnoser]
 public class ClippingLibraryComparison
 {
     private static readonly FeatureCollection Data = TestData.Generic.GetFeatureCollection("issue71.geojson");
