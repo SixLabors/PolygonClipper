@@ -1,9 +1,11 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace PolygonClipper;
 
@@ -16,14 +18,18 @@ namespace PolygonClipper;
 internal sealed class StablePriorityQueue<T, TComparer>
     where TComparer : IComparer<T>
 {
-    private readonly List<T> heap = [];
+    private readonly List<T> heap;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="StablePriorityQueue{T, TComparer}"/> class with a specified comparer.
     /// </summary>
     /// <param name="comparer">The comparer to determine the priority of the elements.</param>
-    public StablePriorityQueue(TComparer comparer)
-        => this.Comparer = comparer ?? throw new ArgumentNullException(nameof(comparer));
+    /// <param name="capacity">The initial capacity of the priority queue.</param>
+    public StablePriorityQueue(TComparer comparer, int capacity)
+    {
+        this.Comparer = comparer ?? throw new ArgumentNullException(nameof(comparer));
+        this.heap = new List<T>(capacity > 0 ? capacity : 16);
+    }
 
     /// <summary>
     /// Gets the number of elements in the priority queue.
@@ -42,7 +48,7 @@ internal sealed class StablePriorityQueue<T, TComparer>
     public void Enqueue(T item)
     {
         this.heap.Add(item);
-        this.Up(this.heap.Count - 1);
+        this.Up((uint)this.heap.Count - 1);
     }
 
     /// <summary>
@@ -86,61 +92,66 @@ internal sealed class StablePriorityQueue<T, TComparer>
     }
 
     /// <summary>
-    /// Restores the heap property by moving the item at the specified index upward.
+    /// Restores the min-heap property by moving the item at the specified index upward
+    /// through the heap until it is in the correct position. This is called after insertion.
     /// </summary>
-    /// <param name="index">The index of the item to move upward.</param>
-    private void Up(int index)
+    /// <param name="index">The index of the newly added item to sift upward.</param>
+    private void Up(uint index)
     {
-        List<T> data = this.heap;
-        T item = data[index];
+        ref T dRef = ref MemoryMarshal.GetReference(CollectionsMarshal.AsSpan(this.heap));
+        T item = Unsafe.Add(ref dRef, index);
         TComparer comparer = this.Comparer;
 
         while (index > 0)
         {
-            int parent = (index - 1) >> 1;
-            T current = data[parent];
+            uint parent = (index - 1u) >> 1;
+            T current = Unsafe.Add(ref dRef, parent);
             if (comparer.Compare(item, current) >= 0)
             {
                 break;
             }
 
-            data[index] = current;
+            Unsafe.Add(ref dRef, index) = current;
             index = parent;
         }
 
-        data[index] = item;
+        Unsafe.Add(ref dRef, index) = item;
     }
 
     /// <summary>
-    /// Restores the heap property by moving the item at the specified index downward.
+    /// Restores the min-heap property by moving the item at the specified index downward
+    /// through the heap until it is in the correct position. This is called after removal of the root.
     /// </summary>
-    /// <param name="index">The index of the item to move downward.</param>
-    private void Down(int index)
+    /// <param name="index">The index of the item to sift downward (typically the root).</param>
+    private void Down(uint index)
     {
-        List<T> data = this.heap;
-        int halfLength = data.Count >> 1;
-        T item = data[index];
+        Span<T> data = CollectionsMarshal.AsSpan(this.heap);
+        ref T dRef = ref MemoryMarshal.GetReference(data);
+
+        uint length = (uint)data.Length;
+        uint halfLength = length >> 1;
+        T item = Unsafe.Add(ref dRef, index);
         TComparer comparer = this.Comparer;
 
         while (index < halfLength)
         {
-            int bestChild = (index << 1) + 1; // Initially left child
-            int right = bestChild + 1;
+            uint bestChild = (index << 1) + 1; // Initially left child
+            uint right = bestChild + 1u;
 
-            if (right < data.Count && comparer.Compare(data[right], data[bestChild]) < 0)
+            if (right < length && comparer.Compare(Unsafe.Add(ref dRef, right), Unsafe.Add(ref dRef, bestChild)) < 0)
             {
                 bestChild = right;
             }
 
-            if (comparer.Compare(data[bestChild], item) >= 0)
+            if (comparer.Compare(Unsafe.Add(ref dRef, bestChild), item) >= 0)
             {
                 break;
             }
 
-            data[index] = data[bestChild];
+            Unsafe.Add(ref dRef, index) = Unsafe.Add(ref dRef, bestChild);
             index = bestChild;
         }
 
-        data[index] = item;
+        Unsafe.Add(ref dRef, index) = item;
     }
 }
