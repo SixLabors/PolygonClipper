@@ -5,6 +5,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace PolygonClipper;
 
@@ -162,6 +164,7 @@ public class PolygonClipper
 
         SweepEvent? prevEvent;
         SweepEvent? nextEvent;
+        Span<SweepEvent> workspace = new SweepEvent[4];
         while (eventQueue.Count > 0)
         {
             SweepEvent sweepEvent = eventQueue.Dequeue();
@@ -188,7 +191,7 @@ public class PolygonClipper
                 if (nextEvent != null)
                 {
                     // Check intersection with the next neighbor
-                    if (PossibleIntersection(sweepEvent, nextEvent, eventQueue) == 2)
+                    if (PossibleIntersection(sweepEvent, nextEvent, eventQueue, workspace) == 2)
                     {
                         ComputeFields(sweepEvent, prevEvent, operation);
                         ComputeFields(nextEvent, sweepEvent, operation);
@@ -199,7 +202,7 @@ public class PolygonClipper
                 if (prevEvent != null)
                 {
                     // Check intersection with the previous neighbor
-                    if (PossibleIntersection(prevEvent, sweepEvent, eventQueue) == 2)
+                    if (PossibleIntersection(prevEvent, sweepEvent, eventQueue, workspace) == 2)
                     {
                         SweepEvent? prevPrevEvent = statusLine.Prev(prevEvent.PosSL);
                         ComputeFields(prevEvent, prevPrevEvent, operation);
@@ -218,7 +221,7 @@ public class PolygonClipper
                 // Check intersection between neighbors
                 if (prevEvent != null && nextEvent != null)
                 {
-                    _ = PossibleIntersection(prevEvent, nextEvent, eventQueue);
+                    _ = PossibleIntersection(prevEvent, nextEvent, eventQueue, workspace);
                 }
 
                 statusLine.RemoveAt(it);
@@ -499,6 +502,10 @@ public class PolygonClipper
     /// <param name="le1">The first sweep event representing a line segment.</param>
     /// <param name="le2">The second sweep event representing a line segment.</param>
     /// <param name="eventQueue">The event queue to add new events to.</param>
+    /// <param name="workspace">
+    /// A scratch space for temporary storage of sweep events.
+    /// Must be at least 4 elements long to hold the events for the two segments and their associated other events.
+    /// </param>
     /// <returns>
     /// An integer indicating the result of the intersection:
     /// <list type="bullet">
@@ -514,7 +521,8 @@ public class PolygonClipper
     private static int PossibleIntersection(
         SweepEvent le1,
         SweepEvent le2,
-        StablePriorityQueue<SweepEvent, SweepEventComparer> eventQueue)
+        StablePriorityQueue<SweepEvent, SweepEventComparer> eventQueue,
+        Span<SweepEvent> workspace)
     {
         if (le1.OtherEvent == null || le2.OtherEvent == null)
         {
@@ -569,41 +577,55 @@ public class PolygonClipper
         }
 
         // The line segments associated with le1 and le2 overlap.
-        // TODO: Rewrite this to avoid allocation.
-        List<SweepEvent> events = new(4);
         bool leftCoincide = le1.Point == le2.Point;
         bool rightCoincide = le1.OtherEvent.Point == le2.OtherEvent.Point;
 
-        // Populate the events
+        // Populate the events.
+        // The working buffer has a length of 4, which is sufficient to hold the events
+        // for the two segments and their associated other events.
+        // Events are assigned in a specific order to avoid overwriting shared references.
+        ref SweepEvent wRef = ref MemoryMarshal.GetReference(workspace);
         if (!leftCoincide)
         {
             if (comparer.Compare(le1, le2) > 0)
             {
-                events.Add(le2);
-                events.Add(le1);
+                Unsafe.Add(ref wRef, 0u) = le2;
+                Unsafe.Add(ref wRef, 1u) = le1;
             }
             else
             {
-                events.Add(le1);
-                events.Add(le2);
+                Unsafe.Add(ref wRef, 0u) = le1;
+                Unsafe.Add(ref wRef, 1u) = le2;
+            }
+
+            // Positions 0 and 1 contain the left events of the segments.
+            // Positions 2 and 3 will contain the right events of the segments.
+            if (!rightCoincide)
+            {
+                Unsafe.Add(ref wRef, 2u) = le1.OtherEvent;
+                Unsafe.Add(ref wRef, 3u) = le2.OtherEvent;
+            }
+            else
+            {
+                Unsafe.Add(ref wRef, 2u) = le2.OtherEvent;
+                Unsafe.Add(ref wRef, 3u) = le1.OtherEvent;
             }
         }
-
-        if (!rightCoincide)
+        else if (leftCoincide && !rightCoincide)
         {
+            // Only the right endpoints differ, so we use positions 0 and 1 for their sorted order.
             if (comparer.Compare(le1.OtherEvent, le2.OtherEvent) > 0)
             {
-                events.Add(le2.OtherEvent);
-                events.Add(le1.OtherEvent);
+                Unsafe.Add(ref wRef, 0u) = le2.OtherEvent;
+                Unsafe.Add(ref wRef, 1u) = le1.OtherEvent;
             }
             else
             {
-                events.Add(le1.OtherEvent);
-                events.Add(le2.OtherEvent);
+                Unsafe.Add(ref wRef, 0u) = le1.OtherEvent;
+                Unsafe.Add(ref wRef, 1u) = le2.OtherEvent;
             }
         }
 
-        // Handle leftCoincide case
         if (leftCoincide)
         {
             le2.EdgeType = EdgeType.NonContributing;
@@ -613,30 +635,31 @@ public class PolygonClipper
 
             if (leftCoincide && !rightCoincide)
             {
-                DivideSegment(events[1].OtherEvent, events[0].Point, eventQueue, comparer);
+                DivideSegment(Unsafe.Add(ref wRef, 1u).OtherEvent, Unsafe.Add(ref wRef, 0u).Point, eventQueue, comparer);
             }
 
             return 2;
         }
 
-        // Handle the rightCoincide case
         if (rightCoincide)
         {
-            DivideSegment(events[0], events[1].Point, eventQueue, comparer);
+            // Since leftCoincide is false, the first two workspace slots contain distinct left events.
+            DivideSegment(Unsafe.Add(ref wRef, 0u), Unsafe.Add(ref wRef, 1u).Point, eventQueue, comparer);
             return 3;
         }
 
         // Handle general overlapping case
-        if (events[0] != events[3].OtherEvent)
+        // At this point: workspace[0,1] = sorted left events, workspace[2,3] = sorted right events.
+        if (Unsafe.Add(ref wRef, 0u) != Unsafe.Add(ref wRef, 3u).OtherEvent)
         {
-            DivideSegment(events[0], events[1].Point, eventQueue, comparer);
-            DivideSegment(events[1], events[2].Point, eventQueue, comparer);
+            DivideSegment(Unsafe.Add(ref wRef, 0u), Unsafe.Add(ref wRef, 1u).Point, eventQueue, comparer);
+            DivideSegment(Unsafe.Add(ref wRef, 1u), Unsafe.Add(ref wRef, 2u).Point, eventQueue, comparer);
             return 3;
         }
 
         // One segment fully contains the other
-        DivideSegment(events[0], events[1].Point, eventQueue, comparer);
-        DivideSegment(events[3].OtherEvent, events[2].Point, eventQueue, comparer);
+        DivideSegment(Unsafe.Add(ref wRef, 0u), Unsafe.Add(ref wRef, 1u).Point, eventQueue, comparer);
+        DivideSegment(Unsafe.Add(ref wRef, 3u).OtherEvent, Unsafe.Add(ref wRef, 2u).Point, eventQueue, comparer);
         return 3;
     }
 
@@ -924,6 +947,7 @@ public class PolygonClipper
         return map;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void MarkProcessed(SweepEvent sweepEvent, Span<bool> processed, int pos, int contourId)
     {
         processed[pos] = true;
@@ -994,11 +1018,9 @@ public class PolygonClipper
     /// starting from the given position.
     /// </summary>
     /// <param name="pos">The current position in the result events.</param>
-    /// <param name="resultEvents">The list of sweep events representing result segments.</param>
     /// <param name="processed">A list indicating whether each event at the corresponding index has been processed.</param>
-    /// <param name="originalPos">The original position to return if no unprocessed event is found.</param>
-    /// <param name="iterationMap"></param>
-    /// <param name="found"></param>
+    /// <param name="iterationMap">A precomputed map that indicates the next position to check for unprocessed events.</param>
+    /// <param name="found">A boolean indicating whether an unprocessed event was found.</param>
     /// <returns>The index of the next unprocessed position.</returns>
     /// <remarks>
     /// This method searches forward from the current position until it finds an unprocessed event with

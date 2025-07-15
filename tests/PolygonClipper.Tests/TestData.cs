@@ -13,7 +13,7 @@ internal static class TestData
     public static class Fixtures
     {
         public static FeatureCollection GetFeatureCollection(string fileName)
-            => JsonSerializer.Deserialize<FeatureCollection>(GetGeoJsonPath(fileName));
+            => JsonSerializer.Deserialize<FeatureCollection>(GetGeoJsonPath(fileName))!;
 
         private static string GetGeoJsonPath(string fileName)
             => GetFullPath(nameof(Fixtures), fileName);
@@ -33,7 +33,7 @@ internal static class TestData
         public static FeatureCollection GetFeatureCollection(string fileName)
         {
             string path = GetGeoJsonPath(fileName);
-            return JsonSerializer.Deserialize<FeatureCollection>(File.ReadAllText(path));
+            return JsonSerializer.Deserialize<FeatureCollection>(File.ReadAllText(path))!;
         }
 
         private static string GetGeoJsonPath(string fileName)

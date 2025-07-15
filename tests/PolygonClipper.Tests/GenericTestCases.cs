@@ -54,7 +54,7 @@ public class GenericTestCases
         Polygon clipping = ConvertToPolygon(clippingGeometry);
 
 #pragma warning disable RCS1124 // Inline local variable
-        List<ExpectedResult> expectedResults = ExtractExpectedResults(data.Features.Skip(2).ToList(), data.Type);
+        List<ExpectedResult> expectedResults = ExtractExpectedResults([.. data.Features.Skip(2)], data.Type);
 #pragma warning restore RCS1124 // Inline local variable
 
         // ExpectedResult result = expectedResults[1];
@@ -157,7 +157,8 @@ public class GenericTestCases
 
             return new ExpectedResult
             {
-                Operation = operation, Coordinates = ConvertToPolygon(feature.Geometry as MultiPolygon)
+                Operation = operation,
+                Coordinates = ConvertToPolygon(feature.Geometry as MultiPolygon)
             };
         });
 
