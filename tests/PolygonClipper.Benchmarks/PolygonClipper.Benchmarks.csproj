@@ -31,11 +31,12 @@
   <ItemGroup>
     <Compile Include="..\PolygonClipper.Tests\TestData.cs" Link="TestData.cs" />
     <Compile Include="..\PolygonClipper.Tests\TestEnvironment.cs" Link="TestEnvironment.cs" />
+    <Compile Include="..\PolygonClipper.Tests\TestPolygonUtilities.cs" Link="TestPolygonUtilities.cs" />    
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" Version="0.14.0" />
-    <PackageReference Include="Clipper2" Version="1.4.0" />
+    <PackageReference Include="Clipper2" Version="1.5.4" />
   </ItemGroup>
 
   <ItemGroup>
