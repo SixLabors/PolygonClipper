@@ -40,6 +40,27 @@ internal static class TestData
             => GetFullPath(nameof(Generic), fileName);
     }
 
+    public static class Benchmarks
+    {
+        public static IEnumerable<string> GetFileNames()
+        {
+            DirectoryInfo info = new(Path.Combine(TestEnvironment.GeoJsonTestDataFullPath, nameof(Benchmarks)));
+            foreach (FileInfo file in info.EnumerateFiles("*.geojson"))
+            {
+                yield return file.Name;
+            }
+        }
+
+        public static FeatureCollection GetFeatureCollection(string fileName)
+        {
+            string path = GetGeoJsonPath(fileName);
+            return JsonSerializer.Deserialize<FeatureCollection>(File.ReadAllText(path))!;
+        }
+
+        private static string GetGeoJsonPath(string fileName)
+            => GetFullPath(nameof(Benchmarks), fileName);
+    }
+
     private static string GetFullPath(string folder, string fileName)
         => Path.Combine(TestEnvironment.GeoJsonTestDataFullPath, folder, fileName);
 }
