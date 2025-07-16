@@ -18,6 +18,7 @@ namespace PolygonClipper;
 internal sealed class StablePriorityQueue<T, TComparer>
     where TComparer : IComparer<T>
 {
+    private const int Log2Arity = 2;
     private readonly List<T> heap;
 
     /// <summary>
@@ -29,6 +30,23 @@ internal sealed class StablePriorityQueue<T, TComparer>
     {
         this.Comparer = comparer ?? throw new ArgumentNullException(nameof(comparer));
         this.heap = new List<T>(capacity > 0 ? capacity : 16);
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StablePriorityQueue{T, TComparer}"/> class
+    /// with a specified comparer and an initial collection of unordered elements.
+    /// The heap property is established in linear time.
+    /// </summary>
+    /// <param name="comparer">The comparer to determine the priority of the elements.</param>
+    /// <param name="items">
+    /// The initial collection of elements to heapify.
+    /// Note: The collection is modified to establish the heap property.
+    /// </param>
+    public StablePriorityQueue(TComparer comparer, List<T> items)
+    {
+        this.Comparer = comparer ?? throw new ArgumentNullException(nameof(comparer));
+        this.heap = items ?? throw new ArgumentNullException(nameof(items));
+        this.Heapify(this.heap);
     }
 
     /// <summary>
@@ -107,7 +125,7 @@ internal sealed class StablePriorityQueue<T, TComparer>
 
         while (index > 0)
         {
-            uint parent = (index - 1u) >> 1;
+            uint parent = (index - 1u) >> Log2Arity;
             T current = Unsafe.Add(ref dRef, parent);
             if (comparer.Compare(item, current) >= 0)
             {
@@ -133,18 +151,21 @@ internal sealed class StablePriorityQueue<T, TComparer>
         ref T dRef = ref MemoryMarshal.GetReference(data);
 
         uint length = (uint)data.Length;
-        uint halfLength = length >> 1;
         T item = Unsafe.Add(ref dRef, index);
         TComparer comparer = this.Comparer;
 
-        while (index < halfLength)
+        while ((index << Log2Arity) + 1u < length)
         {
-            uint bestChild = (index << 1) + 1; // Initially left child
-            uint right = bestChild + 1u;
+            uint firstChild = (index << Log2Arity) + 1u;
+            uint bestChild = firstChild;
+            uint maxChild = Math.Min(firstChild + (1u << Log2Arity), length);
 
-            if (right < length && comparer.Compare(Unsafe.Add(ref dRef, right), Unsafe.Add(ref dRef, bestChild)) < 0)
+            for (uint i = firstChild + 1u; i < maxChild; i++)
             {
-                bestChild = right;
+                if (comparer.Compare(Unsafe.Add(ref dRef, i), Unsafe.Add(ref dRef, bestChild)) < 0)
+                {
+                    bestChild = i;
+                }
             }
 
             if (comparer.Compare(Unsafe.Add(ref dRef, bestChild), item) >= 0)
@@ -157,6 +178,25 @@ internal sealed class StablePriorityQueue<T, TComparer>
         }
 
         Unsafe.Add(ref dRef, index) = item;
+    }
+
+    /// <summary>
+    /// Heapifies the given list to establish the min-heap property.
+    /// </summary>
+    /// <param name="heap">The list to heapify.</param>
+    private void Heapify(List<T> heap)
+    {
+        int count = heap.Count;
+        if (count <= 1)
+        {
+            return;
+        }
+
+        int lastParent = (count - 2) >> Log2Arity;
+        for (int i = lastParent; i >= 0; i--)
+        {
+            this.Down((uint)i, heap);
+        }
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]

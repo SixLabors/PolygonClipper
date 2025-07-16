@@ -131,7 +131,8 @@ public class PolygonClipper
         int clippingVertexCount = clipping.GetVertexCount();
         int eventCount = (subjectVertexCount + clippingVertexCount) * 2;
 
-        StablePriorityQueue<SweepEvent, SweepEventComparer> eventQueue = new(new SweepEventComparer(), eventCount);
+        SweepEventComparer comparer = new();
+        List<SweepEvent> unorderedEventQueue = new(eventCount);
         int contourId = 0;
 
         for (int i = 0; i < subject.ContourCount; i++)
@@ -140,7 +141,14 @@ public class PolygonClipper
             contourId++;
             for (int j = 0; j < contour.VertexCount - 1; j++)
             {
-                ProcessSegment(contourId, contour.Segment(j), PolygonType.Subject, eventQueue, ref min, ref max);
+                ProcessSegment(
+                    contourId,
+                    contour.Segment(j),
+                    PolygonType.Subject,
+                    unorderedEventQueue,
+                    comparer,
+                    ref min,
+                    ref max);
             }
         }
 
@@ -155,7 +163,14 @@ public class PolygonClipper
 
             for (int j = 0; j < contour.VertexCount - 1; j++)
             {
-                ProcessSegment(contourId, contour.Segment(j), PolygonType.Clipping, eventQueue, ref min, ref max);
+                ProcessSegment(
+                    contourId,
+                    contour.Segment(j),
+                    PolygonType.Clipping,
+                    unorderedEventQueue,
+                    comparer,
+                    ref min,
+                    ref max);
             }
         }
 
@@ -166,6 +181,7 @@ public class PolygonClipper
         }
 
         // Sweep line algorithm: process events in the priority queue
+        StablePriorityQueue<SweepEvent, SweepEventComparer> eventQueue = new(comparer, unorderedEventQueue);
         List<SweepEvent> sortedEvents = new(eventCount);
 
         // Heuristic capacity for the sweep line status structure.
@@ -173,7 +189,6 @@ public class PolygonClipper
         // are active, so we preallocate half the subject's vertex count
         // to reduce resizing without overcommitting memory.
         StatusLine statusLine = new(subjectVertexCount >> 1);
-        SweepEventComparer comparer = eventQueue.Comparer;
         double subjectMaxX = subjectBB.Max.X;
         double minMaxX = Vertex.Min(subjectBB.Max, clippingBB.Max).X;
 
@@ -348,14 +363,16 @@ public class PolygonClipper
     /// <param name="contourId">The identifier of the contour to which the segment belongs.</param>
     /// <param name="s">The segment to process.</param>
     /// <param name="pt">The polygon type to which the segment belongs.</param>
-    /// <param name="eventQueue">The event queue to add the generated events to.</param>
+    /// <param name="eventQueue">The unordered event queue to add the generated events to.</param>
+    /// <param name="comparer">The comparer used to determine the order of sweep events in the queue.</param>
     /// <param name="min">The minimum vertex of the bounding box.</param>
     /// <param name="max">The maximum vertex of the bounding box.</param>
     private static void ProcessSegment(
         int contourId,
         Segment s,
         PolygonType pt,
-        StablePriorityQueue<SweepEvent, SweepEventComparer> eventQueue,
+        List<SweepEvent> eventQueue,
+        SweepEventComparer comparer,
         ref Vertex min,
         ref Vertex max)
     {
@@ -372,7 +389,7 @@ public class PolygonClipper
         e1.ContourId = e2.ContourId = contourId;
 
         // Determine which endpoint is the left endpoint
-        if (eventQueue.Comparer.Compare(e1, e2) < 0)
+        if (comparer.Compare(e1, e2) < 0)
         {
             e2.Left = false;
         }
@@ -385,8 +402,8 @@ public class PolygonClipper
         max = Vertex.Max(max, s.Max);
 
         // Add the events to the event queue
-        eventQueue.Enqueue(e1);
-        eventQueue.Enqueue(e2);
+        eventQueue.Add(e1);
+        eventQueue.Add(e2);
     }
 
     /// <summary>
