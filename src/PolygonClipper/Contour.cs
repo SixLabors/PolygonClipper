@@ -194,7 +194,7 @@ public sealed class Contour
     /// </summary>
     /// <param name="vertex">The vertex to add.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void AddVertex(Vertex vertex) => this.points.Add(vertex);
+    public void AddVertex(in Vertex vertex) => this.points.Add(vertex);
 
     /// <summary>
     /// Removes the vertex at the specified index from the contour.

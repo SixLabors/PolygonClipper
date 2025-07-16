@@ -7,9 +7,12 @@ using PolygonClipper.Tests.TestCases;
 using Xunit;
 
 namespace PolygonClipper.Tests;
+
 public class TestPolygonUtilitiesTests
 {
     private static readonly FeatureCollection Data = TestData.Generic.GetFeatureCollection("issue71.geojson");
+
+    private static readonly (Polygon subject, Polygon clipping) Polygons = TestPolygonUtilities.BuildPolygon(Data);
 
     [Fact]
     public void ConvertToPolygon_ValidGeometry_ReturnsPolygon()
@@ -50,9 +53,9 @@ public class TestPolygonUtilitiesTests
     [Fact]
     public void PolygonClipper_Union_ValidPolygons_ReturnsCorrectResult()
     {
-        (Polygon subject, Polygon clipping) = TestPolygonUtilities.BuildPolygon(Data);
+        //(Polygon subject, Polygon clipping) = TestPolygonUtilities.BuildPolygon(Data);
 
-        Polygon solution = PolygonClipper.Union(subject, clipping);
+        Polygon solution = PolygonClipper.Union(Polygons.subject, Polygons.clipping);
         Assert.NotNull(solution);
 
         Assert.Equal(2, solution.ContourCount);
@@ -60,7 +63,7 @@ public class TestPolygonUtilitiesTests
         Assert.Equal(9, solution[1].VertexCount);
     }
 
-    [Fact(Skip = "Clipper2 result is unverified.")]
+    [Fact]
     public void Clipper2_Union_ValidPolygons_ReturnsCorrectResult()
     {
         (PathsD subject, PathsD clipping) = TestPolygonUtilities.BuildClipper2Polygon(Data);
@@ -71,10 +74,10 @@ public class TestPolygonUtilitiesTests
         clipper2.AddClip(clipping);
         Assert.True(clipper2.Execute(ClipType.Union, FillRule.Positive, solution));
 
-        // Clipper2 is wrong?
-        // It only produces a single polygon with 121 vertices instead of two polygons.
+        // Clipper2 does not duplicate the first vertex of the each contour
+        // for closed polygons, so we need to adjust the expected counts.
         Assert.Equal(2, solution.Count);
-        Assert.Equal(122, solution[0].Count);
-        Assert.Equal(9, solution[1].Count);
+        Assert.Equal(121, solution[0].Count);
+        Assert.Equal(8, solution[1].Count);
     }
 }

@@ -73,6 +73,11 @@ internal static class TestPolygonUtilities
                     }
 
                     polygon.Push(contour);
+
+                    if (!ring.IsClosed())
+                    {
+                        contour.AddVertex(contour.GetVertex(0));
+                    }
                 }
             }
 
@@ -95,6 +100,12 @@ internal static class TestPolygonUtilities
                 {
                     contour.Add(new PointD(xy.Longitude, xy.Latitude));
                 }
+
+                if (!ring.IsClosed())
+                {
+                    contour.Add(contour[0]);
+                }
+
                 polygon.Add(contour);
             }
 
@@ -104,6 +115,10 @@ internal static class TestPolygonUtilities
         {
             // Convert GeoJSON MultiPolygon to our Polygon type
             PathsD polygon = [];
+
+            // Clipper2 expects holes run in the opposite direction
+            // to the outer ring, so we need to reverse holes if they are clockwise.
+            int i = 0;
             foreach (GeoPolygon geoPolygon in geoJsonMultiPolygon.Coordinates)
             {
                 foreach (LineString ring in geoPolygon.Coordinates)
@@ -113,7 +128,21 @@ internal static class TestPolygonUtilities
                     {
                         contour.Add(new PointD(xy.Longitude, xy.Latitude));
                     }
+
+                    if (!ring.IsClosed())
+                    {
+                        contour.Add(contour[0]);
+                    }
+
+                    // Assume all polygons following the initial one are holes.
+                    // If the area of the contour is positive, we must reverse it.
+                    if (i > 0 && Clipper.Area(contour) > 0)
+                    {
+                        contour.Reverse();
+                    }
+
                     polygon.Add(contour);
+                    i++;
                 }
             }
 

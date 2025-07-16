@@ -26,8 +26,11 @@ namespace PolygonClipper;
 [DebuggerDisplay("Count = {Count}")]
 internal sealed class StatusLine
 {
-    private readonly List<SweepEvent> sortedEvents = [];
+    private readonly List<SweepEvent> sortedEvents;
     private readonly SegmentComparer comparer = new();
+
+    public StatusLine(int capacity)
+        => this.sortedEvents = new List<SweepEvent>(capacity > 0 ? capacity : 16);
 
     /// <summary>
     /// Gets the number of events in the status line.

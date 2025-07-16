@@ -152,7 +152,7 @@ internal sealed class SweepEvent
     /// <see langword="true"/> if the line segment is below the point; otherwise <see langword="false"/>.
     /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Below(Vertex p)
+    public bool Below(in Vertex p)
         => this.Left
         ? PolygonUtilities.SignedArea(this.Point, this.OtherEvent.Point, p) > 0D
         : PolygonUtilities.SignedArea(this.OtherEvent.Point, this.Point, p) > 0D;
@@ -165,7 +165,7 @@ internal sealed class SweepEvent
     /// <see langword="true"/> if the line segment is above the point; otherwise <see langword="false"/>.
     /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Above(Vertex p) => !this.Below(p);
+    public bool Above(in Vertex p) => !this.Below(p);
 
     /// <summary>
     /// Is the line segment (point, otherEvent->point) a vertical line segment.

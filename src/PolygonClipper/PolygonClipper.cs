@@ -123,9 +123,17 @@ public class PolygonClipper
         Vertex min = new(double.PositiveInfinity);
         Vertex max = new(double.NegativeInfinity);
 
-        int eventCount = (subject.GetVertexCount() + clipping.GetVertexCount()) * 2;
+        // Estimate the total number of sweep events.
+        // Each segment contributes two events (left/right endpoints),
+        // and subdivision during intersection may increase the count,
+        // so we conservatively double the total vertex count.
+        int subjectVertexCount = subject.GetVertexCount();
+        int clippingVertexCount = clipping.GetVertexCount();
+        int eventCount = (subjectVertexCount + clippingVertexCount) * 2;
+
         StablePriorityQueue<SweepEvent, SweepEventComparer> eventQueue = new(new SweepEventComparer(), eventCount);
         int contourId = 0;
+
         for (int i = 0; i < subject.ContourCount; i++)
         {
             Contour contour = subject[i];
@@ -158,8 +166,13 @@ public class PolygonClipper
         }
 
         // Sweep line algorithm: process events in the priority queue
-        List<SweepEvent> sortedEvents = [];
-        StatusLine statusLine = new();
+        List<SweepEvent> sortedEvents = new(eventCount);
+
+        // Heuristic capacity for the sweep line status structure.
+        // At any given point during the sweep, only a subset of segments
+        // are active, so we preallocate half the subject's vertex count
+        // to reduce resizing without overcommitting memory.
+        StatusLine statusLine = new(subjectVertexCount >> 1);
         SweepEventComparer comparer = eventQueue.Comparer;
         double subjectMaxX = subjectBB.Max.X;
         double minMaxX = Vertex.Min(subjectBB.Max, clippingBB.Max).X;
@@ -868,7 +881,7 @@ public class PolygonClipper
 
     private static ReadOnlySpan<int> PrecomputeIterationOrder(List<SweepEvent> data)
     {
-        Span<int> map = new(new int[data.Count]);
+        Span<int> map = new int[data.Count];
 
         int i = 0;
         while (i < data.Count)

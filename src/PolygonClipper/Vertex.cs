@@ -52,7 +52,7 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <returns>The summed vector.</returns>
     /// <remarks>The <see cref="op_Addition" /> method defines the addition operation for <see cref="Vector2" /> objects.</remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Vertex operator +(Vertex left, Vertex right)
+    public static Vertex operator +(in Vertex left, in Vertex right)
         => AsVertexUnsafe(AsVector128Unsafe(left) + AsVector128Unsafe(right));
 
     /// <summary>
@@ -63,7 +63,7 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <returns>The vector that results from subtracting <paramref name="right" /> from <paramref name="left" />.</returns>
     /// <remarks>The <see cref="op_Subtraction" /> method defines the subtraction operation for <see cref="Vector2" /> objects.</remarks>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Vertex operator -(Vertex left, Vertex right)
+    public static Vertex operator -(in Vertex left, in Vertex right)
         => AsVertexUnsafe(AsVector128Unsafe(left) - AsVector128Unsafe(right));
 
     /// <summary>
@@ -73,7 +73,7 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <param name="right">The second vertex.</param>
     /// <returns>The element-wise product vertex.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Vertex operator *(Vertex left, Vertex right) => AsVertexUnsafe(AsVector128Unsafe(left) * AsVector128Unsafe(right));
+    public static Vertex operator *(in Vertex left, in Vertex right) => AsVertexUnsafe(AsVector128Unsafe(left) * AsVector128Unsafe(right));
 
     /// <summary>
     /// Multiplies the specified vertex by the specified scalar value.
@@ -82,7 +82,7 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <param name="right">The scalar value.</param>
     /// <returns>The scaled vertex.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Vertex operator *(Vertex left, double right) => AsVertexUnsafe(AsVector128Unsafe(left) * right);
+    public static Vertex operator *(in Vertex left, double right) => AsVertexUnsafe(AsVector128Unsafe(left) * right);
 
     /// <summary>
     /// Multiplies the specified vertex by the specified scalar value.
@@ -91,7 +91,7 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <param name="right">The scalar value.</param>
     /// <returns>The scaled vertex.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Vertex operator *(double left, Vertex right) => right * left;
+    public static Vertex operator *(double left, in Vertex right) => right * left;
 
     /// <summary>
     /// Divides the first vertex by the second.
@@ -100,7 +100,7 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <param name="right">The second vertex.</param>
     /// <returns>The vertex that results from dividing <paramref name="left" /> by <paramref name="right" />.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Vertex operator /(Vertex left, Vertex right) => AsVertexUnsafe(AsVector128Unsafe(left) / AsVector128Unsafe(right));
+    public static Vertex operator /(in Vertex left, in Vertex right) => AsVertexUnsafe(AsVector128Unsafe(left) / AsVector128Unsafe(right));
 
     /// <summary>
     /// Divides the specified vertex by a specified scalar value.
@@ -109,7 +109,7 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <param name="right">The scalar value.</param>
     /// <returns>The result of the division.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Vertex operator /(Vertex left, double right) => AsVertexUnsafe(AsVector128Unsafe(left) / right);
+    public static Vertex operator /(in Vertex left, double right) => AsVertexUnsafe(AsVector128Unsafe(left) / right);
 
     /// <summary>
     /// Divides the specified vertex by the specified scalar value.
@@ -118,7 +118,7 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <param name="right">The scalar value.</param>
     /// <returns>The result of the division.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Vertex operator /(double left, Vertex right) => right / left;
+    public static Vertex operator /(double left, in Vertex right) => right / left;
 
     /// <summary>
     /// Determines whether two vertices are equal.
@@ -126,7 +126,7 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <param name="left">The first vertex.</param>
     /// <param name="right">The second vertex.</param>
     /// <returns><see langword="true"/> if the vertices are equal; otherwise, <see langword="false"/>.</returns>
-    public static bool operator ==(Vertex left, Vertex right) => left.Equals(right);
+    public static bool operator ==(in Vertex left, in Vertex right) => left.Equals(right);
 
     /// <summary>
     /// Determines whether two vertices are not equal.
@@ -134,7 +134,7 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <param name="left">The first vertex.</param>
     /// <param name="right">The second vertex.</param>
     /// <returns><see langword="true"/> if the vertices are not equal; otherwise, <see langword="false"/>.</returns>
-    public static bool operator !=(Vertex left, Vertex right) => !left.Equals(right);
+    public static bool operator !=(in Vertex left, in Vertex right) => !left.Equals(right);
 
     /// <summary>
     /// Returns the dot product of two vertices.
@@ -142,7 +142,7 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <param name="a">The first vertex.</param>
     /// <param name="b">The second vertex.</param>
     /// <returns>The <see cref="double"/> dot product.</returns>
-    public static double Dot(Vertex a, Vertex b)
+    public static double Dot(in Vertex a, in Vertex b)
     {
         Vector128<double> a128 = AsVector128Unsafe(a);
         Vector128<double> b128 = AsVector128Unsafe(b);
@@ -155,21 +155,21 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <param name="a">The first vertex.</param>
     /// <param name="b">The second vertex.</param>
     /// <returns>The <see cref="double"/> cross product.</returns>
-    public static double Cross(Vertex a, Vertex b)
+    public static double Cross(in Vertex a, in Vertex b)
         => (a.X * b.Y) - (a.Y * b.X);
 
     /// <summary>Computes the Euclidean distance between the two given vertices.</summary>
     /// <param name="value1">The first vertex.</param>
     /// <param name="value2">The second vertex.</param>
     /// <returns>The distance.</returns>
-    public static double Distance(Vertex value1, Vertex value2)
+    public static double Distance(in Vertex value1, in Vertex value2)
         => double.Sqrt(DistanceSquared(value1, value2));
 
     /// <summary>Returns the Euclidean distance squared between two specified vertices.</summary>
     /// <param name="a">The first vertex.</param>
     /// <param name="b">The second vertex.</param>
     /// <returns>The distance squared.</returns>
-    public static double DistanceSquared(Vertex a, Vertex b)
+    public static double DistanceSquared(in Vertex a, in Vertex b)
         => (a - b).LengthSquared();
 
     /// <summary>
@@ -194,7 +194,7 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <param name="b">The second vertex.</param>
     /// <returns>The minimized <see cref="Vertex"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Vertex Min(Vertex a, Vertex b)
+    public static Vertex Min(in Vertex a, in Vertex b)
         => AsVertexUnsafe(Vector128.Min(AsVector128Unsafe(a), AsVector128Unsafe(b)));
 
     /// <summary>
@@ -204,7 +204,7 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <param name="b">The second vertex.</param>
     /// <returns>The maximized <see cref="Vertex"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Vertex Max(Vertex a, Vertex b)
+    public static Vertex Max(in Vertex a, in Vertex b)
         => AsVertexUnsafe(Vector128.Max(AsVector128Unsafe(a), AsVector128Unsafe(b)));
 
     /// <inheritdoc/>
@@ -221,7 +221,7 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <inheritdoc/>
     public override string ToString() => $"Vertex [ X={this.X}, Y={this.Y} ]";
 
-    private static Vector128<double> AsVector128Unsafe(Vertex value)
+    private static Vector128<double> AsVector128Unsafe(in Vertex value)
         => Unsafe.BitCast<Vertex, Vector128<double>>(value);
 
     private static Vertex AsVertexUnsafe(Vector128<double> value)

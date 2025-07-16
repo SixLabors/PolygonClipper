@@ -34,7 +34,11 @@ internal sealed class StablePriorityQueue<T, TComparer>
     /// <summary>
     /// Gets the number of elements in the priority queue.
     /// </summary>
-    public int Count => this.heap.Count;
+    public int Count
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => this.heap.Count;
+    }
 
     /// <summary>
     /// Gets the comparer used to determine the priority of the elements.
@@ -47,8 +51,9 @@ internal sealed class StablePriorityQueue<T, TComparer>
     /// <param name="item">The item to add.</param>
     public void Enqueue(T item)
     {
-        this.heap.Add(item);
-        this.Up((uint)this.heap.Count - 1);
+        List<T> data = this.heap;
+        data.Add(item);
+        this.Up((uint)data.Count - 1, data);
     }
 
     /// <summary>
@@ -58,19 +63,20 @@ internal sealed class StablePriorityQueue<T, TComparer>
     /// <exception cref="InvalidOperationException">Thrown if the priority queue is empty.</exception>
     public T Dequeue()
     {
-        if (this.heap.Count == 0)
-        {
-            throw new InvalidOperationException("Queue is empty.");
-        }
+        List<T> data = this.heap;
+        int count = data.Count;
+        ThrowIfEmpty(count);
+        ref T dRef = ref MemoryMarshal.GetReference(CollectionsMarshal.AsSpan(data));
 
-        T top = this.heap[0];
-        T bottom = this.heap[^1];
-        this.heap.RemoveAt(this.heap.Count - 1);
+        int maxIndex = count - 1;
+        T top = Unsafe.Add(ref dRef, 0u);
+        T bottom = Unsafe.Add(ref dRef, (uint)maxIndex);
+        data.RemoveAt(maxIndex);
 
-        if (this.heap.Count > 0)
+        if (--count > 0)
         {
-            this.heap[0] = bottom;
-            this.Down(0);
+            Unsafe.Add(ref dRef, 0u) = bottom;
+            this.Down(0u, data);
         }
 
         return top;
@@ -83,11 +89,7 @@ internal sealed class StablePriorityQueue<T, TComparer>
     /// <exception cref="InvalidOperationException">Thrown if the priority queue is empty.</exception>
     public T Peek()
     {
-        if (this.heap.Count == 0)
-        {
-            throw new InvalidOperationException("Queue is empty.");
-        }
-
+        ThrowIfEmpty(this.Count);
         return this.heap[0];
     }
 
@@ -96,9 +98,10 @@ internal sealed class StablePriorityQueue<T, TComparer>
     /// through the heap until it is in the correct position. This is called after insertion.
     /// </summary>
     /// <param name="index">The index of the newly added item to sift upward.</param>
-    private void Up(uint index)
+    /// <param name="heap">The heap to operate on.</param>
+    private void Up(uint index, List<T> heap)
     {
-        ref T dRef = ref MemoryMarshal.GetReference(CollectionsMarshal.AsSpan(this.heap));
+        ref T dRef = ref MemoryMarshal.GetReference(CollectionsMarshal.AsSpan(heap));
         T item = Unsafe.Add(ref dRef, index);
         TComparer comparer = this.Comparer;
 
@@ -123,9 +126,10 @@ internal sealed class StablePriorityQueue<T, TComparer>
     /// through the heap until it is in the correct position. This is called after removal of the root.
     /// </summary>
     /// <param name="index">The index of the item to sift downward (typically the root).</param>
-    private void Down(uint index)
+    /// <param name="heap">The heap to operate on.</param>
+    private void Down(uint index, List<T> heap)
     {
-        Span<T> data = CollectionsMarshal.AsSpan(this.heap);
+        Span<T> data = CollectionsMarshal.AsSpan(heap);
         ref T dRef = ref MemoryMarshal.GetReference(data);
 
         uint length = (uint)data.Length;
@@ -153,5 +157,14 @@ internal sealed class StablePriorityQueue<T, TComparer>
         }
 
         Unsafe.Add(ref dRef, index) = item;
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ThrowIfEmpty(int count)
+    {
+        if (count == 0)
+        {
+            throw new InvalidOperationException("Queue is empty.");
+        }
     }
 }

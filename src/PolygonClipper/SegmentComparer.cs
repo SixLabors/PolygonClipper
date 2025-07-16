@@ -13,8 +13,6 @@ namespace PolygonClipper;
 /// </summary>
 internal sealed class SegmentComparer : IComparer<SweepEvent>, IComparer
 {
-    private readonly SweepEventComparer eventComparer = new();
-
     /// <inheritdoc/>
     public int Compare(SweepEvent? x, SweepEvent? y)
     {
@@ -35,7 +33,7 @@ internal sealed class SegmentComparer : IComparer<SweepEvent>, IComparer
         }
 
         SweepEvent perhapsInversedX, perhapsInversedY;
-        bool inversed = false;
+        bool inversed;
 
         if (x.IsBefore(y))
         {
