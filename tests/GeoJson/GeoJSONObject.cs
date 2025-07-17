@@ -2,10 +2,6 @@
 
 using GeoJSON.Text.Converters;
 using GeoJSON.Text.CoordinateReferenceSystem;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Linq;
 using System.Text.Json.Serialization;
 
 namespace GeoJSON.Text

@@ -1,9 +1,6 @@
 ﻿// Copyright © Joerg Battermann 2014, Matt Hunt 2017
 
 using GeoJSON.Text.Converters;
-using System;
-using System.Collections.Generic;
-using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace GeoJSON.Text.CoordinateReferenceSystem

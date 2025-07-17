@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
 namespace PolygonClipper;
@@ -29,7 +28,7 @@ public sealed class Polygon
     /// Gets the contour at the specified index.
     /// </summary>
     /// <param name="index">The index of the contour.</param>
-    /// <returns>The <see cref="GetContour"/> at the given index.</returns>
+    /// <returns>The <see cref="Contour"/> at the given index.</returns>
     public Contour this[int index]
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

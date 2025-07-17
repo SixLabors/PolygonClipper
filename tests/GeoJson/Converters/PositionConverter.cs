@@ -1,7 +1,6 @@
 ﻿// Copyright © Joerg Battermann 2014, Matt Hunt 2017
 
 using GeoJSON.Text.Geometry;
-using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 

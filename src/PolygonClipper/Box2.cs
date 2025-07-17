@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System;
 using System.Runtime.CompilerServices;
 
 namespace PolygonClipper;
@@ -42,10 +41,22 @@ public readonly struct Box2 : IEquatable<Box2>
     /// </summary>
     public Vertex Max { get; }
 
+    /// <summary>
+    /// Compares two <see cref="Box2"/> instances for equality.
+    /// </summary>
+    /// <param name="left">The left <see cref="Box2"/> object.</param>
+    /// <param name="right">The right <see cref="Box2"/> object.</param>
+    /// <returns><c>true</c> if both boxes are equal; otherwise, <c>false</c>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool operator ==(in Box2 left, in Box2 right)
         => left.Equals(right);
 
+    /// <summary>
+    /// Determines whether two <see cref="Box2"/> instances are not equal.
+    /// </summary>
+    /// <param name="left">The left <see cref="Box2"/> object.</param>
+    /// <param name="right">The right <see cref="Box2"/> object.</param>
+    /// <returns><c>true</c> if the boxes are not equal; otherwise, <c>false</c>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool operator !=(in Box2 left, in Box2 right)
         => !(left == right);

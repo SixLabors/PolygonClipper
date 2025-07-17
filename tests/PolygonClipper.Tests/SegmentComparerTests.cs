@@ -1,9 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Collections.Generic;
-using Xunit;
-
 namespace PolygonClipper.Tests;
 
 public class SegmentComparerTests

@@ -1,14 +1,10 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using GeoJSON.Text;
 using GeoJSON.Text.Feature;
 using GeoJSON.Text.Geometry;
 using PolygonClipper.Tests.TestCases;
-using Xunit;
 using Xunit.Abstractions;
 using GeoPolygon = GeoJSON.Text.Geometry.Polygon;
 

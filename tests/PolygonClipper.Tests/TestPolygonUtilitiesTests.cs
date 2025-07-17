@@ -3,7 +3,6 @@
 
 using GeoJSON.Text.Feature;
 using PolygonClipper.Tests.TestCases;
-using Xunit;
 
 namespace PolygonClipper.Tests;
 

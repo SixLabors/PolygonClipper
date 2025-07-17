@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System;
 using GeoJSON.Text.Feature;
 using GeoJSON.Text.Geometry;
 

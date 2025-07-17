@@ -1,9 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System;
 using System.Collections;
-using System.Collections.Generic;
 
 namespace PolygonClipper;
 
