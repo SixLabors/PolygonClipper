@@ -17,7 +17,7 @@ internal static class PolygonUtilities
     /// <param name="p2">The third point.</param>
     /// <returns>The <see cref="double"/> area.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static double SignedArea(Vertex p0, Vertex p1, Vertex p2)
+    public static double SignedArea(in Vertex p0, in Vertex p1, in Vertex p2)
         => ((p0.X - p2.X) * (p1.Y - p2.Y)) - ((p1.X - p2.X) * (p0.Y - p2.Y));
 
     /// <summary>
@@ -33,7 +33,7 @@ internal static class PolygonUtilities
     /// - Returns 1 if the segments intersect at a single point.
     /// - Returns 2 if the segments overlap.
     /// </returns>
-    public static int FindIntersection(Segment seg0, Segment seg1, out Vertex pi0, out Vertex pi1)
+    public static int FindIntersection(in Segment seg0, in Segment seg1, out Vertex pi0, out Vertex pi1)
     {
         pi0 = default;
         pi1 = default;
@@ -76,7 +76,7 @@ internal static class PolygonUtilities
     /// - Returns 1 if the segments intersect at a single point.
     /// - Returns 2 if the segments overlap.
     /// </returns>
-    private static int FindIntersectionImpl(Segment seg0, Segment seg1, out Vertex pi0, out Vertex pi1)
+    private static int FindIntersectionImpl(in Segment seg0, in Segment seg1, out Vertex pi0, out Vertex pi1)
     {
         pi0 = default;
         pi1 = default;
@@ -175,7 +175,12 @@ internal static class PolygonUtilities
     /// <returns>
     /// <see langword="true"/> if the segments intersect; otherwise, <see langword="false"/>.
     /// </returns>
-    private static bool TryGetIntersectionBoundingBox(Vertex a1, Vertex a2, Vertex b1, Vertex b2, [NotNullWhen(true)] out Box2? result)
+    private static bool TryGetIntersectionBoundingBox(
+        in Vertex a1,
+        in Vertex a2,
+        in Vertex b1,
+        in Vertex b2,
+        [NotNullWhen(true)] out Box2? result)
     {
         Vertex minA = Vertex.Min(a1, a2);
         Vertex maxA = Vertex.Max(a1, a2);
@@ -202,7 +207,7 @@ internal static class PolygonUtilities
     /// <param name="bbox">The bounding box.</param>
     /// <returns>The constrained point.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static Vertex ConstrainToBoundingBox(Vertex p, Box2 bbox)
+    private static Vertex ConstrainToBoundingBox(in Vertex p, in Box2 bbox)
         => Vertex.Min(Vertex.Max(p, bbox.Min), bbox.Max);
 
     /// <summary>
@@ -213,5 +218,5 @@ internal static class PolygonUtilities
     /// <param name="d">The direction vector of the segment.</param>
     /// <returns>The interpolated vertex at the given fractional distance.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Vertex MidPoint(Vertex p, double s, Vertex d) => p + (s * d);
+    public static Vertex MidPoint(in Vertex p, double s, in Vertex d) => p + (s * d);
 }

@@ -16,7 +16,7 @@ public readonly struct Box2 : IEquatable<Box2>
     /// </summary>
     /// <param name="vector">The xy-coordinate.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Box2(Vertex vector)
+    public Box2(in Vertex vector)
         : this(vector, vector)
     {
     }
@@ -26,7 +26,7 @@ public readonly struct Box2 : IEquatable<Box2>
     /// </summary>
     /// <param name="min">The minimum xy-coordinate.</param>
     /// <param name="max">The maximum xy-coordinate.</param>
-    public Box2(Vertex min, Vertex max)
+    public Box2(in Vertex min, in Vertex max)
     {
         this.Min = min;
         this.Max = max;
@@ -43,11 +43,11 @@ public readonly struct Box2 : IEquatable<Box2>
     public Vertex Max { get; }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator ==(Box2 left, Box2 right)
+    public static bool operator ==(in Box2 left, in Box2 right)
         => left.Equals(right);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator !=(Box2 left, Box2 right)
+    public static bool operator !=(in Box2 left, in Box2 right)
         => !(left == right);
 
     /// <summary>
@@ -56,7 +56,7 @@ public readonly struct Box2 : IEquatable<Box2>
     /// <param name="other">The other box.</param>
     /// <returns>The summed <see cref="Box2"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Box2 Add(Box2 other)
+    public Box2 Add(in Box2 other)
         => new(Vertex.Min(this.Min, other.Min), Vertex.Max(this.Max, other.Max));
 
     /// <inheritdoc/>

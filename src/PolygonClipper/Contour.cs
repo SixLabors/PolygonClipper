@@ -43,8 +43,7 @@ public sealed class Contour
     public int HoleCount => this.holes.Count;
 
     /// <summary>
-    /// Gets a value indicating whether the contour
-    /// is external (not a hole).
+    /// Gets a value indicating whether the contour is external (not a hole).
     /// </summary>
     public bool IsExternal => this.HoleOf == null;
 
@@ -127,12 +126,12 @@ public sealed class Contour
         {
             c = points[i];
             c1 = points[i + 1];
-            area += (c.X * c1.Y) - (c1.X * c.Y);
+            area += Vertex.Cross(c, c1);
         }
 
-        c = points[this.points.Count - 1];
+        c = points[^1];
         c1 = points[0];
-        area += (c.X * c1.Y) - (c1.X * c.Y);
+        area += Vertex.Cross(c, c1);
         return this.cc = area >= 0;
     }
 
@@ -176,11 +175,11 @@ public sealed class Contour
     }
 
     /// <summary>
-    /// Offsets the contour by the specified x and y values.
+    /// Translates the contour by the specified x and y values.
     /// </summary>
     /// <param name="x">The x-coordinate offset.</param>
     /// <param name="y">The y-coordinate offset.</param>
-    public void Offset(double x, double y)
+    public void Translate(double x, double y)
     {
         List<Vertex> points = this.points;
         for (int i = 0; i < points.Count; i++)
@@ -194,7 +193,7 @@ public sealed class Contour
     /// </summary>
     /// <param name="vertex">The vertex to add.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void AddVertex(Vertex vertex) => this.points.Add(vertex);
+    public void AddVertex(in Vertex vertex) => this.points.Add(vertex);
 
     /// <summary>
     /// Removes the vertex at the specified index from the contour.
