@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using GeoJSON.Text.Geometry;
 
 namespace GeoJSON.Text

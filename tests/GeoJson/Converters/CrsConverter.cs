@@ -1,5 +1,7 @@
 ﻿// Copyright © Joerg Battermann 2014, Matt Hunt 2017
 
+using System;
+using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using GeoJSON.Text.CoordinateReferenceSystem;

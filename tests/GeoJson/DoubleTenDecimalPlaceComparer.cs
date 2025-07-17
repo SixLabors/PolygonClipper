@@ -1,5 +1,8 @@
 ﻿// Copyright © Joerg Battermann 2014, Matt Hunt 2017
 
+using System;
+using System.Collections.Generic;
+
 namespace GeoJSON.Text
 {
     /// <summary>

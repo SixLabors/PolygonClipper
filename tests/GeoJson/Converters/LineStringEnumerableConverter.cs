@@ -1,5 +1,7 @@
 ﻿// Copyright © Joerg Battermann 2014, Matt Hunt 2017
 
+using System;
+using System.Collections.Generic;
 using GeoJSON.Text.Geometry;
 using System.Collections.ObjectModel;
 using System.Text.Json;
@@ -8,7 +10,7 @@ using System.Text.Json.Serialization;
 namespace GeoJSON.Text.Converters
 {
     /// <summary>
-    /// Converter to read and write the <see cref="IReadOnlyCollection{LineString}" /> type.
+    /// Converter to read and write the <see cref="IReadOnlyCollection{T}" /> type.
     /// </summary>
     public class LineStringEnumerableConverter : JsonConverter<IReadOnlyCollection<LineString>>
     {
