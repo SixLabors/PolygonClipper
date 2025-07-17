@@ -93,15 +93,15 @@ public sealed class Polygon
     }
 
     /// <summary>
-    /// Offsets the polygon by the specified x and y values.
+    /// Translates the polygon by the specified x and y values.
     /// </summary>
     /// <param name="x">The x-coordinate offset.</param>
     /// <param name="y">The y-coordinate offset.</param>
-    public void Offset(double x, double y)
+    public void Translate(double x, double y)
     {
         for (int i = 0; i < this.contours.Count; i++)
         {
-            this.contours[i].Offset(x, y);
+            this.contours[i].Translate(x, y);
         }
     }
 
