@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using GeoJSON.Text.Converters;
 using GeoJSON.Text.CoordinateReferenceSystem;
 using System.Text.Json.Serialization;

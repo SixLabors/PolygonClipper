@@ -20,7 +20,7 @@ public class GenericTestCases
         => TestData.Generic.GetFileNames().Select(x => new object[] { x });
 
     [Fact]
-    public Polygon Profile()
+    public void Profile()
     {
         // Use this test for profiling purposes. (Rider)
         FeatureCollection data = TestData.Generic.GetFeatureCollection("issue71.geojson");
@@ -31,7 +31,7 @@ public class GenericTestCases
         Polygon subject = ConvertToPolygon(subjectGeometry);
         Polygon clipping = ConvertToPolygon(clippingGeometry);
 
-        return PolygonClipper.Union(subject, clipping);
+        _ = PolygonClipper.Union(subject, clipping);
     }
 
     [Theory]
