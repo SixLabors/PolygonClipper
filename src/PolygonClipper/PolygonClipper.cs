@@ -6,7 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace PolygonClipper;
+namespace SixLabors.PolygonClipper;
 
 /// <summary>
 /// Implements a robust algorithm for performing boolean operations on polygons.

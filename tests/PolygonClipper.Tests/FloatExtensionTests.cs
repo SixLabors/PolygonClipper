@@ -1,7 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-namespace PolygonClipper.Tests;
+namespace SixLabors.PolygonClipper.Tests;
 
 public class FloatExtensionsTests
 {

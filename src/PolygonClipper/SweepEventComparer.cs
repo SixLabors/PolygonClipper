@@ -3,7 +3,7 @@
 
 using System.Collections;
 
-namespace PolygonClipper;
+namespace SixLabors.PolygonClipper;
 
 /// <summary>
 /// Compares two <see cref="SweepEvent"/> instances for sorting in the event queue.

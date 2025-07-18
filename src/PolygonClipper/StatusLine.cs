@@ -4,7 +4,7 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
-namespace PolygonClipper;
+namespace SixLabors.PolygonClipper;
 
 /// <summary>
 /// Represents a status line for the sweep line algorithm, maintaining a sorted collection of sweep events.

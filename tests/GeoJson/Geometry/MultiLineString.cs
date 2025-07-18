@@ -2,12 +2,12 @@
 
 using System;
 using System.Collections.Generic;
-using GeoJSON.Text.Converters;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text.Json.Serialization;
+using GeoJson.Converters;
 
-namespace GeoJSON.Text.Geometry
+namespace GeoJson.Geometry
 {
 
     /// <summary>
@@ -29,7 +29,7 @@ namespace GeoJSON.Text.Geometry
         /// <param name="coordinates">The coordinates.</param>
         public MultiLineString(IEnumerable<LineString> coordinates)
         {
-            Coordinates =new ReadOnlyCollection<LineString>(
+            this.Coordinates =new ReadOnlyCollection<LineString>(
                 coordinates?.ToArray() ?? Array.Empty<LineString>());
         }
 
@@ -63,7 +63,7 @@ namespace GeoJSON.Text.Geometry
         /// </summary>
         public override bool Equals(object obj)
         {
-            return Equals(this, obj as MultiLineString);
+            return this.Equals(this, obj as MultiLineString);
         }
 
         /// <summary>
@@ -71,7 +71,7 @@ namespace GeoJSON.Text.Geometry
         /// </summary>
         public bool Equals(MultiLineString other)
         {
-            return Equals(this, other);
+            return this.Equals(this, other);
         }
 
         /// <summary>
@@ -116,7 +116,7 @@ namespace GeoJSON.Text.Geometry
         public override int GetHashCode()
         {
             int hash = base.GetHashCode();
-            foreach (LineString? item in Coordinates)
+            foreach (LineString? item in this.Coordinates)
             {
                 hash = (hash * 397) ^ item.GetHashCode();
             }

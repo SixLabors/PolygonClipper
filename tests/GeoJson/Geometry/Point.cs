@@ -2,10 +2,10 @@
 
 using System;
 using System.Collections.Generic;
-using GeoJSON.Text.Converters;
 using System.Text.Json.Serialization;
+using GeoJson.Converters;
 
-namespace GeoJSON.Text.Geometry
+namespace GeoJson.Geometry
 {
     /// <summary>
     /// Defines the Point type.
@@ -26,7 +26,7 @@ namespace GeoJSON.Text.Geometry
         /// <param name="coordinates">The Position.</param>
         public Point(IPosition coordinates)
         {
-            Coordinates = coordinates ?? throw new ArgumentNullException(nameof(coordinates));
+            this.Coordinates = coordinates ?? throw new ArgumentNullException(nameof(coordinates));
         }
 
         [JsonPropertyName("type")]
@@ -49,7 +49,7 @@ namespace GeoJSON.Text.Geometry
         /// </summary>
         public override bool Equals(object obj)
         {
-            return Equals(this, obj as Point);
+            return this.Equals(this, obj as Point);
         }
 
         /// <summary>
@@ -57,7 +57,7 @@ namespace GeoJSON.Text.Geometry
         /// </summary>
         public bool Equals(Point other)
         {
-            return Equals(this, other);
+            return this.Equals(this, other);
         }
 
         /// <summary>
@@ -102,7 +102,7 @@ namespace GeoJSON.Text.Geometry
         public override int GetHashCode()
         {
             int hash = base.GetHashCode();
-            hash = (hash * 397) ^ Coordinates.GetHashCode();
+            hash = (hash * 397) ^ this.Coordinates.GetHashCode();
             return hash;
         }
 

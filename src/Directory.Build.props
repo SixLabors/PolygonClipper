@@ -28,7 +28,7 @@
   <ItemGroup>
     <!-- DynamicProxyGenAssembly2 is needed so Moq can use our internals -->
 
-    <InternalsVisibleTo Include="PolygonClipper.Tests" Key="$(SixLaborsPublicKey)" />
+    <InternalsVisibleTo Include="SixLabors.PolygonClipper.Tests" Key="$(SixLaborsPublicKey)" />
   </ItemGroup>
 
 </Project>

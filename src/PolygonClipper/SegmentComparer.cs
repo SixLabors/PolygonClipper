@@ -4,7 +4,7 @@
 using System.Collections;
 using System.Runtime.CompilerServices;
 
-namespace PolygonClipper;
+namespace SixLabors.PolygonClipper;
 
 /// <summary>
 /// Allows the comparison of segments for sorting.

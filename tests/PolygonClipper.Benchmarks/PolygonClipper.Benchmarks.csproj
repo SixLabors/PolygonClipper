@@ -1,9 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <AssemblyName>PolygonClipper.Benchmarks</AssemblyName>
+    <AssemblyName>SixLabors.PolygonClipper.Benchmarks</AssemblyName>
     <OutputType>Exe</OutputType>
-    <RootNamespace>PolygonClipper.Benchmarks</RootNamespace>
+    <RootNamespace>SixLabors.PolygonClipper.Benchmarks</RootNamespace>
     <GenerateProgramFile>false</GenerateProgramFile>
     <DebugType>portable</DebugType>
     <!--Used to hide test project from dotnet test-->

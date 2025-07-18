@@ -1,7 +1,9 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-namespace PolygonClipper.Tests;
+using SixLabors.PolygonClipper;
+
+namespace SixLabors.PolygonClipper.Tests;
 
 public class SweepEventComparerTests
 {
@@ -10,7 +12,7 @@ public class SweepEventComparerTests
     [Fact]
     public void Queue_ShouldProcessLeastByX_SweepEventFirst()
     {
-        PriorityQueue<SweepEvent, SweepEvent> queue = new(this.comparer);
+        PriorityQueue<SixLabors.PolygonClipper.SweepEvent, SixLabors.PolygonClipper.SweepEvent> queue = new(this.comparer);
         SweepEvent e1 = new(new Vertex(0, 0), true);
         SweepEvent e2 = new(new Vertex(.5F, .5F), true);
 
@@ -24,7 +26,7 @@ public class SweepEventComparerTests
     [Fact]
     public void Queue_ShouldProcessLeastByY_SweepEventFirst()
     {
-        PriorityQueue<SweepEvent, SweepEvent> queue = new(this.comparer);
+        PriorityQueue<SixLabors.PolygonClipper.SweepEvent, SixLabors.PolygonClipper.SweepEvent> queue = new(this.comparer);
         SweepEvent e1 = new(new Vertex(0, 0), true);
         SweepEvent e2 = new(new Vertex(0, .5F), true);
 
@@ -38,7 +40,7 @@ public class SweepEventComparerTests
     [Fact]
     public void Queue_ShouldPopLeastByLeftProp_SweepEventFirst()
     {
-        PriorityQueue<SweepEvent, SweepEvent> queue = new(this.comparer);
+        PriorityQueue<SixLabors.PolygonClipper.SweepEvent, SixLabors.PolygonClipper.SweepEvent> queue = new(this.comparer);
         SweepEvent e1 = new(new Vertex(0, 0), true);
         SweepEvent e2 = new(new Vertex(0, 0), false);
 
@@ -96,7 +98,7 @@ public class SweepEventComparerTests
     [Fact]
     public void SweepEventComparison_CollinearEdges()
     {
-        SweepEvent e1 = new(new Vertex(0, 0), true, new SweepEvent(new Vertex(1, 1), false), PolygonType.Clipping);
+        SweepEvent e1 = new(new Vertex(0, 0), true, new SweepEvent(new Vertex(1, 1), false), SixLabors.PolygonClipper.PolygonType.Clipping);
         SweepEvent e2 = new(new Vertex(0, 0), true, new SweepEvent(new Vertex(2, 2), false));
 
         SweepEventComparer comparer = new();

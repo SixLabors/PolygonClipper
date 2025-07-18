@@ -3,7 +3,7 @@
 
 using System.Runtime.CompilerServices;
 
-namespace PolygonClipper;
+namespace SixLabors.PolygonClipper;
 
 /// <summary>
 /// Provides extension methods for floating-point numbers.

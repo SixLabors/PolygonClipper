@@ -4,7 +4,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
-namespace PolygonClipper;
+namespace SixLabors.PolygonClipper;
 
 internal static class PolygonUtilities
 {

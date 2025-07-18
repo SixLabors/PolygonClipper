@@ -2,12 +2,12 @@
 
 using System;
 using System.Collections.Generic;
-using GeoJSON.Text.Geometry;
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using GeoJson.Geometry;
 
-namespace GeoJSON.Text.Converters
+namespace GeoJson.Converters
 {
     /// <summary>
     /// Converts <see cref="IGeometryObject"/> types to and from JSON.

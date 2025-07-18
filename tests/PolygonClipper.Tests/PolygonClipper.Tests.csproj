@@ -3,6 +3,8 @@
   <PropertyGroup>
     <CodeAnalysisRuleSet>..\sixlabors.tests.ruleset</CodeAnalysisRuleSet>
     <IsPackable>false</IsPackable>
+    <AssemblyName>SixLabors.PolygonClipper.Tests</AssemblyName>
+    <RootNamespace>SixLabors.PolygonClipper.Tests</RootNamespace>
   </PropertyGroup>
 
   <Choose>

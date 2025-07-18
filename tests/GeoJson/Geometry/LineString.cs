@@ -2,12 +2,12 @@
 
 using System;
 using System.Collections.Generic;
-using GeoJSON.Text.Converters;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text.Json.Serialization;
+using GeoJson.Converters;
 
-namespace GeoJSON.Text.Geometry
+namespace GeoJson.Geometry
 {
     /// <summary>
     /// Defines the LineString type.
@@ -39,10 +39,10 @@ namespace GeoJSON.Text.Geometry
         /// <param name="coordinates">The coordinates.</param>
         public LineString(IEnumerable<IPosition> coordinates)
         {
-            Coordinates = new ReadOnlyCollection<IPosition>(
+            this.Coordinates = new ReadOnlyCollection<IPosition>(
                 coordinates?.ToArray() ?? throw new ArgumentNullException(nameof(coordinates)));
 
-            if (Coordinates.Count < 2)
+            if (this.Coordinates.Count < 2)
             {
                 throw new ArgumentOutOfRangeException(
                     nameof(coordinates),
@@ -70,8 +70,8 @@ namespace GeoJSON.Text.Geometry
         /// </returns>
         public bool IsClosed()
         {
-            IPosition firstCoordinate = Coordinates[0];
-            IPosition lastCoordinate = Coordinates[Coordinates.Count - 1];
+            IPosition firstCoordinate = this.Coordinates[0];
+            IPosition lastCoordinate = this.Coordinates[this.Coordinates.Count - 1];
 
             return firstCoordinate.Longitude.Equals(lastCoordinate.Longitude)
                    && firstCoordinate.Latitude.Equals(lastCoordinate.Latitude)
@@ -89,7 +89,7 @@ namespace GeoJSON.Text.Geometry
         /// </returns>
         public bool IsLinearRing()
         {
-            return Coordinates.Count >= 4 && IsClosed();
+            return this.Coordinates.Count >= 4 && this.IsClosed();
         }
 
         #region IEqualityComparer, IEquatable
@@ -99,7 +99,7 @@ namespace GeoJSON.Text.Geometry
         /// </summary>
         public override bool Equals(object obj)
         {
-            return Equals(this, obj as LineString);
+            return this.Equals(this, obj as LineString);
         }
 
         /// <summary>
@@ -107,7 +107,7 @@ namespace GeoJSON.Text.Geometry
         /// </summary>
         public bool Equals(LineString other)
         {
-            return Equals(this, other);
+            return this.Equals(this, other);
         }
 
         /// <summary>
@@ -152,7 +152,7 @@ namespace GeoJSON.Text.Geometry
         public override int GetHashCode()
         {
             int hash = base.GetHashCode();
-            foreach (IPosition? item in Coordinates)
+            foreach (IPosition? item in this.Coordinates)
             {
                 hash = (hash * 397) ^ item.GetHashCode();
             }

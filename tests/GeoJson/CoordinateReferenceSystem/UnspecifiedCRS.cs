@@ -1,6 +1,6 @@
 ﻿// Copyright © Joerg Battermann 2014, Matt Hunt 2017
 
-namespace GeoJSON.Text.CoordinateReferenceSystem
+namespace GeoJson.CoordinateReferenceSystem
 {
     /// <summary>
     /// Represents an unspecified Coordinate Reference System
@@ -29,7 +29,7 @@ namespace GeoJSON.Text.CoordinateReferenceSystem
         /// </summary>
         public override bool Equals(object obj)
         {
-            return Equals(obj as ICRSObject);
+            return this.Equals(obj as ICRSObject);
         }
 
         /// <summary>
@@ -45,7 +45,7 @@ namespace GeoJSON.Text.CoordinateReferenceSystem
             {
                 return false;
             }
-            return Type == obj.Type;
+            return this.Type == obj.Type;
         }
 
         /// <summary>
@@ -77,7 +77,7 @@ namespace GeoJSON.Text.CoordinateReferenceSystem
         /// </summary>
         public override int GetHashCode()
         {
-            return Type.GetHashCode();
+            return this.Type.GetHashCode();
         }
 
     }

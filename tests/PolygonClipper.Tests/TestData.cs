@@ -2,9 +2,9 @@
 // Licensed under the Six Labors Split License.
 
 using System.Text.Json;
-using GeoJSON.Text.Feature;
+using GeoJson.Feature;
 
-namespace PolygonClipper.Tests.TestCases;
+namespace SixLabors.PolygonClipper.Tests;
 
 internal static class TestData
 {

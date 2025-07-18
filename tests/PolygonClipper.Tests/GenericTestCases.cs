@@ -1,14 +1,13 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using GeoJSON.Text;
-using GeoJSON.Text.Feature;
-using GeoJSON.Text.Geometry;
-using PolygonClipper.Tests.TestCases;
+using GeoJson;
+using GeoJson.Feature;
+using GeoJson.Geometry;
 using Xunit.Abstractions;
-using GeoPolygon = GeoJSON.Text.Geometry.Polygon;
+using GeoPolygon = GeoJson.Geometry.Polygon;
 
-namespace PolygonClipper.Tests;
+namespace SixLabors.PolygonClipper.Tests;
 
 public class GenericTestCases
 {
@@ -31,7 +30,7 @@ public class GenericTestCases
         Polygon subject = ConvertToPolygon(subjectGeometry);
         Polygon clipping = ConvertToPolygon(clippingGeometry);
 
-        _ = PolygonClipper.Union(subject, clipping);
+        _ = SixLabors.PolygonClipper.PolygonClipper.Union(subject, clipping);
     }
 
     [Theory]
@@ -134,11 +133,11 @@ public class GenericTestCases
             string mode = feature.Properties["operation"]?.ToString();
             Func<Polygon, Polygon, Polygon> operation = mode switch
             {
-                "union" => PolygonClipper.Union,
-                "intersection" => PolygonClipper.Intersection,
-                "xor" => PolygonClipper.Xor,
-                "diff" => PolygonClipper.Difference,
-                "diff_ba" => (a, b) => PolygonClipper.Difference(b, a),
+                "union" => SixLabors.PolygonClipper.PolygonClipper.Union,
+                "intersection" => SixLabors.PolygonClipper.PolygonClipper.Intersection,
+                "xor" => SixLabors.PolygonClipper.PolygonClipper.Xor,
+                "diff" => SixLabors.PolygonClipper.PolygonClipper.Difference,
+                "diff_ba" => (a, b) => SixLabors.PolygonClipper.PolygonClipper.Difference(b, a),
                 _ => throw new InvalidOperationException($"Invalid mode: {mode}")
             };
 

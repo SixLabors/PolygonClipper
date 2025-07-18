@@ -1,11 +1,11 @@
 ﻿// Copyright © Joerg Battermann 2014, Matt Hunt 2017
 
 using System;
-using GeoJSON.Text.Geometry;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using GeoJson.Geometry;
 
-namespace GeoJSON.Text.Converters
+namespace GeoJson.Converters
 {
     /// <summary>
     /// Converts <see cref="IGeometryObject"/> types to and from JSON.

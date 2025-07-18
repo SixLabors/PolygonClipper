@@ -4,9 +4,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json.Serialization;
-using GeoJSON.Text.Geometry;
+using GeoJson.Geometry;
 
-namespace GeoJSON.Text.Feature;
+namespace GeoJson.Feature;
 
 /// <summary>
 /// Defines the FeatureCollection type.
@@ -31,7 +31,7 @@ public class FeatureCollection : GeoJSONObject, IEqualityComparer<FeatureCollect
             throw new ArgumentNullException(nameof(features));
         }
 
-        Features = features;
+        this.Features = features;
     }
 
     [JsonPropertyName("type")]
@@ -54,7 +54,7 @@ public class FeatureCollection : GeoJSONObject, IEqualityComparer<FeatureCollect
     /// </summary>
     public override bool Equals(object obj)
     {
-        return Equals(this, obj as FeatureCollection);
+        return this.Equals(this, obj as FeatureCollection);
     }
 
     /// <summary>
@@ -62,7 +62,7 @@ public class FeatureCollection : GeoJSONObject, IEqualityComparer<FeatureCollect
     /// </summary>
     public bool Equals(FeatureCollection other)
     {
-        return Equals(this, other);
+        return this.Equals(this, other);
     }
 
     /// <summary>
@@ -110,7 +110,7 @@ public class FeatureCollection : GeoJSONObject, IEqualityComparer<FeatureCollect
     public override int GetHashCode()
     {
         int hash = base.GetHashCode();
-        foreach (Feature? feature in Features)
+        foreach (Feature? feature in this.Features)
         {
             hash = (hash * 397) ^ feature.GetHashCode();
         }
@@ -150,7 +150,7 @@ public class FeatureCollection<TProps> : FeatureCollection, IEqualityComparer<Fe
             throw new ArgumentNullException(nameof(features));
         }
 
-        Features = features;
+        this.Features = features;
     }
 
     [JsonPropertyName("type")]
@@ -172,7 +172,7 @@ public class FeatureCollection<TProps> : FeatureCollection, IEqualityComparer<Fe
     /// </summary>
     public override bool Equals(object obj)
     {
-        return Equals(this, obj as FeatureCollection<TProps>);
+        return this.Equals(this, obj as FeatureCollection<TProps>);
     }
 
     /// <summary>
@@ -180,7 +180,7 @@ public class FeatureCollection<TProps> : FeatureCollection, IEqualityComparer<Fe
     /// </summary>
     public bool Equals(FeatureCollection<TProps> other)
     {
-        return Equals(this, other);
+        return this.Equals(this, other);
     }
 
     /// <summary>
@@ -228,7 +228,7 @@ public class FeatureCollection<TProps> : FeatureCollection, IEqualityComparer<Fe
     public override int GetHashCode()
     {
         int hash = base.GetHashCode();
-        foreach (Feature<IGeometryObject, TProps>? feature in Features)
+        foreach (Feature<IGeometryObject, TProps>? feature in this.Features)
         {
             hash = (hash * 397) ^ feature.GetHashCode();
         }

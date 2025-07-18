@@ -3,7 +3,7 @@
 
 using System.Runtime.CompilerServices;
 
-namespace PolygonClipper;
+namespace SixLabors.PolygonClipper;
 
 /// <summary>
 /// Represents a line segment on a plane.
