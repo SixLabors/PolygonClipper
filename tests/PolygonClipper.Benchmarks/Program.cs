@@ -3,7 +3,7 @@
 
 using BenchmarkDotNet.Running;
 
-namespace PolygonClipper.Benchmarks;
+namespace SixLabors.PolygonClipper.Benchmarks;
 
 internal class Program
 {

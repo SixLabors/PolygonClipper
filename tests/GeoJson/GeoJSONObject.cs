@@ -1,14 +1,13 @@
 ﻿// Copyright © Joerg Battermann 2014, Matt Hunt 2017
 
-using GeoJSON.Text.Converters;
-using GeoJSON.Text.CoordinateReferenceSystem;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Linq;
 using System.Text.Json.Serialization;
+using GeoJson.Converters;
+using GeoJson.CoordinateReferenceSystem;
 
-namespace GeoJSON.Text
+namespace GeoJson
 {
     /// <summary>
     ///     Base class for all IGeometryObject implementing types
@@ -66,7 +65,7 @@ namespace GeoJSON.Text
         /// </summary>
         public override bool Equals(object obj)
         {
-            return Equals(this, obj as GeoJSONObject);
+            return this.Equals(this, obj as GeoJSONObject);
         }
 
         /// <summary>
@@ -74,7 +73,7 @@ namespace GeoJSON.Text
         /// </summary>
         public bool Equals(GeoJSONObject other)
         {
-            return Equals(this, other);
+            return this.Equals(this, other);
         }
 
         /// <summary>
@@ -142,7 +141,7 @@ namespace GeoJSON.Text
         /// </summary>
         public override int GetHashCode()
         {
-            return ((int)Type).GetHashCode();
+            return ((int)this.Type).GetHashCode();
         }
 
         /// <summary>

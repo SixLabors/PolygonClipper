@@ -2,7 +2,7 @@
 
 using System.Runtime.Serialization;
 
-namespace GeoJSON.Text
+namespace GeoJson
 {
     /// <summary>
     /// Defines the GeoJSON Objects types.

@@ -1,16 +1,16 @@
 ﻿// Copyright © Joerg Battermann 2014, Matt Hunt 2017
 
-using GeoJSON.Text.Geometry;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using GeoJson.Geometry;
 
-namespace GeoJSON.Text.Converters
+namespace GeoJson.Converters
 {
     /// <summary>
-    /// Converter to read and write the <see cref="IReadOnlyCollection{IPosition}" /> type.
+    /// Converter to read and write the <see cref="IReadOnlyCollection{T}" /> type.
     /// </summary>
     public class PositionEnumerableConverter : JsonConverter<IReadOnlyCollection<IPosition>>
     {

@@ -1,10 +1,9 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System;
 using System.Runtime.CompilerServices;
 
-namespace PolygonClipper;
+namespace SixLabors.PolygonClipper;
 
 /// <summary>
 /// Provides extension methods for floating-point numbers.
@@ -52,7 +51,8 @@ internal static class FloatExtensions
         long bits = BitConverter.DoubleToInt64Bits(x);
 
         // Adjust bits to get the next representable value
-        if ((y > x) == (x > 0D)) // Moving in the same sign direction
+        // Moving in the same sign direction
+        if ((y > x) == (x > 0D))
         {
             bits++;
         }

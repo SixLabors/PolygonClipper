@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+
+  <!--Add common namespaces to implicit global usings if enabled.-->
+  <ItemGroup Condition="'$(UsePolygonClipper)'=='enable' OR '$(UsePolygonClipper)'=='true'">
+    <Using Include="PolygonClipper" />
+  </ItemGroup>
+
+</Project>

@@ -3,7 +3,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace GeoJSON.Text.CoordinateReferenceSystem
+namespace GeoJson.CoordinateReferenceSystem
 {
     /// <summary>
     /// Defines the Linked CRS type.
@@ -42,14 +42,14 @@ namespace GeoJSON.Text.CoordinateReferenceSystem
                 throw new ArgumentException("must be a dereferenceable URI", nameof(href));
             }
 
-            Properties = new Dictionary<string, object> { { "href", href } };
+            this.Properties = new Dictionary<string, object> { { "href", href } };
 
             if (!string.IsNullOrEmpty(type))
             {
-                Properties.Add("type", type);
+                this.Properties.Add("type", type);
             }
 
-            Type = CRSType.Link;
+            this.Type = CRSType.Link;
         }
 
         /// <summary>

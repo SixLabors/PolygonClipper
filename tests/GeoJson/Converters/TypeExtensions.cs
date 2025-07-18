@@ -1,8 +1,7 @@
 ﻿using System;
 using System.Reflection;
 
-
-namespace GeoJSON.Text.Converters
+namespace GeoJson.Converters
 {
     public static class TypeExtensions
     {

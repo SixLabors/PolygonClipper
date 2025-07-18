@@ -3,7 +3,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace GeoJSON.Text.CoordinateReferenceSystem
+namespace GeoJson.CoordinateReferenceSystem
 {
     /// <summary>
     /// Defines the Named CRS type.
@@ -39,8 +39,8 @@ namespace GeoJSON.Text.CoordinateReferenceSystem
                 throw new ArgumentException("must be specified", nameof(name));
             }
 
-            Properties = new Dictionary<string, object> { { "name", name } };
-            Type = CRSType.Name;
+            this.Properties = new Dictionary<string, object> { { "name", name } };
+            this.Type = CRSType.Name;
         }
     }
 }

@@ -23,6 +23,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GeoJson", "tests\GeoJson\GeoJson.csproj", "{F881441F-D3B6-4B48-8CEF-8DC0746D4578}"
+EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = ".github", ".github", "{6F7A3AE6-C7D1-441F-A203-BA6575931CE2}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "workflows", "workflows", "{EEA3B5E9-3337-42EE-B0BF-FA586A1BC435}"
@@ -32,6 +33,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "workflows", "workflows", "{
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PolygonClipper.Benchmarks", "tests\PolygonClipper.Benchmarks\PolygonClipper.Benchmarks.csproj", "{F1965B36-D896-4BC1-8941-7FE6CEB82CD5}"
+EndProject
+Project("{D954291E-2A0B-460D-934E-DC6B0785DB48}") = "SharedInfrastructure", "shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.shproj", "{68A8CC40-6AED-4E96-B524-31B1158FDEEA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -66,6 +69,7 @@ Global
 		{6F7A3AE6-C7D1-441F-A203-BA6575931CE2} = {6B327CDE-88A5-4715-A8A3-E9A8C80EA10C}
 		{EEA3B5E9-3337-42EE-B0BF-FA586A1BC435} = {6F7A3AE6-C7D1-441F-A203-BA6575931CE2}
 		{F1965B36-D896-4BC1-8941-7FE6CEB82CD5} = {84C4B358-492B-46FC-9F11-FBB76B06BD3F}
+		{68A8CC40-6AED-4E96-B524-31B1158FDEEA} = {F0882E95-667C-48FE-B43A-24FC55D9F354}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {2C73BEEC-091B-45E4-A0BD-7D7CD16A8451}

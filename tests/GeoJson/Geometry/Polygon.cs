@@ -5,9 +5,9 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text.Json.Serialization;
-using GeoJSON.Text.Converters;
+using GeoJson.Converters;
 
-namespace GeoJSON.Text.Geometry
+namespace GeoJson.Geometry
 {
     /// <summary>
     /// Defines the Polygon type.
@@ -33,9 +33,9 @@ namespace GeoJSON.Text.Geometry
         /// </param>
         public Polygon(IEnumerable<LineString> coordinates)
         {
-            Coordinates = new ReadOnlyCollection<LineString>(
+            this.Coordinates = new ReadOnlyCollection<LineString>(
                 coordinates?.ToArray() ?? throw new ArgumentNullException(nameof(coordinates)));
-            if (Coordinates.Any(linearRing => !linearRing.IsLinearRing()))
+            if (this.Coordinates.Any(linearRing => !linearRing.IsLinearRing()))
             {
                 // throw new ArgumentException("All elements must be closed LineStrings with 4 or more positions" +
                 //                             " (see GeoJSON spec at 'https://tools.ietf.org/html/rfc7946#section-3.1.6').", nameof(coordinates));
@@ -74,7 +74,7 @@ namespace GeoJSON.Text.Geometry
         /// </summary>
         public override bool Equals(object obj)
         {
-            return Equals(this, obj as Polygon);
+            return this.Equals(this, obj as Polygon);
         }
 
         /// <summary>
@@ -82,7 +82,7 @@ namespace GeoJSON.Text.Geometry
         /// </summary>
         public bool Equals(Polygon other)
         {
-            return Equals(this, other);
+            return this.Equals(this, other);
         }
 
         /// <summary>
@@ -127,7 +127,7 @@ namespace GeoJSON.Text.Geometry
         public override int GetHashCode()
         {
             int hash = base.GetHashCode();
-            foreach (LineString item in Coordinates)
+            foreach (LineString item in this.Coordinates)
             {
                 hash = (hash * 397) ^ item.GetHashCode();
             }

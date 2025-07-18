@@ -1,11 +1,9 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using GeoJSON.Text.Feature;
-using PolygonClipper.Tests.TestCases;
-using Xunit;
+using GeoJson.Feature;
 
-namespace PolygonClipper.Tests;
+namespace SixLabors.PolygonClipper.Tests;
 
 public class TestPolygonUtilitiesTests
 {
@@ -37,7 +35,7 @@ public class TestPolygonUtilitiesTests
     [Fact]
     public void PolygonClipper_Union_Profile_Test()
     {
-        Polygon solution = PolygonClipper.Union(Polygons.subject, Polygons.clipping);
+        Polygon solution = SixLabors.PolygonClipper.PolygonClipper.Union(Polygons.subject, Polygons.clipping);
         Assert.NotNull(solution);
 
         Assert.Equal(2, solution.ContourCount);

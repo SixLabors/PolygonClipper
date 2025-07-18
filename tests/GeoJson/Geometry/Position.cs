@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 
-namespace GeoJSON.Text.Geometry
+namespace GeoJson.Geometry
 {
     /// <summary>
     /// A position is the fundamental geometry construct, consisting of <see cref="Latitude" />,
@@ -23,9 +23,9 @@ namespace GeoJSON.Text.Geometry
         public Position(double latitude, double longitude, double? altitude = null)
         {
             // TODO Coordinate range validation should be performed only when CRS is supplied
-            Latitude = latitude;
-            Longitude = longitude;
-            Altitude = altitude;
+            this.Latitude = latitude;
+            this.Longitude = longitude;
+            this.Altitude = altitude;
         }
 
         /// <summary>
@@ -57,8 +57,8 @@ namespace GeoJSON.Text.Geometry
                 throw new ArgumentOutOfRangeException(nameof(altitude), "Longitude representation must be a numeric.");
             }
 
-            Latitude = lat;
-            Longitude = lon;
+            this.Latitude = lat;
+            this.Longitude = lon;
 
             if (altitude != null)
             {
@@ -67,7 +67,7 @@ namespace GeoJSON.Text.Geometry
                     throw new ArgumentOutOfRangeException(nameof(altitude), "Altitude must be a proper altitude (m(eter) as double) value, e.g. '6500'.");
                 }
 
-                Altitude = alt;
+                this.Altitude = alt;
             }
         }
 
@@ -94,9 +94,9 @@ namespace GeoJSON.Text.Geometry
         /// </returns>
         public override string ToString()
         {
-            return Altitude == null
-                ? string.Format(CultureInfo.InvariantCulture, "Latitude: {0}, Longitude: {1}", Latitude, Longitude)
-                : string.Format(CultureInfo.InvariantCulture, "Latitude: {0}, Longitude: {1}, Altitude: {2}", Latitude, Longitude, Altitude);
+            return this.Altitude == null
+                ? string.Format(CultureInfo.InvariantCulture, "Latitude: {0}, Longitude: {1}", this.Latitude, this.Longitude)
+                : string.Format(CultureInfo.InvariantCulture, "Latitude: {0}, Longitude: {1}, Altitude: {2}", this.Latitude, this.Longitude, this.Altitude);
         }
 
         #region IEqualityComparer, IEquatable
@@ -161,9 +161,9 @@ namespace GeoJSON.Text.Geometry
         /// </summary>
         public override int GetHashCode()
         {
-            int hash = 397 ^ Latitude.GetHashCode();
-            hash = (hash * 397) ^ Longitude.GetHashCode();
-            hash = (hash * 397) ^ Altitude.GetValueOrDefault().GetHashCode();
+            int hash = 397 ^ this.Latitude.GetHashCode();
+            hash = (hash * 397) ^ this.Longitude.GetHashCode();
+            hash = (hash * 397) ^ this.Altitude.GetValueOrDefault().GetHashCode();
             return hash;
         }
 

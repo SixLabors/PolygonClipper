@@ -1,32 +1,13 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <RuleSet Name="SixLabors.Tests" ToolsVersion="17.0">
-  <Include Path="sixlabors.ruleset" Action="Default" />
-  <Rules AnalyzerId="Microsoft.CodeAnalysis.CSharp" RuleNamespace="Microsoft.CodeAnalysis.CSharp">
-    <Rule Id="CS1591" Action="None" />
-  </Rules>
-  <Rules AnalyzerId="Microsoft.CodeAnalysis.CSharp.Features" RuleNamespace="Microsoft.CodeAnalysis.CSharp.Features">
-    <Rule Id="IDE0058" Action="None" />
-  </Rules>
-  <Rules AnalyzerId="Microsoft.CodeAnalysis.NetAnalyzers" RuleNamespace="Microsoft.CodeAnalysis.NetAnalyzers">
-    <Rule Id="CA1707" Action="None" />
-  </Rules>
-  <Rules AnalyzerId="Microsoft.CodeAnalysis.VisualBasic.Features" RuleNamespace="Microsoft.CodeAnalysis.VisualBasic.Features">
-    <Rule Id="IDE0058" Action="None" />
-  </Rules>
+  <Include Path="..\shared-infrastructure\sixlabors.tests.ruleset" Action="Default" />
   <Rules AnalyzerId="StyleCop.Analyzers" RuleNamespace="StyleCop.Analyzers">
-    <Rule Id="SA0001" Action="None" />
-    <Rule Id="SA1115" Action="None" />
-    <Rule Id="SA1201" Action="None" />
-    <Rule Id="SA1202" Action="None" />
-    <Rule Id="SA1203" Action="None" />
-    <Rule Id="SA1204" Action="None" />
-    <Rule Id="SA1310" Action="None" />
-    <Rule Id="SA1401" Action="None" />
-    <Rule Id="SA1600" Action="None" />
-    <Rule Id="SA1601" Action="None" />
-    <Rule Id="SA1602" Action="None" />
-    <Rule Id="SA1611" Action="None" />
-    <Rule Id="SA1618" Action="None" />
-    <Rule Id="SA1642" Action="None" />
+    <Rule Id="SA1313" Action="None" />
+  </Rules>
+  <Rules AnalyzerId="xunit.analyzers" RuleNamespace="xunit.analyzers">
+    <Rule Id="xUnit1004" Action="None" />
+    <Rule Id="xUnit1013" Action="None" />
+    <Rule Id="xUnit1026" Action="None" />
+    <Rule Id="xUnit2013" Action="None" />
   </Rules>
 </RuleSet>

@@ -1,9 +1,9 @@
 ﻿// Copyright © Joerg Battermann 2014, Matt Hunt 2017
 
-using GeoJSON.Text.Converters;
 using System.Text.Json.Serialization;
+using GeoJson.Converters;
 
-namespace GeoJSON.Text
+namespace GeoJson
 {
     /// <summary>
     /// Base Interface for GeoJSONObject types.

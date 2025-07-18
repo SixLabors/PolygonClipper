@@ -1,11 +1,9 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System;
 using System.Collections;
-using System.Collections.Generic;
 
-namespace PolygonClipper;
+namespace SixLabors.PolygonClipper;
 
 /// <summary>
 /// Compares two <see cref="SweepEvent"/> instances for sorting in the event queue.

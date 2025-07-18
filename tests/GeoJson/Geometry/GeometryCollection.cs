@@ -5,9 +5,9 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text.Json.Serialization;
-using GeoJSON.Text.Converters;
+using GeoJson.Converters;
 
-namespace GeoJSON.Text.Geometry
+namespace GeoJson.Geometry
 {
     /// <summary>
     /// Defines the GeometryCollection type.
@@ -30,7 +30,7 @@ namespace GeoJSON.Text.Geometry
         /// <param name="geometries">The geometries contained in this GeometryCollection.</param>
         public GeometryCollection(IEnumerable<IGeometryObject> geometries)
         {
-            Geometries = new ReadOnlyCollection<IGeometryObject>(
+            this.Geometries = new ReadOnlyCollection<IGeometryObject>(
                 geometries?.ToArray() ?? throw new ArgumentNullException(nameof(geometries)));
         }
 
@@ -53,7 +53,7 @@ namespace GeoJSON.Text.Geometry
         /// </summary>
         public override bool Equals(object obj)
         {
-            return Equals(this, obj as GeometryCollection);
+            return this.Equals(this, obj as GeometryCollection);
         }
 
         /// <summary>
@@ -61,7 +61,7 @@ namespace GeoJSON.Text.Geometry
         /// </summary>
         public bool Equals(GeometryCollection other)
         {
-            return Equals(this, other);
+            return this.Equals(this, other);
         }
 
         /// <summary>
@@ -106,7 +106,7 @@ namespace GeoJSON.Text.Geometry
         public override int GetHashCode()
         {
             int hash = base.GetHashCode();
-            foreach (IGeometryObject item in Geometries)
+            foreach (IGeometryObject item in this.Geometries)
             {
                 hash = (hash * 397) ^ item.GetHashCode();
             }

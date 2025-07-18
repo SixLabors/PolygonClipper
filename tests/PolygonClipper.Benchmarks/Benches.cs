@@ -4,11 +4,10 @@
 #nullable disable
 
 using BenchmarkDotNet.Attributes;
-using GeoJSON.Text.Feature;
-using PolygonClipper.Tests;
-using PolygonClipper.Tests.TestCases;
+using GeoJson.Feature;
+using SixLabors.PolygonClipper.Tests;
 
-namespace PolygonClipper.Benchmarks;
+namespace SixLabors.PolygonClipper.Benchmarks;
 
 /// <summary>
 /// Benchmarks the performance of <c>PolygonClipper</c> for polygon union operations using a fixed input dataset.
@@ -33,5 +32,5 @@ public class Benches
     }
 
     [Benchmark]
-    public Polygon PolygonClipper() => global::PolygonClipper.PolygonClipper.Union(this.subject, this.clipping);
+    public Polygon PolygonClipper() => global::SixLabors.PolygonClipper.PolygonClipper.Union(this.subject, this.clipping);
 }
