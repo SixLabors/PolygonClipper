@@ -17,7 +17,7 @@
   <Import Project="$(MSBuildThisFileDirectory)..\Directory.Build.props" />
 
   <PropertyGroup>
-    <CodeAnalysisRuleSet>..\sixlabors.Tests.ruleset</CodeAnalysisRuleSet>
+    <CodeAnalysisRuleSet>..\sixlabors.tests.ruleset</CodeAnalysisRuleSet>
     <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
   </PropertyGroup>
 
