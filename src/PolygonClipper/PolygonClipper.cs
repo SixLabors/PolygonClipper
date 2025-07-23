@@ -127,23 +127,23 @@ public class PolygonClipper
         // Each segment contributes two events (left/right endpoints),
         // and subdivision during intersection may increase the count,
         // so we conservatively double the total vertex count.
-        int subjectVertexCount = subject.GetVertexCount();
-        int clippingVertexCount = clipping.GetVertexCount();
+        int subjectVertexCount = subject.VertexCount;
+        int clippingVertexCount = clipping.VertexCount;
         int eventCount = (subjectVertexCount + clippingVertexCount) * 2;
 
         SweepEventComparer comparer = new();
         List<SweepEvent> unorderedEventQueue = new(eventCount);
         int contourId = 0;
 
-        for (int i = 0; i < subject.ContourCount; i++)
+        for (int i = 0; i < subject.Count; i++)
         {
             Contour contour = subject[i];
             contourId++;
-            for (int j = 0; j < contour.VertexCount - 1; j++)
+            for (int j = 0; j < contour.Count - 1; j++)
             {
                 ProcessSegment(
                     contourId,
-                    contour.Segment(j),
+                    contour.GetSegment(j),
                     PolygonType.Subject,
                     unorderedEventQueue,
                     comparer,
@@ -157,15 +157,15 @@ public class PolygonClipper
         // Process all segments in the clipping polygon
         min = new Vertex(double.PositiveInfinity);
         max = new Vertex(double.NegativeInfinity);
-        for (int i = 0; i < clipping.ContourCount; i++)
+        for (int i = 0; i < clipping.Count; i++)
         {
             Contour contour = clipping[i];
 
-            for (int j = 0; j < contour.VertexCount - 1; j++)
+            for (int j = 0; j < contour.Count - 1; j++)
             {
                 ProcessSegment(
                     contourId,
-                    contour.Segment(j),
+                    contour.GetSegment(j),
                     PolygonType.Clipping,
                     unorderedEventQueue,
                     comparer,
@@ -282,11 +282,11 @@ public class PolygonClipper
     {
         result = null;
 
-        if (subject.ContourCount * clipping.ContourCount == 0)
+        if (subject.Count * clipping.Count == 0)
         {
             if (operation == BooleanOperation.Intersection)
             {
-                result = new Polygon();
+                result = [];
                 return true;
             }
 
@@ -298,7 +298,7 @@ public class PolygonClipper
 
             if (operation is BooleanOperation.Union or BooleanOperation.Xor)
             {
-                result = subject.ContourCount == 0 ? clipping : subject;
+                result = subject.Count == 0 ? clipping : subject;
                 return true;
             }
         }
@@ -335,7 +335,7 @@ public class PolygonClipper
         {
             if (operation == BooleanOperation.Intersection)
             {
-                result = new Polygon();
+                result = [];
                 return true;
             }
 
@@ -834,7 +834,7 @@ public class PolygonClipper
 
         ReadOnlySpan<int> iterationMap = PrecomputeIterationOrder(resultEvents);
 
-        Polygon result = new();
+        Polygon result = [];
         Span<bool> processed = new bool[resultEvents.Count];
         for (int i = 0; i < resultEvents.Count; i++)
         {
@@ -843,7 +843,7 @@ public class PolygonClipper
                 continue;
             }
 
-            int contourId = result.ContourCount;
+            int contourId = result.Count;
             Contour contour = InitializeContourFromContext(resultEvents[i], result, contourId);
 
             int pos = i;
@@ -851,7 +851,7 @@ public class PolygonClipper
             contour.AddVertex(initial);
 
             // Main loop to process the contour
-            while (true)
+            do
             {
                 MarkProcessed(resultEvents[pos], processed, pos, contourId);
                 pos = resultEvents[pos].Pos;
@@ -864,31 +864,27 @@ public class PolygonClipper
                 {
                     break;
                 }
-
-                if (resultEvents[pos].Point == initial)
-                {
-                    break;
-                }
             }
+            while (resultEvents[pos].Point != initial);
 
-            result.Push(contour);
+            result.Add(contour);
         }
 
-        Polygon polygon = new();
+        Polygon polygon = [];
 
-        for (int i = 0; i < result.ContourCount; i++)
+        for (int i = 0; i < result.Count; i++)
         {
             Contour contour = result[i];
             if (contour.IsExternal)
             {
                 // The exterior ring goes first
-                polygon.Push(contour);
+                polygon.Add(contour);
 
                 // Followed by holes if any
                 for (int j = 0; j < contour.HoleCount; j++)
                 {
                     int holeId = contour.GetHoleIndex(j);
-                    polygon.Push(result[holeId]);
+                    polygon.Add(result[holeId]);
                 }
             }
         }
@@ -1012,33 +1008,33 @@ public class PolygonClipper
                 // We are inside. Check if the lower contour is a hole or an exterior contour.
                 Contour lowerContour = polygon[lowerContourId];
 
-                if (lowerContour.HoleOf != null)
+                if (lowerContour.ParentIndex != null)
                 {
                     // The lower contour is a hole: Connect the new contour as a hole to its parent and use the same depth.
-                    int parentContourId = lowerContour.HoleOf.Value;
+                    int parentContourId = lowerContour.ParentIndex.Value;
                     polygon[parentContourId].AddHoleIndex(contourId);
-                    contour.HoleOf = parentContourId;
+                    contour.ParentIndex = parentContourId;
                     contour.Depth = polygon[lowerContourId].Depth;
                 }
                 else
                 {
                     // The lower contour is an exterior contour: Connect the new contour as a hole and increment depth.
                     polygon[lowerContourId].AddHoleIndex(contourId);
-                    contour.HoleOf = lowerContourId;
+                    contour.ParentIndex = lowerContourId;
                     contour.Depth = polygon[lowerContourId].Depth + 1;
                 }
             }
             else
             {
                 // We are outside: This contour is an exterior contour of the same depth.
-                contour.HoleOf = null;
+                contour.ParentIndex = null;
                 contour.Depth = polygon[lowerContourId].Depth;
             }
         }
         else
         {
             // There is no "previous in result" event: This contour is an exterior contour with depth 0.
-            contour.HoleOf = null;
+            contour.ParentIndex = null;
             contour.Depth = 0;
         }
 

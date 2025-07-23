@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
@@ -9,7 +10,9 @@ namespace PolygonClipper;
 /// <summary>
 /// Represents a complex polygon.
 /// </summary>
-public sealed class Polygon
+#pragma warning disable CA1710 // Identifiers should have correct suffix
+public sealed class Polygon : IReadOnlyCollection<Contour>
+#pragma warning restore CA1710 // Identifiers should have correct suffix
 {
     /// <summary>
     /// The collection of contours that make up the polygon.
@@ -19,36 +22,39 @@ public sealed class Polygon
     /// <summary>
     /// Gets the number of contours in the polygon.
     /// </summary>
-    public int ContourCount
+    public int Count
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => this.contours.Count;
     }
 
     /// <summary>
+    /// Gets the total number of vertices across all contours in the polygon.
+    /// </summary>
+    /// <returns>The total vertex count.</returns>
+    public int VertexCount
+    {
+        get
+        {
+            int count = 0;
+            for (int i = 0; i < this.contours.Count; i++)
+            {
+                count += this.contours[i].Count;
+            }
+
+            return count;
+        }
+    }
+
+    /// <summary>
     /// Gets the contour at the specified index.
     /// </summary>
     /// <param name="index">The index of the contour.</param>
-    /// <returns>The <see cref="GetContour"/> at the given index.</returns>
+    /// <returns>The <see cref="Contour"/> at the given index.</returns>
     public Contour this[int index]
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => this.contours[index];
-    }
-
-    /// <summary>
-    /// Gets the total number of vertices across all contours in the polygon.
-    /// </summary>
-    /// <returns>The total vertex count.</returns>
-    public int GetVertexCount()
-    {
-        int nv = 0;
-        for (int i = 0; i < this.contours.Count; i++)
-        {
-            nv += this.contours[i].VertexCount;
-        }
-
-        return nv;
     }
 
     /// <summary>
@@ -57,16 +63,16 @@ public sealed class Polygon
     /// <param name="polygon">The polygon to join.</param>
     public void Join(Polygon polygon)
     {
-        int size = this.ContourCount;
+        int size = this.Count;
         for (int i = 0; i < polygon.contours.Count; ++i)
         {
             Contour contour = polygon.contours[i];
-            this.Push(contour);
-            this.Last().ClearHoles();
+            this.Add(contour);
+            this.GetLastContour().ClearHoles();
 
             for (int j = 0; j < contour.HoleCount; ++j)
             {
-                this.Last().AddHoleIndex(contour.GetHoleIndex(j) + size);
+                this.GetLastContour().AddHoleIndex(contour.GetHoleIndex(j) + size);
             }
         }
     }
@@ -78,13 +84,13 @@ public sealed class Polygon
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Box2 GetBoundingBox()
     {
-        if (this.ContourCount == 0)
+        if (this.Count == 0)
         {
             return default;
         }
 
         Box2 b = this.contours[0].GetBoundingBox();
-        for (int i = 1; i < this.ContourCount; i++)
+        for (int i = 1; i < this.Count; i++)
         {
             b = b.Add(this.contours[i].GetBoundingBox());
         }
@@ -109,21 +115,24 @@ public sealed class Polygon
     /// Adds a contour to the end of the contour collection.
     /// </summary>
     /// <param name="contour">The contour to add.</param>
-    public void Push(Contour contour) => this.contours.Add(contour);
+    public void Add(Contour contour) => this.contours.Add(contour);
 
     /// <summary>
     /// Gets the last contour in the polygon.
     /// </summary>
     /// <returns>The last <see cref="Contour"/> in the collection.</returns>
-    public Contour Last() => this.contours[^1];
-
-    /// <summary>
-    /// Removes the last contour from the polygon.
-    /// </summary>
-    public void Pop() => this.contours.RemoveAt(this.contours.Count - 1);
+    public Contour GetLastContour() => this.contours[^1];
 
     /// <summary>
     /// Clears all contours from the polygon.
     /// </summary>
     public void Clear() => this.contours.Clear();
+
+    /// <inheritdoc/>
+    public IEnumerator<Contour> GetEnumerator()
+        => ((IEnumerable<Contour>)this.contours).GetEnumerator();
+
+    /// <inheritdoc/>
+    IEnumerator IEnumerable.GetEnumerator()
+        => ((IEnumerable)this.contours).GetEnumerator();
 }

@@ -2,18 +2,30 @@
 
 [![License: Six Labors Split](https://img.shields.io/badge/license-Six%20Labors%20Split-%23e30183)](https://github.com/SixLabors/PolygonClipper/blob/master/LICENSE)
 
-## A Simple Algorithm for Boolean Operations on Polygons  
+A C# implementation of the Martínez–Rueda algorithm for performing Boolean operations on polygons. This library supports union, intersection, difference, and xor operations on complex polygons with holes, multiple contours, and self-intersections.
 
-*Francisco Martínez, Carlos Ogayar, Juan R. Jiménez, Antonio J. Rueda*
-  
-https://sci-hub.se/10.1016/j.advengsoft.2013.04.004
+## Features
 
-This repository contains the beginnings of an attempted port of the original public domain C++ implementation by the main author of the paper Francisco Martínez.   
+- Works with non-convex polygons, including holes and multiple disjoint regions
+- Handles edge cases like overlapping edges and vertical segments
+- Preserves topology: output polygons include hole/contour hierarchy
+- Deterministic and robust sweep line algorithm with O((n + k) log n) complexity
 
-The original code can be found in the reference folder.  
-  
-The plan is to implement a performant port, add additional tests and some method by which to generate renders of output clipping operations.   
-  
-This is currently an intellectual exercise but I believe a C# port could be very useful in many applications if proven successful. 
-  
-All and any assistance is gratefully accepted. :heart:
+## Usage
+
+The API centers around `Polygon` and `Contour` types. Construct input polygons using contours, then apply Boolean operations via the `PolygonClipper` class:
+
+```csharp
+Polygon result = PolygonClipper.Intersect(subject, clipping);
+```
+
+## Based On
+
+This implementation is based on the algorithm described in:
+
+> F. Martínez et al., "A simple algorithm for Boolean operations on polygons", *Advances in Engineering Software*, 64 (2013), pp. 11–19.  
+> https://sci-hub.se/10.1016/j.advengsoft.2013.04.004
+
+## License
+
+Six Labors Split License. See [`LICENSE`](https://github.com/SixLabors/PolygonClipper/blob/main/LICENSE) for details.

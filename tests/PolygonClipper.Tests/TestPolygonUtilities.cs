@@ -22,12 +22,12 @@ internal static class TestPolygonUtilities
         return (subject, clipping);
     }
 
-    private static Polygon ConvertToPolygon(IGeometryObject geometry)
+    public static Polygon ConvertToPolygon(IGeometryObject geometry)
     {
         if (geometry is GeoPolygon geoJsonPolygon)
         {
             // Convert GeoJSON Polygon to our Polygon type
-            Polygon polygon = new();
+            Polygon polygon = [];
             foreach (LineString ring in geoJsonPolygon.Coordinates)
             {
                 Contour contour = new();
@@ -36,11 +36,11 @@ internal static class TestPolygonUtilities
                     contour.AddVertex(new Vertex(xy.Longitude, xy.Latitude));
                 }
 
-                polygon.Push(contour);
+                polygon.Add(contour);
 
                 if (!ring.IsClosed())
                 {
-                    contour.AddVertex(contour.GetVertex(0));
+                    contour.AddVertex(contour[0]);
                 }
             }
 
@@ -49,7 +49,7 @@ internal static class TestPolygonUtilities
         else if (geometry is MultiPolygon geoJsonMultiPolygon)
         {
             // Convert GeoJSON MultiPolygon to our Polygon type
-            Polygon polygon = new();
+            Polygon polygon = [];
             foreach (GeoPolygon geoPolygon in geoJsonMultiPolygon.Coordinates)
             {
                 foreach (LineString ring in geoPolygon.Coordinates)
@@ -60,11 +60,11 @@ internal static class TestPolygonUtilities
                         contour.AddVertex(new Vertex(xy.Longitude, xy.Latitude));
                     }
 
-                    polygon.Push(contour);
+                    polygon.Add(contour);
 
                     if (!ring.IsClosed())
                     {
-                        contour.AddVertex(contour.GetVertex(0));
+                        contour.AddVertex(contour[0]);
                     }
                 }
             }

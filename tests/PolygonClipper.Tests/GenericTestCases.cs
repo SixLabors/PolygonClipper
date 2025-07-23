@@ -32,9 +32,7 @@ public class GenericTestCases
         IGeometryObject subjectGeometry = data.Features[0].Geometry;
         IGeometryObject clippingGeometry = data.Features[1].Geometry;
 
-        Polygon subject = ConvertToPolygon(subjectGeometry);
-        Polygon clipping = ConvertToPolygon(clippingGeometry);
-
+        (Polygon subject, Polygon clipping) = TestPolygonUtilities.BuildPolygon(data);
         return PolygonClipper.Union(subject, clipping);
     }
 
@@ -50,8 +48,7 @@ public class GenericTestCases
         IGeometryObject subjectGeometry = data.Features[0].Geometry;
         IGeometryObject clippingGeometry = data.Features[1].Geometry;
 
-        Polygon subject = ConvertToPolygon(subjectGeometry);
-        Polygon clipping = ConvertToPolygon(clippingGeometry);
+        (Polygon subject, Polygon clipping) = TestPolygonUtilities.BuildPolygon(data);
 
 #pragma warning disable RCS1124 // Inline local variable
         List<ExpectedResult> expectedResults = ExtractExpectedResults([.. data.Features.Skip(2)], data.Type);
@@ -66,70 +63,22 @@ public class GenericTestCases
             Polygon expected = result.Coordinates;
             Polygon actual = result.Operation(subject, clipping);
 
-            Assert.Equal(expected.ContourCount, actual.ContourCount);
-            for (int i = 0; i < expected.ContourCount; i++)
+            Assert.Equal(expected.Count, actual.Count);
+            for (int i = 0; i < expected.Count; i++)
             {
                 // We don't test for holes here as the reference tests do not do so.
                 this.testOutputHelper.WriteLine($"Current Countour {i}");
 
-                Assert.Equal(expected[i].VertexCount, actual[i].VertexCount);
-                for (int j = 0; j < expected[i].VertexCount; j++)
+                Assert.Equal(expected[i].Count, actual[i].Count);
+                for (int j = 0; j < expected[i].Count; j++)
                 {
-                    Vertex expectedVertex = expected[i].GetVertex(j);
-                    Vertex actualVertex = actual[i].GetVertex(j);
+                    Vertex expectedVertex = expected[i][j];
+                    Vertex actualVertex = actual[i][j];
                     Assert.Equal(expectedVertex.X, actualVertex.X, 3);
                     Assert.Equal(expectedVertex.Y, actualVertex.Y, 3);
                 }
             }
         }
-    }
-
-    private static Polygon ConvertToPolygon(IGeometryObject geometry)
-    {
-        if (geometry is GeoPolygon geoJsonPolygon)
-        {
-            // Convert GeoJSON Polygon to our Polygon type
-            Polygon polygon = new();
-            foreach (LineString ring in geoJsonPolygon.Coordinates)
-            {
-                Contour contour = new();
-                foreach (IPosition xy in ring.Coordinates)
-                {
-                    contour.AddVertex(new Vertex(xy.Longitude, xy.Latitude));
-                }
-
-                polygon.Push(contour);
-
-                if (!ring.IsClosed())
-                {
-                    contour.AddVertex(contour.GetVertex(0));
-                }
-            }
-
-            return polygon;
-        }
-        else if (geometry is MultiPolygon geoJsonMultiPolygon)
-        {
-            // Convert GeoJSON MultiPolygon to our Polygon type
-            Polygon polygon = new();
-            foreach (GeoPolygon geoPolygon in geoJsonMultiPolygon.Coordinates)
-            {
-                foreach (LineString ring in geoPolygon.Coordinates)
-                {
-                    Contour contour = new();
-                    foreach (IPosition xy in ring.Coordinates)
-                    {
-                        contour.AddVertex(new Vertex(xy.Longitude, xy.Latitude));
-                    }
-
-                    polygon.Push(contour);
-                }
-            }
-
-            return polygon;
-        }
-
-        throw new InvalidOperationException("Unsupported geometry type.");
     }
 
     private static List<ExpectedResult> ExtractExpectedResults(List<Feature> features, GeoJSONObjectType type)
@@ -151,14 +100,14 @@ public class GenericTestCases
                 return new ExpectedResult
                 {
                     Operation = operation,
-                    Coordinates = ConvertToPolygon(feature.Geometry as GeoPolygon)
+                    Coordinates = TestPolygonUtilities.ConvertToPolygon(feature.Geometry as GeoPolygon)
                 };
             }
 
             return new ExpectedResult
             {
                 Operation = operation,
-                Coordinates = ConvertToPolygon(feature.Geometry as MultiPolygon)
+                Coordinates = TestPolygonUtilities.ConvertToPolygon(feature.Geometry as MultiPolygon)
             };
         });
 

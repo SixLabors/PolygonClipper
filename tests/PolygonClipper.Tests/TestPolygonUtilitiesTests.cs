@@ -26,12 +26,12 @@ public class TestPolygonUtilitiesTests
         Assert.IsType<Polygon>(subject);
         Assert.IsType<Polygon>(clipping);
 
-        Assert.Equal(2, subject.ContourCount);
-        Assert.Equal(122, subject[0].VertexCount);
-        Assert.Equal(9, subject[1].VertexCount);
+        Assert.Equal(2, subject.Count);
+        Assert.Equal(122, subject[0].Count);
+        Assert.Equal(9, subject[1].Count);
 
-        Assert.Equal(1, clipping.ContourCount);
-        Assert.Equal(12, clipping[0].VertexCount);
+        Assert.Equal(1, clipping.Count);
+        Assert.Equal(12, clipping[0].Count);
     }
 
     [Fact]
@@ -40,8 +40,8 @@ public class TestPolygonUtilitiesTests
         Polygon solution = PolygonClipper.Union(Polygons.subject, Polygons.clipping);
         Assert.NotNull(solution);
 
-        Assert.Equal(2, solution.ContourCount);
-        Assert.Equal(122, solution[0].VertexCount);
-        Assert.Equal(9, solution[1].VertexCount);
+        Assert.Equal(2, solution.Count);
+        Assert.Equal(122, solution[0].Count);
+        Assert.Equal(9, solution[1].Count);
     }
 }
