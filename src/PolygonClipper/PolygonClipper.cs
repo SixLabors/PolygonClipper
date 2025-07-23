@@ -208,7 +208,7 @@ public class PolygonClipper
             if (sweepEvent.Left)
             {
                 // Insert the event into the status line and get neighbors
-                int it = sweepEvent.PosSL = statusLine.Insert(sweepEvent);
+                int it = sweepEvent.PosSL = statusLine.Add(sweepEvent);
                 prevEvent = statusLine.Prev(it);
                 nextEvent = statusLine.Next(it);
 
@@ -428,13 +428,13 @@ public class PolygonClipper
         {
             // Previous line segment in sl belongs to a different polygon that "se" belongs to.
             le.InOut = !prev.OtherInOut;
-            le.OtherInOut = prev.Vertical() ? !prev.InOut : prev.InOut;
+            le.OtherInOut = prev.IsVertical() ? !prev.InOut : prev.InOut;
         }
 
         // Compute PrevInResult field
         if (prev != null)
         {
-            le.PrevInResult = (!InResult(prev, operation) || prev.Vertical())
+            le.PrevInResult = (!InResult(prev, operation) || prev.IsVertical())
                 ? prev.PrevInResult
                 : prev;
         }
@@ -562,8 +562,8 @@ public class PolygonClipper
 
         // Point intersections
         int nIntersections = PolygonUtilities.FindIntersection(
-            le1.Segment(),
-            le2.Segment(),
+            le1.GetSegment(),
+            le2.GetSegment(),
             out Vertex ip1,
             out Vertex _); // Currently unused but could be used to detect collinear overlapping segments
 

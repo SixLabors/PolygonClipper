@@ -25,11 +25,17 @@ namespace SixLabors.PolygonClipper;
 [DebuggerDisplay("Count = {Count}")]
 internal sealed class StatusLine
 {
+    private const int DefaultCapacity = 16;
     private readonly List<SweepEvent> sortedEvents;
     private readonly SegmentComparer comparer = new();
 
+    public StatusLine()
+        : this(DefaultCapacity)
+    {
+    }
+
     public StatusLine(int capacity)
-        => this.sortedEvents = new List<SweepEvent>(capacity > 0 ? capacity : 16);
+        => this.sortedEvents = new List<SweepEvent>(capacity > 0 ? capacity : DefaultCapacity);
 
     /// <summary>
     /// Gets the number of events in the status line.
@@ -38,6 +44,24 @@ internal sealed class StatusLine
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => this.sortedEvents.Count;
+    }
+
+    /// <summary>
+    /// Gets the minimum sweep event in the status line (first in sort order).
+    /// </summary>
+    public SweepEvent Min
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => this.sortedEvents[0];
+    }
+
+    /// <summary>
+    /// Gets the maximum sweep event in the status line (last in sort order).
+    /// </summary>
+    public SweepEvent Max
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => this.sortedEvents[^1];
     }
 
     /// <summary>
@@ -52,11 +76,11 @@ internal sealed class StatusLine
     }
 
     /// <summary>
-    /// Inserts a sweep event into the status line, maintaining sorted order.
+    /// Adds a sweep event into the status line, maintaining sorted order.
     /// </summary>
     /// <param name="e">The sweep event to insert.</param>
     /// <returns>The index where the event was inserted.</returns>
-    public int Insert(SweepEvent e)
+    public int Add(SweepEvent e)
     {
         int index = this.sortedEvents.BinarySearch(e, this.comparer);
         if (index < 0)

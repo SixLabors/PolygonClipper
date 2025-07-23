@@ -152,7 +152,7 @@ internal sealed class SweepEvent
     /// <see langword="true"/> if the line segment is below the point; otherwise <see langword="false"/>.
     /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Below(in Vertex p)
+    public bool IsBelow(in Vertex p)
         => this.Left
         ? PolygonUtilities.SignedArea(this.Point, this.OtherEvent.Point, p) > 0D
         : PolygonUtilities.SignedArea(this.OtherEvent.Point, this.Point, p) > 0D;
@@ -165,7 +165,7 @@ internal sealed class SweepEvent
     /// <see langword="true"/> if the line segment is above the point; otherwise <see langword="false"/>.
     /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Above(in Vertex p) => !this.Below(p);
+    public bool IsAbove(in Vertex p) => !this.IsBelow(p);
 
     /// <summary>
     /// Is the line segment (point, otherEvent->point) a vertical line segment.
@@ -174,7 +174,7 @@ internal sealed class SweepEvent
     /// <see langword="true"/> if the line segment is vertical; otherwise <see langword="false"/>.
     /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Vertical() => this.Point.X == this.OtherEvent.Point.X;
+    public bool IsVertical() => this.Point.X == this.OtherEvent.Point.X;
 
     /// <summary>
     /// Determines if this sweep event comes before another sweep event.
@@ -199,7 +199,7 @@ internal sealed class SweepEvent
     /// <summary>
     /// Returns the segment associated with the sweep event.
     /// </summary>
-    /// <returns>The <see cref="Segment"/>.</returns>
+    /// <returns>The <see cref="GetSegment"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Segment Segment() => new(this.Point, this.OtherEvent.Point);
+    public Segment GetSegment() => new(this.Point, this.OtherEvent.Point);
 }

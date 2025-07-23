@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 
 namespace SixLabors.PolygonClipper.Tests;
+
 internal static class TestEnvironment
 {
     private static readonly FileInfo TestAssemblyFile = new(typeof(TestEnvironment).GetTypeInfo().Assembly.Location);

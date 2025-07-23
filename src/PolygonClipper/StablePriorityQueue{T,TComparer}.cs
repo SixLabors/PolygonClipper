@@ -17,7 +17,17 @@ internal sealed class StablePriorityQueue<T, TComparer>
     where TComparer : IComparer<T>
 {
     private const int Log2Arity = 2;
+    private const int DefaultCapacity = 16;
     private readonly List<T> heap;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StablePriorityQueue{T, TComparer}"/> class with a specified comparer.
+    /// </summary>
+    /// <param name="comparer">The comparer to determine the priority of the elements.</param>
+    public StablePriorityQueue(TComparer comparer)
+       : this(comparer, DefaultCapacity)
+    {
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="StablePriorityQueue{T, TComparer}"/> class with a specified comparer.
@@ -27,7 +37,7 @@ internal sealed class StablePriorityQueue<T, TComparer>
     public StablePriorityQueue(TComparer comparer, int capacity)
     {
         this.Comparer = comparer ?? throw new ArgumentNullException(nameof(comparer));
-        this.heap = new List<T>(capacity > 0 ? capacity : 16);
+        this.heap = new List<T>(capacity > 0 ? capacity : DefaultCapacity);
     }
 
     /// <summary>

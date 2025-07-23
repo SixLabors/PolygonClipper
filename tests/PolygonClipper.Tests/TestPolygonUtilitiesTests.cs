@@ -12,7 +12,7 @@ public class TestPolygonUtilitiesTests
     /// <summary>
     /// Static to allow profiling in Rider.
     /// </summary>
-    private static readonly (Polygon subject, Polygon clipping) Polygons = TestPolygonUtilities.BuildPolygon(Data);
+    private static readonly (Polygon Subject, Polygon Clipping) Polygons = TestPolygonUtilities.BuildPolygon(Data);
 
     [Fact]
     public void ConvertToPolygon_ValidGeometry_ReturnsPolygon()
@@ -35,7 +35,7 @@ public class TestPolygonUtilitiesTests
     [Fact]
     public void PolygonClipper_Union_Profile_Test()
     {
-        Polygon solution = SixLabors.PolygonClipper.PolygonClipper.Union(Polygons.subject, Polygons.clipping);
+        Polygon solution = PolygonClipper.Union(Polygons.Subject, Polygons.Clipping);
         Assert.NotNull(solution);
 
         Assert.Equal(2, solution.Count);
