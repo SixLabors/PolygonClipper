@@ -199,7 +199,7 @@ internal sealed class SweepEvent
     /// <summary>
     /// Returns the segment associated with the sweep event.
     /// </summary>
-    /// <returns>The <see cref="GetSegment"/>.</returns>
+    /// <returns>The <see cref="Segment"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Segment GetSegment() => new(this.Point, this.OtherEvent.Point);
 }

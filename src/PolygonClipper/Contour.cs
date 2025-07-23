@@ -80,7 +80,7 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     /// Gets the segment at the specified index of the contour.
     /// </summary>
     /// <param name="index">The index of the segment.</param>
-    /// <returns>The <see cref="GetSegment"/>.</returns>
+    /// <returns>The <see cref="Segment"/>.</returns>
     internal Segment GetSegment(int index)
         => (index == this.Count - 1)
         ? new Segment(this.vertices[^1], this.vertices[0])
