@@ -1,14 +1,12 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace PolygonClipper;
+namespace SixLabors.PolygonClipper;
 
 /// <summary>
 /// Implements a robust algorithm for performing boolean operations on polygons.

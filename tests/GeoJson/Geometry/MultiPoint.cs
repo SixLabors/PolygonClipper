@@ -1,13 +1,13 @@
 ﻿// Copyright © Joerg Battermann 2014, Matt Hunt 2017
 
-using GeoJSON.Text.Converters;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text.Json.Serialization;
+using GeoJson.Converters;
 
-namespace GeoJSON.Text.Geometry
+namespace GeoJson.Geometry
 {
     /// <summary>
     /// Contains an array of <see cref="Point" />.
@@ -28,7 +28,7 @@ namespace GeoJSON.Text.Geometry
         /// <param name="coordinates">The coordinates.</param>
         public MultiPoint(IEnumerable<Point> coordinates)
         {
-            Coordinates = new ReadOnlyCollection<Point>(coordinates?.ToArray() ?? Array.Empty<Point>());
+            this.Coordinates = new ReadOnlyCollection<Point>(coordinates?.ToArray() ?? Array.Empty<Point>());
         }
 
         //[JsonConstructor]
@@ -57,7 +57,7 @@ namespace GeoJSON.Text.Geometry
         /// </summary>
         public override bool Equals(object obj)
         {
-            return Equals(this, obj as MultiPoint);
+            return this.Equals(this, obj as MultiPoint);
         }
 
         /// <summary>
@@ -65,7 +65,7 @@ namespace GeoJSON.Text.Geometry
         /// </summary>
         public bool Equals(MultiPoint other)
         {
-            return Equals(this, other);
+            return this.Equals(this, other);
         }
 
         /// <summary>
@@ -110,7 +110,7 @@ namespace GeoJSON.Text.Geometry
         public override int GetHashCode()
         {
             int hash = base.GetHashCode();
-            foreach (Point? item in Coordinates)
+            foreach (Point? item in this.Coordinates)
             {
                 hash = (hash * 397) ^ item.GetHashCode();
             }

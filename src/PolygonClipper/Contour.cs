@@ -1,11 +1,10 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
-namespace PolygonClipper;
+namespace SixLabors.PolygonClipper;
 
 /// <summary>
 /// Represents a simple polygon. The edges of the contours are interior disjoint.

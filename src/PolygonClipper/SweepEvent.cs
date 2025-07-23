@@ -1,11 +1,11 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Runtime.CompilerServices;
-
 #nullable disable
 
-namespace PolygonClipper;
+using System.Runtime.CompilerServices;
+
+namespace SixLabors.PolygonClipper;
 
 /// <summary>
 /// Represents a sweep.

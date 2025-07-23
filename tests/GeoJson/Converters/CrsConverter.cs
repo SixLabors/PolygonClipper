@@ -1,11 +1,12 @@
 ﻿// Copyright © Joerg Battermann 2014, Matt Hunt 2017
 
 using System;
+using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using GeoJSON.Text.CoordinateReferenceSystem;
+using GeoJson.CoordinateReferenceSystem;
 
-namespace GeoJSON.Text.Converters
+namespace GeoJson.Converters
 {
     /// <summary>
     /// Converts <see cref="ICRSObject"/> types to and from JSON.
