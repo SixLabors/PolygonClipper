@@ -1,9 +1,8 @@
 ﻿// Copyright © Joerg Battermann 2014, Matt Hunt 2017
 
 using System.Runtime.Serialization;
-using System.Text.Json.Serialization;
 
-namespace GeoJSON.Text.CoordinateReferenceSystem
+namespace GeoJson.CoordinateReferenceSystem
 {
     /// <summary>
     /// Defines the GeoJSON Coordinate Reference System Objects (CRS) types as originally defined in the geojson.org v1.0 spec

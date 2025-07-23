@@ -1,12 +1,14 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <AssemblyName>SixLabors.PolygonClipper.Benchmarks</AssemblyName>
     <OutputType>Exe</OutputType>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-
+    <RootNamespace>SixLabors.PolygonClipper.Benchmarks</RootNamespace>
+    <GenerateProgramFile>false</GenerateProgramFile>
+    <DebugType>portable</DebugType>
     <!--Used to hide test project from dotnet test-->
     <IsTestProject>false</IsTestProject>
+    <Configurations>Debug;Release</Configurations>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -31,7 +33,7 @@
   <ItemGroup>
     <Compile Include="..\PolygonClipper.Tests\TestData.cs" Link="TestData.cs" />
     <Compile Include="..\PolygonClipper.Tests\TestEnvironment.cs" Link="TestEnvironment.cs" />
-    <Compile Include="..\PolygonClipper.Tests\TestPolygonUtilities.cs" Link="TestPolygonUtilities.cs" />    
+    <Compile Include="..\PolygonClipper.Tests\TestPolygonUtilities.cs" Link="TestPolygonUtilities.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -42,5 +44,5 @@
     <ProjectReference Include="..\..\src\PolygonClipper\PolygonClipper.csproj" />
     <ProjectReference Include="..\GeoJson\GeoJson.csproj" />
   </ItemGroup>
-  
+
 </Project>

@@ -5,9 +5,9 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text.Json.Serialization;
-using GeoJSON.Text.Converters;
+using GeoJson.Converters;
 
-namespace GeoJSON.Text.Geometry
+namespace GeoJson.Geometry
 {
     /// <summary>
     /// Defines the MultiPolygon type.
@@ -25,7 +25,7 @@ namespace GeoJSON.Text.Geometry
         /// <param name="polygons">The polygons contained in this MultiPolygon.</param>
         public MultiPolygon(IEnumerable<Polygon> polygons)
         {
-            Coordinates = new ReadOnlyCollection<Polygon>(
+            this.Coordinates = new ReadOnlyCollection<Polygon>(
                 polygons?.ToArray() ?? throw new ArgumentNullException(nameof(polygons)));
         }
 
@@ -59,7 +59,7 @@ namespace GeoJSON.Text.Geometry
         /// </summary>
         public override bool Equals(object obj)
         {
-            return Equals(this, obj as MultiPolygon);
+            return this.Equals(this, obj as MultiPolygon);
         }
 
         /// <summary>
@@ -67,7 +67,7 @@ namespace GeoJSON.Text.Geometry
         /// </summary>
         public bool Equals(MultiPolygon other)
         {
-            return Equals(this, other);
+            return this.Equals(this, other);
         }
 
         /// <summary>
@@ -112,7 +112,7 @@ namespace GeoJSON.Text.Geometry
         public override int GetHashCode()
         {
             int hash = base.GetHashCode();
-            foreach (Polygon? item in Coordinates)
+            foreach (Polygon? item in this.Coordinates)
             {
                 hash = (hash * 397) ^ item.GetHashCode();
             }

@@ -1,13 +1,11 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System;
-using GeoJSON.Text.Feature;
-using GeoJSON.Text.Geometry;
+using GeoJson.Feature;
+using GeoJson.Geometry;
+using GeoPolygon = GeoJson.Geometry.Polygon;
 
-using GeoPolygon = GeoJSON.Text.Geometry.Polygon;
-
-namespace PolygonClipper.Tests;
+namespace SixLabors.PolygonClipper.Tests;
 
 internal static class TestPolygonUtilities
 {

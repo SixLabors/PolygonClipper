@@ -6,7 +6,7 @@ using System.Runtime.Serialization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace GeoJSON.Text.Converters
+namespace GeoJson.Converters
 {
     public class JsonStringEnumMemberConverter : JsonConverterFactory
     {
@@ -23,7 +23,7 @@ namespace GeoJSON.Text.Converters
             this.baseConverter = new JsonStringEnumConverter(namingPolicy, allowIntegerValues);
         }
 
-        public override bool CanConvert(Type typeToConvert) => baseConverter.CanConvert(typeToConvert);
+        public override bool CanConvert(Type typeToConvert) => this.baseConverter.CanConvert(typeToConvert);
 
         public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options)
         {
@@ -34,11 +34,11 @@ namespace GeoJSON.Text.Converters
             Dictionary<string, string>? dictionary = query.ToDictionary(p => p.Item1, p => p.Item2);
             if (dictionary.Count > 0)
             {
-                return new JsonStringEnumConverter(new DictionaryLookupNamingPolicy(dictionary, namingPolicy), allowIntegerValues).CreateConverter(typeToConvert, options);
+                return new JsonStringEnumConverter(new DictionaryLookupNamingPolicy(dictionary, this.namingPolicy), this.allowIntegerValues).CreateConverter(typeToConvert, options);
             }
             else
             {
-                return baseConverter.CreateConverter(typeToConvert, options);
+                return this.baseConverter.CreateConverter(typeToConvert, options);
             }
         }
     }
@@ -49,7 +49,7 @@ namespace GeoJSON.Text.Converters
 
         public JsonNamingPolicyDecorator(JsonNamingPolicy underlyingNamingPolicy) => this.underlyingNamingPolicy = underlyingNamingPolicy;
 
-        public override string ConvertName(string name) => underlyingNamingPolicy == null ? name : underlyingNamingPolicy.ConvertName(name);
+        public override string ConvertName(string name) => this.underlyingNamingPolicy == null ? name : this.underlyingNamingPolicy.ConvertName(name);
     }
 
     internal class DictionaryLookupNamingPolicy : JsonNamingPolicyDecorator
@@ -58,6 +58,6 @@ namespace GeoJSON.Text.Converters
 
         public DictionaryLookupNamingPolicy(Dictionary<string, string> dictionary, JsonNamingPolicy underlyingNamingPolicy) : base(underlyingNamingPolicy) => this.dictionary = dictionary ?? throw new ArgumentNullException();
 
-        public override string ConvertName(string name) => dictionary.TryGetValue(name, out string? value) ? value : base.ConvertName(name);
+        public override string ConvertName(string name) => this.dictionary.TryGetValue(name, out string? value) ? value : base.ConvertName(name);
     }
 }

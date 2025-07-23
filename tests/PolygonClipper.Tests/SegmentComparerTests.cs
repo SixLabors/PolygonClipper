@@ -1,10 +1,9 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Collections.Generic;
-using Xunit;
+using SixLabors.PolygonClipper;
 
-namespace PolygonClipper.Tests;
+namespace SixLabors.PolygonClipper.Tests;
 
 public class SegmentComparerTests
 {
@@ -13,7 +12,7 @@ public class SegmentComparerTests
     [Fact]
     public void NotCollinear_SharedLeftPoint_RightPointFirst()
     {
-        SortedSet<SweepEvent> tree = new(this.segmentComparer);
+        SortedSet<SixLabors.PolygonClipper.SweepEvent> tree = new(this.segmentComparer);
         Vertex pt = default;
         SweepEvent se1 = new(pt, true, new SweepEvent(new Vertex(1, 1), false));
         SweepEvent se2 = new(pt, true, new SweepEvent(new Vertex(2, 3), false));
@@ -28,7 +27,7 @@ public class SegmentComparerTests
     [Fact]
     public void NotCollinear_DifferentLeftPoint_RightPointYCoordToSort()
     {
-        SortedSet<SweepEvent> tree = new(this.segmentComparer);
+        SortedSet<SixLabors.PolygonClipper.SweepEvent> tree = new(this.segmentComparer);
         SweepEvent se1 = new(new Vertex(0, 1), true, new SweepEvent(new Vertex(1, 1), false));
         SweepEvent se2 = new(new Vertex(0, 2), true, new SweepEvent(new Vertex(2, 3), false));
 
@@ -51,13 +50,13 @@ public class SegmentComparerTests
         SweepEventComparer eventComparer = new();
 
         Assert.Equal(1, eventComparer.Compare(se1, se2));
-        Assert.False(se2.Below(se1.Point));
-        Assert.True(se2.Above(se1.Point));
+        Assert.False((bool)se2.Below(se1.Point));
+        Assert.True((bool)se2.Above(se1.Point));
 
-        AssertOrder(se1,se2, true);
+        this.AssertOrder(se1,se2, true);
 
         Assert.Equal(1, eventComparer.Compare(se3, se4));
-        Assert.False(se4.Above(se3.Point));
+        Assert.False((bool)se4.Above(se3.Point));
     }
 
     [Fact]
@@ -66,7 +65,7 @@ public class SegmentComparerTests
         SweepEvent se2 = new(new Vertex(0, 1), true, new SweepEvent(new Vertex(2, 1), false));
         SweepEvent se1 = new(new Vertex(-1, 0), true, new SweepEvent(new Vertex(2, 3), false));
 
-        Assert.False(se1.Below(se2.Point));
+        Assert.False((bool)se1.Below(se2.Point));
 
         Assert.Equal(1, this.segmentComparer.Compare(se1, se2));
     }
@@ -74,8 +73,8 @@ public class SegmentComparerTests
     [Fact]
     public void CollinearSegments()
     {
-        SweepEvent se1 = new(new Vertex(1, 1), true, new SweepEvent(new Vertex(5, 1), false), PolygonType.Subject);
-        SweepEvent se2 = new(new Vertex(2, 1), true, new SweepEvent(new Vertex(3, 1), false), PolygonType.Clipping);
+        SweepEvent se1 = new(new Vertex(1, 1), true, new SweepEvent(new Vertex(5, 1), false), SixLabors.PolygonClipper.PolygonType.Subject);
+        SweepEvent se2 = new(new Vertex(2, 1), true, new SweepEvent(new Vertex(3, 1), false), SixLabors.PolygonClipper.PolygonType.Clipping);
 
         // Assert that the segments belong to different polygons
         Assert.NotEqual(se1.PolygonType, se2.PolygonType);
@@ -88,8 +87,8 @@ public class SegmentComparerTests
         // Arrange
         Vertex pt = new(0, 1);
 
-        SweepEvent se1 = new(pt, true, new SweepEvent(new Vertex(5, 1), false), PolygonType.Clipping);
-        SweepEvent se2 = new(pt, true, new SweepEvent(new Vertex(3, 1), false), PolygonType.Clipping);
+        SweepEvent se1 = new(pt, true, new SweepEvent(new Vertex(5, 1), false), SixLabors.PolygonClipper.PolygonType.Clipping);
+        SweepEvent se2 = new(pt, true, new SweepEvent(new Vertex(3, 1), false), SixLabors.PolygonClipper.PolygonType.Clipping);
 
         se1.ContourId = 1;
         se2.ContourId = 2;
@@ -110,8 +109,8 @@ public class SegmentComparerTests
     [Fact]
     public void CollinearSamePolygonDifferentLeftPoints()
     {
-        SweepEvent se1 = new(new Vertex(1, 1), true, new SweepEvent(new Vertex(5, 1), false), PolygonType.Subject);
-        SweepEvent se2 = new(new Vertex(2, 1), true, new SweepEvent(new Vertex(3, 1), false), PolygonType.Clipping);
+        SweepEvent se1 = new(new Vertex(1, 1), true, new SweepEvent(new Vertex(5, 1), false), SixLabors.PolygonClipper.PolygonType.Subject);
+        SweepEvent se2 = new(new Vertex(2, 1), true, new SweepEvent(new Vertex(3, 1), false), SixLabors.PolygonClipper.PolygonType.Clipping);
 
         Assert.NotEqual(se1.PolygonType, se2.PolygonType);
         Assert.NotEqual(se1.Point, se2.Point);

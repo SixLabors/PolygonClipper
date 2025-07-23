@@ -1,6 +1,6 @@
 ﻿// Copyright © Joerg Battermann 2014, Matt Hunt 2017
 
-namespace GeoJSON.Text.CoordinateReferenceSystem
+namespace GeoJson.CoordinateReferenceSystem
 {
     /// <summary>
     /// Base Interface for CRSBase Object types.

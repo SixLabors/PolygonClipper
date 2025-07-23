@@ -1,15 +1,14 @@
 ﻿// Copyright © Joerg Battermann 2014, Matt Hunt 2017
 
-using System.Collections.Generic;
-using System.Reflection;
-using System.Linq;
-using GeoJSON.Text.Converters;
-using GeoJSON.Text.Geometry;
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
 using System.Text.Json.Serialization;
-using GeoJSON.Text.CoordinateReferenceSystem;
+using GeoJson.Converters;
+using GeoJson.Geometry;
 
-namespace GeoJSON.Text.Feature
+namespace GeoJson.Feature
 {
     /// <summary>
     /// A GeoJSON Feature Object; generic version for strongly typed <see cref="Geometry"/>
@@ -35,16 +34,16 @@ namespace GeoJSON.Text.Feature
 
         public Feature(TGeometry geometry, TProps properties, string id = null)
         {
-            Geometry = geometry;
-            Properties = properties;
-            Id = id;
+            this.Geometry = geometry;
+            this.Properties = properties;
+            this.Id = id;
         }
 
         public Feature(IGeometryObject geometry, TProps properties, string id = null)
         {
-            Geometry = (TGeometry)geometry;
-            Properties = properties;
-            Id = id;
+            this.Geometry = (TGeometry)geometry;
+            this.Properties = properties;
+            this.Id = id;
         }
 
         [JsonPropertyName("type")]
@@ -57,15 +56,15 @@ namespace GeoJSON.Text.Feature
         public string Id { 
             get
             {
-                return _id;
+                return this._id;
             }
 #if NET5_0_OR_GREATER
             init
             {
-                if (_idHasValue) throw new InvalidOperationException("Id property already set, is read only");
+                if (this._idHasValue) throw new InvalidOperationException("Id property already set, is read only");
 
-                _id = value;
-                _idHasValue = true;
+                this._id = value;
+                this._idHasValue = true;
             }
 #else
             set
@@ -83,15 +82,15 @@ namespace GeoJSON.Text.Feature
         public TGeometry Geometry { 
             get
             {
-                return _geometry;
+                return this._geometry;
             }
 #if NET5_0_OR_GREATER
             init
             {
-                if (_geometryHasValue) throw new InvalidOperationException("Geometry property already set, is read only");
+                if (this._geometryHasValue) throw new InvalidOperationException("Geometry property already set, is read only");
 
-                _geometry = value;
-                _geometryHasValue = true;
+                this._geometry = value;
+                this._geometryHasValue = true;
             }
 #else
             set
@@ -108,15 +107,15 @@ namespace GeoJSON.Text.Feature
         public TProps Properties { 
             get
             {
-                return _properties;
+                return this._properties;
             }
 #if NET5_0_OR_GREATER
             init
             {
-                if (_propertiesHasValue) throw new InvalidOperationException("Geometry property already set, is read only");
+                if (this._propertiesHasValue) throw new InvalidOperationException("Geometry property already set, is read only");
 
-                _properties = value;
-                _propertiesHasValue = true;
+                this._properties = value;
+                this._propertiesHasValue = true;
             }
 #else
             set
@@ -146,17 +145,17 @@ namespace GeoJSON.Text.Feature
             if (other is null) return false;
             if (ReferenceEquals(this, other)) return true;
             return base.Equals(other)
-                   && string.Equals(Id, other.Id)
-                   && EqualityComparer<TGeometry>.Default.Equals(Geometry, other.Geometry)
-                   && EqualityComparer<TProps>.Default.Equals(Properties, other.Properties);
+                   && string.Equals(this.Id, other.Id)
+                   && EqualityComparer<TGeometry>.Default.Equals(this.Geometry, other.Geometry)
+                   && EqualityComparer<TProps>.Default.Equals(this.Properties, other.Properties);
         }
 
         public override bool Equals(object obj)
         {
             if (obj is null) return false;
             if (ReferenceEquals(this, obj)) return true;
-            if (obj.GetType() != GetType()) return false;
-            return Equals((Feature<TGeometry, TProps>) obj);
+            if (obj.GetType() != this.GetType()) return false;
+            return this.Equals((Feature<TGeometry, TProps>) obj);
         }
 
         public override int GetHashCode()
@@ -164,9 +163,9 @@ namespace GeoJSON.Text.Feature
             unchecked
             {
                 int hashCode = base.GetHashCode();
-                hashCode = (hashCode * 397) ^ (Id != null ? Id.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ EqualityComparer<TGeometry>.Default.GetHashCode(Geometry);
-                hashCode = (hashCode * 397) ^ EqualityComparer<TProps>.Default.GetHashCode(Properties);
+                hashCode = (hashCode * 397) ^ (this.Id != null ? this.Id.GetHashCode() : 0);
+                hashCode = (hashCode * 397) ^ EqualityComparer<TGeometry>.Default.GetHashCode(this.Geometry);
+                hashCode = (hashCode * 397) ^ EqualityComparer<TProps>.Default.GetHashCode(this.Properties);
                 return hashCode;
             }
         }
@@ -274,34 +273,34 @@ namespace GeoJSON.Text.Feature
             if (other is null) return false;
             if (ReferenceEquals(this, other)) return true;
 
-            if (Geometry == null && other.Geometry == null)
+            if (this.Geometry == null && other.Geometry == null)
             {
                 return true;
             }
 
-            if (Geometry == null && other.Geometry != null)
+            if (this.Geometry == null && other.Geometry != null)
             {
                 return false;
             }
 
-            if (Geometry == null)
+            if (this.Geometry == null)
             {
                 return false;
             }
 
-            return EqualityComparer<TGeometry>.Default.Equals(Geometry, other.Geometry);
+            return EqualityComparer<TGeometry>.Default.Equals(this.Geometry, other.Geometry);
         }
 
         public override bool Equals(object obj)
         {
             if (obj is null) return false;
             if (ReferenceEquals(this, obj)) return true;
-            return obj.GetType() == GetType() && Equals((Feature<TGeometry>) obj);
+            return obj.GetType() == this.GetType() && this.Equals((Feature<TGeometry>) obj);
         }
 
         public override int GetHashCode()
         {
-            return Geometry.GetHashCode();
+            return this.Geometry.GetHashCode();
         }
 
         public static bool operator ==(Feature<TGeometry> left, Feature<TGeometry> right)
