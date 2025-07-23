@@ -5,7 +5,7 @@ using BenchmarkDotNet.Running;
 
 namespace SixLabors.PolygonClipper.Benchmarks;
 
-internal class Program
+internal sealed class Program
 {
     public static void Main(string[] args)
         => BenchmarkSwitcher

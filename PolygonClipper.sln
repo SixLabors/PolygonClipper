@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.12.35707.178 d17.12
+VisualStudioVersion = 17.12.35707.178
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PolygonClipper", "src\PolygonClipper\PolygonClipper.csproj", "{3C8D945E-6074-437E-B6EA-237BD0C80411}"
 EndProject
@@ -73,5 +73,9 @@ Global
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {2C73BEEC-091B-45E4-A0BD-7D7CD16A8451}
+	EndGlobalSection
+	GlobalSection(SharedMSBuildProjectFiles) = preSolution
+		shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems*{3c8d945e-6074-437e-b6ea-237bd0c80411}*SharedItemsImports = 5
+		shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems*{68a8cc40-6aed-4e96-b524-31b1158fdeea}*SharedItemsImports = 13
 	EndGlobalSection
 EndGlobal

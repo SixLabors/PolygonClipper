@@ -12,7 +12,7 @@ public class TestPolygonUtilitiesTests
     /// <summary>
     /// Static to allow profiling in Rider.
     /// </summary>
-    private static readonly (Polygon subject, Polygon clipping) Polygons = TestPolygonUtilities.BuildPolygon(Data);
+    private static readonly (Polygon Subject, Polygon Clipping) Polygons = TestPolygonUtilities.BuildPolygon(Data);
 
     [Fact]
     public void ConvertToPolygon_ValidGeometry_ReturnsPolygon()
@@ -24,22 +24,22 @@ public class TestPolygonUtilitiesTests
         Assert.IsType<Polygon>(subject);
         Assert.IsType<Polygon>(clipping);
 
-        Assert.Equal(2, subject.ContourCount);
-        Assert.Equal(122, subject[0].VertexCount);
-        Assert.Equal(9, subject[1].VertexCount);
+        Assert.Equal(2, subject.Count);
+        Assert.Equal(122, subject[0].Count);
+        Assert.Equal(9, subject[1].Count);
 
-        Assert.Equal(1, clipping.ContourCount);
-        Assert.Equal(12, clipping[0].VertexCount);
+        Assert.Equal(1, clipping.Count);
+        Assert.Equal(12, clipping[0].Count);
     }
 
     [Fact]
     public void PolygonClipper_Union_Profile_Test()
     {
-        Polygon solution = SixLabors.PolygonClipper.PolygonClipper.Union(Polygons.subject, Polygons.clipping);
+        Polygon solution = PolygonClipper.Union(Polygons.Subject, Polygons.Clipping);
         Assert.NotNull(solution);
 
-        Assert.Equal(2, solution.ContourCount);
-        Assert.Equal(122, solution[0].VertexCount);
-        Assert.Equal(9, solution[1].VertexCount);
+        Assert.Equal(2, solution.Count);
+        Assert.Equal(122, solution[0].Count);
+        Assert.Equal(9, solution[1].Count);
     }
 }

@@ -56,7 +56,7 @@ internal sealed class SegmentComparer : IComparer<SweepEvent>, IComparer
             // If they share their left endpoint, use the right endpoint to sort
             if (perhapsInversedX.Point == perhapsInversedY.Point)
             {
-                return LessIf(perhapsInversedX.Below(perhapsInversedY.OtherEvent.Point), inversed);
+                return LessIf(perhapsInversedX.IsBelow(perhapsInversedY.OtherEvent.Point), inversed);
             }
 
             // Different left endpoints: use the y-coordinate to sort if x-coordinates are the same
