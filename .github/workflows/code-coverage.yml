@@ -74,7 +74,7 @@ jobs:
           XUNIT_PATH: .\tests\PolygonClipper.Tests # Required for xunit
 
       - name: Codecov Update
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         if: matrix.options.codecov == true && startsWith(github.repository, 'SixLabors')
         with:
           flags: unittests
