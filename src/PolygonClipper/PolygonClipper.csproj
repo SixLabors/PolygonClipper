@@ -21,6 +21,11 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <!--Bump to v1.0 prior to tagged release.-->
+    <MinVerMinimumMajorMinor>1.0</MinVerMinimumMajorMinor>
+  </PropertyGroup>
+  
   <Choose>
     <When Condition="$(SIXLABORS_TESTING_PREVIEW) == true">
       <PropertyGroup>
@@ -36,7 +41,7 @@
 
   <ItemGroup>
     <None Include="..\..\LICENSE" Pack="true" PackagePath="" />
-    <None Include="..\..\shared-infrastructure\branding\icons\imagesharp\sixlabors.imagesharp.128.png" Pack="true" PackagePath="" />
+    <None Include="..\..\shared-infrastructure\branding\icons\polygonclipper\sixlabors.polygonclipper.128.png" Pack="true" PackagePath="" />
     <None Include="..\..\PolygonClipper.props" Pack="true" PackagePath="build" />
   </ItemGroup>
 

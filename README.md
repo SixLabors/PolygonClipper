@@ -1,6 +1,17 @@
-# PolygonClipper
+<h1 align="center">
 
-[![License: Six Labors Split](https://img.shields.io/badge/license-Six%20Labors%20Split-%23e30183)](https://github.com/SixLabors/PolygonClipper/blob/master/LICENSE)
+<img src="https://github.com/SixLabors/Branding/raw/main/icons/polygonclipper/sixlabors.polygonclipper.svg?sanitize=true" alt="SixLabors.PolygonClipper" width="256"/>
+<br/>
+SixLabors.PolygonClipper
+</h1>
+
+<div align="center">
+
+[![Build Status](https://img.shields.io/github/actions/workflow/status/SixLabors/PolygonClipper/build-and-test.yml?branch=main)](https://github.com/SixLabors/PolygonClipper/actions)
+[![Code coverage](https://codecov.io/gh/SixLabors/PolygonClipper/branch/main/graph/badge.svg)](https://codecov.io/gh/SixLabors/PolygonClipper)
+[![License: Six Labors Split](https://img.shields.io/badge/license-Six%20Labors%20Split-%23e30183)](https://github.com/SixLabors/PolygonClipper/blob/main/LICENSE)
+
+</div>
 
 A C# implementation of the Martínez–Rueda algorithm for performing Boolean operations on polygons. This library supports union, intersection, difference, and xor operations on complex polygons with holes, multiple contours, and self-intersections.
 

@@ -3,7 +3,7 @@
 
   <!--Add common namespaces to implicit global usings if enabled.-->
   <ItemGroup Condition="'$(UsePolygonClipper)'=='enable' OR '$(UsePolygonClipper)'=='true'">
-    <Using Include="PolygonClipper" />
+    <Using Include="SixLabors.PolygonClipper" />
   </ItemGroup>
 
 </Project>
