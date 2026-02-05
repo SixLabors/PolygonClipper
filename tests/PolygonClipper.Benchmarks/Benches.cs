@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-#nullable disable
-
 using BenchmarkDotNet.Attributes;
 using GeoJson.Feature;
 using SixLabors.PolygonClipper.Tests;
@@ -32,5 +30,5 @@ public class Benches
     }
 
     [Benchmark]
-    public Polygon PolygonClipper() => global::SixLabors.PolygonClipper.PolygonClipper.Union(this.subject, this.clipping);
+    public Polygon PolygonClipper() => SixLabors.PolygonClipper.PolygonClipper.Union(this.subject, this.clipping);
 }

@@ -178,6 +178,11 @@ public class PolygonClipper
             return result;
         }
 
+        if (TryTrivialOperationForDisjointPolygons(subject, clipping, operation, out result))
+        {
+            return result;
+        }
+
         // Sweep line algorithm: process events in the priority queue
         StablePriorityQueue<SweepEvent, SweepEventComparer> eventQueue = new(comparer, unorderedEventQueue);
         List<SweepEvent> sortedEvents = new(eventCount);
@@ -290,15 +295,63 @@ public class PolygonClipper
 
             if (operation == BooleanOperation.Difference)
             {
-                result = subject;
+                result = PolygonUtilities.BuildNormalizedPolygon(subject);
                 return true;
             }
 
             if (operation is BooleanOperation.Union or BooleanOperation.Xor)
             {
-                result = subject.Count == 0 ? clipping : subject;
+                result = subject.Count == 0
+                    ? PolygonUtilities.BuildNormalizedPolygon(clipping)
+                    : PolygonUtilities.BuildNormalizedPolygon(subject);
                 return true;
             }
+        }
+
+        return false;
+    }
+
+    private static bool TryTrivialOperationForDisjointPolygons(
+        Polygon subject,
+        Polygon clipping,
+        BooleanOperation operation,
+        [NotNullWhen(true)] out Polygon? result)
+    {
+        result = null;
+
+        if (PolygonUtilities.PolygonsHaveIntersection(subject, clipping))
+        {
+            return false;
+        }
+
+        if (PolygonUtilities.TryGetAnyVertex(subject, out Vertex subjectPoint) &&
+            PolygonUtilities.ContainsPoint(subjectPoint, clipping))
+        {
+            return false;
+        }
+
+        if (PolygonUtilities.TryGetAnyVertex(clipping, out Vertex clippingPoint) &&
+            PolygonUtilities.ContainsPoint(clippingPoint, subject))
+        {
+            return false;
+        }
+
+        if (operation == BooleanOperation.Intersection)
+        {
+            result = [];
+            return true;
+        }
+
+        if (operation == BooleanOperation.Difference)
+        {
+            result = PolygonUtilities.BuildNormalizedPolygon(subject);
+            return true;
+        }
+
+        if (operation is BooleanOperation.Union or BooleanOperation.Xor)
+        {
+            result = PolygonUtilities.BuildNormalizedPolygon(subject, clipping);
+            return true;
         }
 
         return false;
@@ -340,14 +393,13 @@ public class PolygonClipper
             // The bounding boxes do not overlap
             if (operation == BooleanOperation.Difference)
             {
-                result = subject;
+                result = PolygonUtilities.BuildNormalizedPolygon(subject);
                 return true;
             }
 
             if (operation is BooleanOperation.Union or BooleanOperation.Xor)
             {
-                result = subject;
-                result.Join(clipping);
+                result = PolygonUtilities.BuildNormalizedPolygon(subject, clipping);
                 return true;
             }
         }
