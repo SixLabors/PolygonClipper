@@ -15,11 +15,6 @@ namespace SixLabors.PolygonClipper;
 public sealed class Contour : IReadOnlyCollection<Vertex>
 #pragma warning restore CA1710 // Identifiers should have correct suffix
 {
-    public void Add(Vertex vertex)
-    {
-        this.AddVertex(vertex);
-    }
-
     private bool hasCachedOrientation;
     private bool cachedCounterClockwise;
 
@@ -203,7 +198,7 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     /// </summary>
     /// <param name="vertex">The vertex to add.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void AddVertex(in Vertex vertex) => this.vertices.Add(vertex);
+    public void Add(in Vertex vertex) => this.vertices.Add(vertex);
 
     /// <summary>
     /// Removes the vertex at the specified index from the contour.

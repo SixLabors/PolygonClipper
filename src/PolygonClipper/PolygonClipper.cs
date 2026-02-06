@@ -940,7 +940,7 @@ public class PolygonClipper
 
             int pos = i;
             Vertex initial = resultEvents[i].Point;
-            contour.AddVertex(initial);
+            contour.Add(initial);
 
             // Main loop to process the contour
             do
@@ -950,7 +950,7 @@ public class PolygonClipper
 
                 MarkProcessed(resultEvents[pos], processed, pos, contourId);
 
-                contour.AddVertex(resultEvents[pos].Point);
+                contour.Add(resultEvents[pos].Point);
                 pos = NextPos(pos, processed, iterationMap, out bool found);
                 if (!found)
                 {

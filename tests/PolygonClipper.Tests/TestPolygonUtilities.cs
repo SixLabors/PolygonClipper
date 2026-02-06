@@ -31,14 +31,14 @@ internal static class TestPolygonUtilities
                 Contour contour = new();
                 foreach (IPosition xy in ring.Coordinates)
                 {
-                    contour.AddVertex(new Vertex(xy.Longitude, xy.Latitude));
+                    contour.Add(new Vertex(xy.Longitude, xy.Latitude));
                 }
 
                 polygon.Add(contour);
 
                 if (!ring.IsClosed())
                 {
-                    contour.AddVertex(contour[0]);
+                    contour.Add(contour[0]);
                 }
             }
 
@@ -55,14 +55,14 @@ internal static class TestPolygonUtilities
                     Contour contour = new();
                     foreach (IPosition xy in ring.Coordinates)
                     {
-                        contour.AddVertex(new Vertex(xy.Longitude, xy.Latitude));
+                        contour.Add(new Vertex(xy.Longitude, xy.Latitude));
                     }
 
                     polygon.Add(contour);
 
                     if (!ring.IsClosed())
                     {
-                        contour.AddVertex(contour[0]);
+                        contour.Add(contour[0]);
                     }
                 }
             }

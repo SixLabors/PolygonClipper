@@ -744,7 +744,7 @@ internal static class PolygonUtilities
         Contour contour = new();
         foreach (Vertex vertex in contourInfos[contourIndex].Vertices)
         {
-            contour.AddVertex(vertex);
+            contour.Add(vertex);
         }
 
         polygon.Add(contour);

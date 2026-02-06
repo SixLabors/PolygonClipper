@@ -391,7 +391,7 @@ internal static class SelfIntersectionRemover
                 Contour original = originalPolygon[i];
                 for (int j = 0; j < original.Count; j++)
                 {
-                    copy.AddVertex(original[j]);
+                    copy.Add(original[j]);
                 }
 
                 copy.Depth = contourDepth[i];
@@ -562,7 +562,7 @@ internal static class SelfIntersectionRemover
             Vertex startVertex = segments[startIdx].Start;
             Vertex currentVertex = startVertex;
 
-            contour.AddVertex(currentVertex);
+            contour.Add(currentVertex);
             used[currentIdx] = true;
 
             while (true)
@@ -571,7 +571,7 @@ internal static class SelfIntersectionRemover
                 (Vertex segStart, Vertex segEnd, int currentSegIndex) = segments[currentIdx];
                 Vertex nextVertex = (currentVertex == segStart) ? segEnd : segStart;
 
-                contour.AddVertex(nextVertex);
+                contour.Add(nextVertex);
 
                 // Check if we've closed the loop
                 if (nextVertex == startVertex)
