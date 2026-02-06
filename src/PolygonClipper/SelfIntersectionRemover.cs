@@ -4,13 +4,15 @@
 namespace SixLabors.PolygonClipper;
 
 /// <summary>
-/// Provides functionality to remove self-intersections from polygons using a sweep line algorithm.
+/// Provides functionality to remove self-intersections from polygons and compute
+/// containment hierarchy using a sweep line algorithm.
 /// </summary>
 /// <remarks>
 /// <para>
-/// This class implements a dedicated algorithm for detecting and resolving self-intersections
-/// within a single polygon. Unlike boolean operations which work on two polygons, this approach
-/// processes only one polygon and rebuilds its contours after splitting segments at intersection points.
+/// This class implements a sweep line algorithm for detecting self-intersections within
+/// a single polygon and computing the parent/child (external/hole) relationships between
+/// contours. Containment is determined by examining the status line position when each
+/// contour's first segment is encountered during the sweep.
 /// </para>
 /// <para>
 /// The algorithm works in three phases:
@@ -18,45 +20,28 @@ namespace SixLabors.PolygonClipper;
 /// <list type="number">
 /// <item><description>
 /// <b>Intersection Detection:</b> Uses a sweep line to find all points where segments
-/// from the same polygon intersect each other.
+/// from the same contour intersect each other (true self-intersections).
 /// </description></item>
 /// <item><description>
 /// <b>Segment Splitting:</b> Divides segments at intersection points, creating new
 /// vertices where crossings occur.
 /// </description></item>
 /// <item><description>
-/// <b>Contour Reconstruction:</b> Rebuilds contours by grouping segments by their
-/// original contour ID and connecting them by shared endpoints.
+/// <b>Hierarchy Computation:</b> Uses the sweep line status to determine which contours
+/// are contained within others, setting depth and parent relationships accordingly.
 /// </description></item>
 /// </list>
-/// <para>
-/// This implementation does not rely on any input metadata about contour types (external vs hole).
-/// It preserves the original contour structure by tracking which segments belong to which
-/// input contour throughout the process.
-/// </para>
 /// </remarks>
 internal static class SelfIntersectionRemover
 {
     /// <summary>
-    /// Removes self-intersections from a polygon by detecting intersection points,
-    /// splitting segments, and rebuilding contours.
+    /// Processes a polygon to remove self-intersections and compute containment hierarchy.
     /// </summary>
     /// <param name="polygon">The polygon to process.</param>
     /// <returns>
-    /// A new <see cref="Polygon"/> with all self-intersections resolved.
-    /// If the input polygon has no self-intersections, returns a normalized copy.
+    /// A new <see cref="Polygon"/> with self-intersections resolved and contour hierarchy
+    /// (depth and parent relationships) properly set based on geometric containment.
     /// </returns>
-    /// <remarks>
-    /// <para>
-    /// The method preserves the original contour structure of the polygon. Each input
-    /// contour is processed independently, and segments are grouped back to their
-    /// original contours after intersection splitting.
-    /// </para>
-    /// <para>
-    /// For polygons with no self-intersections, this method returns a normalized copy
-    /// of the input without running the full reconstruction.
-    /// </para>
-    /// </remarks>
     public static Polygon Process(Polygon polygon)
     {
         if (polygon.Count == 0)
@@ -349,7 +334,7 @@ internal static class SelfIntersectionRemover
 
             // Process events and track the status line to find containment
             // For each contour, record the parent from its first left event
-            Dictionary<int, bool> contourFirstEventSeen = [];
+            Dictionary<int, bool> contourFirstEventSeen = new(originalPolygon.Count);
             SweepEventComparer comparer = new();
             StatusLine statusLine = new(originalPolygon.VertexCount >> 1);
 
@@ -399,7 +384,7 @@ internal static class SelfIntersectionRemover
             }
 
             // Build result polygon with proper hierarchy
-            List<Contour> originalContours = [];
+            List<Contour> originalContours = new(originalPolygon.Count);
             for (int i = 0; i < originalPolygon.Count; i++)
             {
                 Contour copy = [];
@@ -419,12 +404,12 @@ internal static class SelfIntersectionRemover
             }
 
             // Sort: externals first (depth 0), then their holes (depth 1), etc.
-            return BuildPolygonFromContours(originalContours, contourDepth, contourParent);
+            return BuildPolygonFromContours(originalContours, contourDepth);
         }
 
         // Splits occurred - need to rebuild from segments
-        Dictionary<int, List<(Vertex Start, Vertex End, int SegmentIndex)>> segmentsByContour = [];
-        Dictionary<int, bool> contourHasSplits = [];
+        Dictionary<int, List<(Vertex Start, Vertex End, int SegmentIndex)>> segmentsByContour = new(originalPolygon.Count);
+        Dictionary<int, bool> contourHasSplits = new(originalPolygon.Count);
 
         for (int i = 0; i < events.Count; i++)
         {
@@ -466,14 +451,14 @@ internal static class SelfIntersectionRemover
     }
 
     /// <summary>
-    /// Builds the final polygon from contours with known depth and parent information.
+    /// Builds the final polygon from contours with known depth information.
     /// </summary>
-    private static Polygon BuildPolygonFromContours(List<Contour> contours, int[] depth, int[] parent)
+    private static Polygon BuildPolygonFromContours(List<Contour> contours, int[] depth)
     {
         Polygon result = [];
 
         // Add contours sorted by depth (externals first, then holes)
-        List<int> indices = [];
+        List<int> indices = new(contours.Count);
         for (int i = 0; i < contours.Count; i++)
         {
             indices.Add(i);
@@ -530,7 +515,7 @@ internal static class SelfIntersectionRemover
         });
 
         // Build map from SegmentIndex to list index for fast lookup
-        Dictionary<int, int> segmentIndexToListIndex = [];
+        Dictionary<int, int> segmentIndexToListIndex = new(segments.Count);
         for (int i = 0; i < segments.Count; i++)
         {
             int segIdx = segments[i].SegmentIndex;
@@ -541,7 +526,7 @@ internal static class SelfIntersectionRemover
         }
 
         // Build adjacency: for each vertex, which segments connect to it (by list index after sorting)
-        Dictionary<Vertex, List<int>> vertexToSegments = [];
+        Dictionary<Vertex, List<int>> vertexToSegments = new(segments.Count * 2);
         for (int i = 0; i < segments.Count; i++)
         {
             (Vertex start, Vertex end, _) = segments[i];
@@ -664,7 +649,13 @@ internal static class SelfIntersectionRemover
         // Use sweep line to determine containment hierarchy
         // Create sweep events for all contours
         SweepEventComparer comparer = new();
-        List<SweepEvent> allEvents = [];
+        int estimatedEvents = 0;
+        for (int i = 0; i < count; i++)
+        {
+            estimatedEvents += contours[i].Count * 2;
+        }
+
+        List<SweepEvent> allEvents = new(estimatedEvents);
 
         for (int contourIdx = 0; contourIdx < count; contourIdx++)
         {
@@ -706,7 +697,7 @@ internal static class SelfIntersectionRemover
 
         StablePriorityQueue<SweepEvent, SweepEventComparer> eventQueue = new(comparer, allEvents);
         StatusLine statusLine = new(allEvents.Count >> 1);
-        Dictionary<int, bool> contourFirstEventSeen = [];
+        Dictionary<int, bool> contourFirstEventSeen = new(count);
 
         while (eventQueue.Count > 0)
         {
@@ -761,7 +752,7 @@ internal static class SelfIntersectionRemover
 
         // Build result sorted by depth
         Polygon result = [];
-        List<int> indices = [count];
+        List<int> indices = new(count);
         for (int i = 0; i < count; i++)
         {
             indices.Add(i);
