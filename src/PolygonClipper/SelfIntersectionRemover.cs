@@ -338,8 +338,8 @@ internal static class SelfIntersectionRemover
         if (!anySplits)
         {
             // Determine containment depth for each contour from sweep events
-            // When a contour's first left event is processed, count how many other contours
-            // have segments both above AND below it in the status line
+            // When a contour's segment is added to the status line, the segment immediately
+            // below it tells us which contour we're inside of (if any)
             int[] contourDepth = new int[originalPolygon.Count];
             int[] contourParent = new int[originalPolygon.Count];
             for (int i = 0; i < originalPolygon.Count; i++)
@@ -347,78 +347,54 @@ internal static class SelfIntersectionRemover
                 contourParent[i] = -1;
             }
 
-            // Find the first left event for each contour and compute its depth
+            // Process events and track the status line to find containment
+            // For each contour, record the parent from its first left event
             Dictionary<int, bool> contourFirstEventSeen = [];
+            SweepEventComparer comparer = new();
+            StatusLine statusLine = new(originalPolygon.VertexCount >> 1);
+
             foreach (SweepEvent evt in events)
             {
-                if (!evt.Left)
+                if (evt.Left)
                 {
-                    continue;
-                }
+                    int contourId = evt.ContourId;
+                    bool isFirstEvent = !contourFirstEventSeen.ContainsKey(contourId);
 
-                int contourId = evt.ContourId;
-                if (contourFirstEventSeen.ContainsKey(contourId))
-                {
-                    continue;
-                }
+                    // Add to status line
+                    int position = statusLine.Add(evt);
+                    evt.PosSL = position;
 
-                contourFirstEventSeen[contourId] = true;
-
-                // Count segments from other contours that are below this one in the status line
-                // The number of such segments (considering in/out) tells us the depth
-                int depth = 0;
-                int parentContourId = -1;
-                double parentArea = double.MaxValue;
-
-                // Check events that were processed before this one at the same or earlier X
-                // and are still "active" (their right endpoint hasn't been reached)
-                foreach (SweepEvent other in events)
-                {
-                    if (other == evt || !other.Left || other.ContourId == contourId)
+                    if (isFirstEvent)
                     {
-                        continue;
-                    }
+                        contourFirstEventSeen[contourId] = true;
 
-                    if (other.OtherEvent == null)
-                    {
-                        continue;
-                    }
-
-                    // Check if 'other' segment is active at evt's X position
-                    // (started before or at evt.Point.X and ends after evt.Point.X)
-                    double otherLeftX = Math.Min(other.Point.X, other.OtherEvent.Point.X);
-                    double otherRightX = Math.Max(other.Point.X, other.OtherEvent.Point.X);
-
-                    if (otherLeftX > evt.Point.X || otherRightX <= evt.Point.X)
-                    {
-                        continue;
-                    }
-
-                    // Compute Y of 'other' segment at evt.Point.X
-                    double otherY = ComputeYAtX(other.Point, other.OtherEvent.Point, evt.Point.X);
-
-                    // If other segment is below evt, we're inside that contour
-                    if (otherY < evt.Point.Y)
-                    {
-                        depth++;
-                        int otherContourIdx = other.ContourId - 1;
-                        if (otherContourIdx >= 0 && otherContourIdx < originalPolygon.Count)
+                        // The segment immediately below us tells us what we're inside of
+                        SweepEvent? prevEvent = statusLine.Prev(position);
+                        if (prevEvent != null && prevEvent.ContourId != contourId)
                         {
-                            double area = Math.Abs(ComputeArea(originalPolygon[otherContourIdx]));
-                            if (area < parentArea)
+                            // We're inside the contour of prevEvent
+                            int parentIdx = prevEvent.ContourId - 1;
+                            int contourIdx = contourId - 1;
+
+                            if (contourIdx >= 0 && contourIdx < originalPolygon.Count &&
+                                parentIdx >= 0 && parentIdx < originalPolygon.Count)
                             {
-                                parentArea = area;
-                                parentContourId = other.ContourId;
+                                contourParent[contourIdx] = parentIdx;
+
+                                // Depth is parent's depth + 1
+                                contourDepth[contourIdx] = contourDepth[parentIdx] + 1;
                             }
                         }
                     }
                 }
-
-                int contourIdx = contourId - 1;
-                if (contourIdx >= 0 && contourIdx < originalPolygon.Count)
+                else
                 {
-                    contourDepth[contourIdx] = depth;
-                    contourParent[contourIdx] = parentContourId - 1;
+                    // Remove from status line
+                    SweepEvent? leftEvent = evt.OtherEvent;
+                    if (leftEvent != null && leftEvent.PosSL >= 0 && leftEvent.PosSL < statusLine.Count)
+                    {
+                        statusLine.RemoveAt(leftEvent.PosSL);
+                    }
                 }
             }
 
@@ -490,56 +466,25 @@ internal static class SelfIntersectionRemover
     }
 
     /// <summary>
-    /// Computes the Y coordinate of a line segment at a given X coordinate.
-    /// </summary>
-    private static double ComputeYAtX(Vertex p1, Vertex p2, double x)
-    {
-        if (Math.Abs(p2.X - p1.X) < 1e-10)
-        {
-            return (p1.Y + p2.Y) / 2;
-        }
-
-        double t = (x - p1.X) / (p2.X - p1.X);
-        return p1.Y + (t * (p2.Y - p1.Y));
-    }
-
-    /// <summary>
     /// Builds the final polygon from contours with known depth and parent information.
     /// </summary>
     private static Polygon BuildPolygonFromContours(List<Contour> contours, int[] depth, int[] parent)
     {
         Polygon result = [];
-        bool[] added = new bool[contours.Count];
 
-        // Add externals (depth even) first, sorted by depth then by area
+        // Add contours sorted by depth (externals first, then holes)
         List<int> indices = [];
         for (int i = 0; i < contours.Count; i++)
         {
             indices.Add(i);
         }
 
-        // Sort: externals (even depth) first by depth ascending, then their holes
-        indices.Sort((a, b) =>
-        {
-            int depthCompare = depth[a].CompareTo(depth[b]);
-            if (depthCompare != 0)
-            {
-                return depthCompare;
-            }
-
-            // Same depth - sort by area descending (larger first)
-            double areaA = Math.Abs(ComputeArea(contours[a]));
-            double areaB = Math.Abs(ComputeArea(contours[b]));
-            return areaB.CompareTo(areaA);
-        });
+        // Sort by depth ascending
+        indices.Sort((a, b) => depth[a].CompareTo(depth[b]));
 
         foreach (int i in indices)
         {
-            if (!added[i])
-            {
-                result.Add(contours[i]);
-                added[i] = true;
-            }
+            result.Add(contours[i]);
         }
 
         return result;
@@ -702,25 +647,11 @@ internal static class SelfIntersectionRemover
     }
 
     /// <summary>
-    /// Builds a polygon with proper parent/child hierarchy by computing containment relationships.
+    /// Builds a polygon with proper parent/child hierarchy by computing containment relationships
+    /// using a sweep line algorithm.
     /// </summary>
     /// <param name="contours">The list of contours to organize.</param>
     /// <returns>A polygon with contours properly organized as externals and holes.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method determines which contours are external (shells) and which are holes
-    /// by computing containment relationships. A contour is a hole if it is contained
-    /// within another contour.
-    /// </para>
-    /// <para>
-    /// The algorithm:
-    /// </para>
-    /// <list type="number">
-    /// <item><description>For each contour, find which other contours contain it.</description></item>
-    /// <item><description>The direct parent is the smallest containing contour.</description></item>
-    /// <item><description>Contours with no parent are external; others are holes.</description></item>
-    /// </list>
-    /// </remarks>
     private static Polygon BuildPolygonWithHierarchy(List<Contour> contours)
     {
         if (contours.Count == 0)
@@ -730,261 +661,119 @@ internal static class SelfIntersectionRemover
 
         int count = contours.Count;
 
-        // Compute areas and bounding boxes for all contours
-        double[] areas = new double[count];
-        (double MinX, double MinY, double MaxX, double MaxY)[] bounds = new (double, double, double, double)[count];
+        // Use sweep line to determine containment hierarchy
+        // Create sweep events for all contours
+        SweepEventComparer comparer = new();
+        List<SweepEvent> allEvents = [];
 
-        for (int i = 0; i < count; i++)
+        for (int contourIdx = 0; contourIdx < count; contourIdx++)
         {
-            areas[i] = Math.Abs(ComputeArea(contours[i]));
-            bounds[i] = ComputeBounds(contours[i]);
-        }
-
-        // For each contour, find its parent (smallest containing contour)
-        int[] parentIndex = new int[count];
-        for (int i = 0; i < count; i++)
-        {
-            parentIndex[i] = -1; // -1 means no parent (external)
-        }
-
-        // Compute containment: for each pair, check if one contains the other
-        for (int i = 0; i < count; i++)
-        {
-            Contour contourI = contours[i];
-            if (contourI.Count < 3)
+            Contour contour = contours[contourIdx];
+            for (int j = 0; j < contour.Count - 1; j++)
             {
-                continue;
+                Segment segment = new(contour[j], contour[j + 1]);
+                if (segment.Source == segment.Target)
+                {
+                    continue;
+                }
+
+                SweepEvent e1 = new(segment.Source, true, PolygonType.Subject);
+                SweepEvent e2 = new(segment.Target, true, e1, PolygonType.Subject);
+                e1.OtherEvent = e2;
+                e1.ContourId = e2.ContourId = contourIdx + 1;
+
+                if (comparer.Compare(e1, e2) < 0)
+                {
+                    e2.Left = false;
+                }
+                else
+                {
+                    e1.Left = false;
+                }
+
+                allEvents.Add(e1);
+                allEvents.Add(e2);
             }
+        }
 
-            // Get a test point - try the first vertex, then centroid as fallback
-            Vertex testPoint = contourI[0];
+        // Process events to determine containment
+        int[] contourDepth = new int[count];
+        int[] contourParent = new int[count];
+        for (int i = 0; i < count; i++)
+        {
+            contourParent[i] = -1;
+        }
 
-            double smallestArea = double.MaxValue;
-            int smallestContainingIndex = -1;
+        StablePriorityQueue<SweepEvent, SweepEventComparer> eventQueue = new(comparer, allEvents);
+        StatusLine statusLine = new(allEvents.Count >> 1);
+        Dictionary<int, bool> contourFirstEventSeen = [];
 
-            for (int j = 0; j < count; j++)
+        while (eventQueue.Count > 0)
+        {
+            SweepEvent evt = eventQueue.Dequeue();
+
+            if (evt.Left)
             {
-                if (i == j)
-                {
-                    continue;
-                }
+                int contourId = evt.ContourId;
+                bool isFirstEvent = !contourFirstEventSeen.ContainsKey(contourId);
 
-                Contour contourJ = contours[j];
-                if (contourJ.Count < 3)
-                {
-                    continue;
-                }
+                int position = statusLine.Add(evt);
+                evt.PosSL = position;
 
-                // Quick rejection: if J's bounding box doesn't contain the test point, skip
-                (double minX, double minY, double maxX, double maxY) = bounds[j];
-                if (testPoint.X < minX || testPoint.X > maxX || testPoint.Y < minY || testPoint.Y > maxY)
+                if (isFirstEvent)
                 {
-                    continue;
-                }
+                    contourFirstEventSeen[contourId] = true;
 
-                // Check if contourJ contains the test point from contourI
-                if (ContainsPoint(contourJ, testPoint))
-                {
-                    if (areas[j] < smallestArea)
+                    SweepEvent? prevEvent = statusLine.Prev(position);
+                    if (prevEvent != null && prevEvent.ContourId != contourId)
                     {
-                        smallestArea = areas[j];
-                        smallestContainingIndex = j;
+                        int parentIdx = prevEvent.ContourId - 1;
+                        int contourIdx = contourId - 1;
+
+                        if (contourIdx >= 0 && contourIdx < count &&
+                            parentIdx >= 0 && parentIdx < count)
+                        {
+                            contourParent[contourIdx] = parentIdx;
+                            contourDepth[contourIdx] = contourDepth[parentIdx] + 1;
+                        }
                     }
                 }
             }
-
-            parentIndex[i] = smallestContainingIndex;
-        }
-
-        // Build the result polygon with proper hierarchy
-        // We need to compute depth for each contour
-        int[] depth = new int[count];
-        for (int i = 0; i < count; i++)
-        {
-            int d = 0;
-            int current = parentIndex[i];
-            HashSet<int> visited = [i];
-            while (current != -1 && d < count)
+            else
             {
-                if (visited.Contains(current))
+                SweepEvent? leftEvent = evt.OtherEvent;
+                if (leftEvent != null && leftEvent.PosSL >= 0 && leftEvent.PosSL < statusLine.Count)
                 {
-                    // Cycle detected - break to prevent infinite loop
-                    break;
+                    statusLine.RemoveAt(leftEvent.PosSL);
                 }
-
-                visited.Add(current);
-                d++;
-                current = parentIndex[current];
             }
-
-            depth[i] = d;
         }
 
-        // Set contour properties based on depth
-        // Even depth = external, odd depth = hole
+        // Set contour properties
         for (int i = 0; i < count; i++)
         {
-            Contour contour = contours[i];
-            contour.Depth = depth[i];
-
-            if (parentIndex[i] != -1)
+            contours[i].Depth = contourDepth[i];
+            if (contourParent[i] >= 0)
             {
-                contour.ParentIndex = parentIndex[i];
+                contours[i].ParentIndex = contourParent[i];
             }
         }
 
-        // Build result: externals first (sorted by area descending), then their holes
+        // Build result sorted by depth
         Polygon result = [];
-        bool[] added = new bool[count];
-
-        // Sort externals by area (largest first)
-        List<int> externals = [];
+        List<int> indices = [count];
         for (int i = 0; i < count; i++)
         {
-            if (depth[i] % 2 == 0)
-            {
-                externals.Add(i);
-            }
+            indices.Add(i);
         }
 
-        externals.Sort((a, b) => areas[b].CompareTo(areas[a]));
+        indices.Sort((a, b) => contourDepth[a].CompareTo(contourDepth[b]));
 
-        // Add external contours and their holes
-        foreach (int i in externals)
+        foreach (int i in indices)
         {
-            if (added[i])
-            {
-                continue;
-            }
-
-            // This is an external contour
             result.Add(contours[i]);
-            added[i] = true;
-
-            // Add its direct holes (depth = this depth + 1 and parent = i)
-            for (int j = 0; j < count; j++)
-            {
-                if (!added[j] && parentIndex[j] == i)
-                {
-                    result.Add(contours[j]);
-                    added[j] = true;
-                }
-            }
-        }
-
-        // Add any remaining contours (shouldn't happen with valid input)
-        for (int i = 0; i < count; i++)
-        {
-            if (!added[i])
-            {
-                result.Add(contours[i]);
-            }
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Computes the bounding box of a contour.
-    /// </summary>
-    private static (double MinX, double MinY, double MaxX, double MaxY) ComputeBounds(Contour contour)
-    {
-        if (contour.Count == 0)
-        {
-            return (0, 0, 0, 0);
-        }
-
-        double minX = double.MaxValue;
-        double minY = double.MaxValue;
-        double maxX = double.MinValue;
-        double maxY = double.MinValue;
-
-        for (int i = 0; i < contour.Count; i++)
-        {
-            Vertex v = contour[i];
-            if (v.X < minX)
-            {
-                minX = v.X;
-            }
-
-            if (v.X > maxX)
-            {
-                maxX = v.X;
-            }
-
-            if (v.Y < minY)
-            {
-                minY = v.Y;
-            }
-
-            if (v.Y > maxY)
-            {
-                maxY = v.Y;
-            }
-        }
-
-        return (minX, minY, maxX, maxY);
-    }
-
-    /// <summary>
-    /// Determines if a point is inside a contour using the ray casting algorithm.
-    /// </summary>
-    /// <param name="contour">The contour to test against.</param>
-    /// <param name="point">The point to test.</param>
-    /// <returns><see langword="true"/> if the point is inside the contour; otherwise <see langword="false"/>.</returns>
-    private static bool ContainsPoint(Contour contour, Vertex point)
-    {
-        int count = contour.Count;
-        if (count < 3)
-        {
-            return false;
-        }
-
-        bool inside = false;
-        Vertex p1 = contour[count - 1];
-
-        for (int i = 0; i < count; i++)
-        {
-            Vertex p2 = contour[i];
-
-            if (point.Y > Math.Min(p1.Y, p2.Y) &&
-                point.Y <= Math.Max(p1.Y, p2.Y) &&
-                point.X <= Math.Max(p1.X, p2.X))
-            {
-                double xIntersection = ((point.Y - p1.Y) * (p2.X - p1.X) / (p2.Y - p1.Y)) + p1.X;
-                if (p1.X == p2.X || point.X <= xIntersection)
-                {
-                    inside = !inside;
-                }
-            }
-
-            p1 = p2;
-        }
-
-        return inside;
-    }
-
-    /// <summary>
-    /// Computes the signed area of a contour using the shoelace formula.
-    /// </summary>
-    /// <param name="contour">The contour to compute the area for.</param>
-    /// <returns>The signed area (positive for counter-clockwise, negative for clockwise).</returns>
-    private static double ComputeArea(Contour contour)
-    {
-        int count = contour.Count;
-        if (count < 3)
-        {
-            return 0;
-        }
-
-        double area = 0;
-        for (int i = 0; i < count; i++)
-        {
-            Vertex current = contour[i];
-            Vertex next = contour[(i + 1) % count];
-            area += (current.X * next.Y) - (next.X * current.Y);
-        }
-
-        return area * .5d;
     }
 }
