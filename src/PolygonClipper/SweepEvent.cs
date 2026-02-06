@@ -80,6 +80,12 @@ internal sealed class SweepEvent
     public int ContourId { get; set; }
 
     /// <summary>
+    /// Gets or sets the index of the segment within its original contour.
+    /// Used to maintain original path ordering during contour reconstruction.
+    /// </summary>
+    public int SegmentIndex { get; set; }
+
+    /// <summary>
     /// Gets index of the polygon to which the associated segment belongs to;
     /// </summary>
     public PolygonType PolygonType { get; }

@@ -108,24 +108,20 @@ public class PolygonClipper
     /// <param name="polygon">The polygon to process.</param>
     /// <returns>A new <see cref="Polygon"/> without self-intersections.</returns>
     /// <remarks>
-    /// This method internally uses the sweep line algorithm to detect all self-intersections and split
-    /// segments accordingly, then rebuilds the polygon using a union operation to ensure all regions
-    /// are properly connected and oriented.
+    /// <para>
+    /// This method uses a dedicated sweep line algorithm that:
+    /// </para>
+    /// <list type="number">
+    /// <item><description>Detects all self-intersection points within the polygon.</description></item>
+    /// <item><description>Splits segments at intersection points.</description></item>
+    /// <item><description>Rebuilds contours by connecting segments at shared endpoints.</description></item>
+    /// </list>
+    /// <para>
+    /// For polygons with no self-intersections, this method returns a copy with the same structure.
+    /// </para>
     /// </remarks>
     public static Polygon RemoveSelfIntersections(Polygon polygon)
-    {
-        if (polygon.Count == 0)
-        {
-            return [];
-        }
-
-        // Process the polygon only as subject (not duplicated as clipping).
-        // Use an empty clipping polygon and bypass trivial checks.
-        // The sweep will detect self-intersections within the subject polygon.
-        Polygon empty = [];
-        PolygonClipper clipper = new(polygon, empty, BooleanOperation.Union);
-        return clipper.RunCore();
-    }
+        => SelfIntersectionRemover.Process(polygon);
 
     /// <summary>
     /// Executes the boolean operation using the sweep line algorithm.
