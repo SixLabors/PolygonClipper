@@ -37,7 +37,6 @@ namespace SixLabors.PolygonClipper;
 /// </remarks>
 internal static class SelfIntersectionRemover
 {
-
     /// <summary>
     /// Processes a polygon to remove self-intersections using the positive fill rule.
     /// </summary>
@@ -87,6 +86,12 @@ internal static class SelfIntersectionRemover
         return resultPolygon;
     }
 
+    /// <summary>
+    /// Compares two contours using the Y coordinate of their lowest vertex, breaking ties by X.
+    /// </summary>
+    /// <param name="left">The first contour to compare.</param>
+    /// <param name="right">The second contour to compare.</param>
+    /// <returns>A value indicating the relative ordering for sorting.</returns>
     private static int CompareContoursByLowestPoint(Contour left, Contour right)
     {
         Vertex leftPoint = GetLowestPoint(left);
@@ -105,6 +110,11 @@ internal static class SelfIntersectionRemover
         return rightPoint.X.CompareTo(leftPoint.X);
     }
 
+    /// <summary>
+    /// Finds the lowest vertex in a contour, ignoring the duplicated closing vertex if present.
+    /// </summary>
+    /// <param name="contour">The contour to scan.</param>
+    /// <returns>The lowest vertex, or <see cref="Vertex"/> default when the contour is empty.</returns>
     private static Vertex GetLowestPoint(Contour contour)
     {
         int count = contour.Count;
@@ -132,6 +142,10 @@ internal static class SelfIntersectionRemover
         return lowest;
     }
 
+    /// <summary>
+    /// Rotates the contour so that its lowest vertex appears first, keeping relative ordering intact.
+    /// </summary>
+    /// <param name="contour">The contour to normalize.</param>
     private static void RotateContourToLowestPoint(Contour contour)
     {
         int count = contour.Count;
@@ -178,6 +192,11 @@ internal static class SelfIntersectionRemover
         }
     }
 
+    /// <summary>
+    /// Ensures every contour is oriented with positive winding for outer rings and negative for holes.
+    /// </summary>
+    /// <param name="polygon">The polygon whose contours need reorientation.</param>
+    /// <returns>A polygon copy with consistent winding order.</returns>
     private static Polygon OrientContoursForPositiveFill(Polygon polygon)
     {
         if (polygon.Count == 0)
@@ -269,6 +288,12 @@ internal static class SelfIntersectionRemover
         return oriented;
     }
 
+    /// <summary>
+    /// Computes the nesting depth for a contour relative to its parents.
+    /// </summary>
+    /// <param name="index">The index of the contour.</param>
+    /// <param name="parentIndices">The parent lookup table.</param>
+    /// <returns>The zero-based depth.</returns>
     private static int GetDepth(int index, int[] parentIndices)
     {
         int depth = 0;
@@ -282,6 +307,11 @@ internal static class SelfIntersectionRemover
         return depth;
     }
 
+    /// <summary>
+    /// Selects a representative vertex from a contour for containment tests.
+    /// </summary>
+    /// <param name="contour">The contour to examine.</param>
+    /// <returns>A vertex guaranteed not to be the duplicated closing point.</returns>
     private static Vertex GetContourTestPoint(Contour contour)
     {
         if (contour.Count == 0)
@@ -298,6 +328,12 @@ internal static class SelfIntersectionRemover
         return first;
     }
 
+    /// <summary>
+    /// Determines whether a point lies inside a contour using ray casting. Points on the boundary count as inside.
+    /// </summary>
+    /// <param name="point">The query point.</param>
+    /// <param name="contour">The contour to test against.</param>
+    /// <returns><see langword="true"/> if the point lies inside or on the edge.</returns>
     private static bool PointInContour(in Vertex point, Contour contour)
     {
         int count = contour.Count;
@@ -339,6 +375,13 @@ internal static class SelfIntersectionRemover
         return inside;
     }
 
+    /// <summary>
+    /// Tests whether a point lies on the closed segment between two vertices.
+    /// </summary>
+    /// <param name="point">The point to check.</param>
+    /// <param name="a">Segment start.</param>
+    /// <param name="b">Segment end.</param>
+    /// <returns><see langword="true"/> when the point is collinear and within the segment bounds.</returns>
     private static bool IsPointOnSegment(in Vertex point, in Vertex a, in Vertex b)
     {
         if (PolygonUtilities.SignedArea(a, b, point) != 0D)
@@ -352,6 +395,11 @@ internal static class SelfIntersectionRemover
         return point.X >= min.X && point.X <= max.X && point.Y >= min.Y && point.Y <= max.Y;
     }
 
+    /// <summary>
+    /// Calculates the signed area of a contour. Positive values indicate counter-clockwise orientation.
+    /// </summary>
+    /// <param name="contour">The contour to measure.</param>
+    /// <returns>The signed area in square units.</returns>
     private static double GetSignedArea(Contour contour)
     {
         double area = 0D;
@@ -365,6 +413,11 @@ internal static class SelfIntersectionRemover
         return area;
     }
 
+    /// <summary>
+    /// Converts oriented contours into directed segments, splitting where necessary using a sweep-line.
+    /// </summary>
+    /// <param name="polygon">The positively oriented polygon.</param>
+    /// <returns>A list of directed segments describing the arrangement.</returns>
     private static List<DirectedSegment> BuildArrangementSegments(Polygon polygon)
     {
         SweepEventComparer comparer = new();
@@ -384,6 +437,7 @@ internal static class SelfIntersectionRemover
                     continue;
                 }
 
+                // Each vertex pair produces two sweep events (left/right) so the sweep-line can detect intersections.
                 SweepEvent e1 = new(segment.Source, true, PolygonType.Subject);
                 SweepEvent e2 = new(segment.Target, true, e1, PolygonType.Subject);
                 e1.OtherEvent = e2;
@@ -421,6 +475,7 @@ internal static class SelfIntersectionRemover
         List<SweepEvent> sortedEvents = new(unorderedEvents.Count);
         StatusLine statusLine = new(polygon.VertexCount >> 1);
 
+        // Guard against pathological input that could otherwise leave the sweep stuck in an infinite loop.
         int maxIterations = unorderedEvents.Count * 10;
         int iterations = 0;
         Span<SweepEvent> workspace = new SweepEvent[4];
@@ -479,6 +534,7 @@ internal static class SelfIntersectionRemover
                 continue;
             }
 
+            // After sorting we can emit the canonical orientation for each segment in the arrangement.
             Vertex source = sweepEvent.SegmentSource;
             Vertex target = sweepEvent.SegmentTarget;
             if (source != target)
@@ -490,6 +546,11 @@ internal static class SelfIntersectionRemover
         return segments;
     }
 
+    /// <summary>
+    /// Builds a half-edge graph from the directed segments so faces and windings can be enumerated.
+    /// </summary>
+    /// <param name="segments">The segments produced by the arrangement phase.</param>
+    /// <returns>A populated half-edge graph.</returns>
     private static HalfEdgeGraph BuildHalfEdgeGraph(List<DirectedSegment> segments)
     {
         HalfEdgeGraph graph = new();
@@ -512,11 +573,13 @@ internal static class SelfIntersectionRemover
             Node origin = GetNode(segment.Source);
             Node destination = GetNode(segment.Target);
 
+            // Each geometric edge is represented by two half-edges so we can walk faces and reference the opposite side.
             HalfEdge edge = new(origin, destination);
             HalfEdge twin = new(destination, origin);
             edge.Twin = twin;
             twin.Twin = edge;
 
+            // Pre-compute polar angles so outgoing edges can be sorted counter-clockwise per node.
             edge.Angle = Math.Atan2(destination.Point.Y - origin.Point.Y, destination.Point.X - origin.Point.X);
             twin.Angle = Math.Atan2(origin.Point.Y - destination.Point.Y, origin.Point.X - destination.Point.X);
 
@@ -530,10 +593,16 @@ internal static class SelfIntersectionRemover
         return graph;
     }
 
+    /// <summary>
+    /// Walks the half-edge graph to create face records with their boundaries.
+    /// </summary>
+    /// <param name="graph">The graph to traverse.</param>
+    /// <returns>A list of faces with edge loops.</returns>
     private static List<Face> EnumerateFaces(HalfEdgeGraph graph)
     {
         foreach (Node node in graph.Nodes)
         {
+            // Sorting outgoing edges by polar angle lets us stitch the half-edge cycle for each face.
             node.Outgoing.Sort((a, b) => a.Angle.CompareTo(b.Angle));
         }
 
@@ -588,6 +657,11 @@ internal static class SelfIntersectionRemover
         return faces;
     }
 
+    /// <summary>
+    /// Samples each half-edge to determine the winding number of the region on its left.
+    /// </summary>
+    /// <param name="graph">The graph containing the half-edges.</param>
+    /// <param name="segments">The original segments used for winding queries.</param>
     private static void ComputeEdgeWinding(HalfEdgeGraph graph, List<DirectedSegment> segments)
     {
         foreach (HalfEdge edge in graph.Edges)
@@ -605,6 +679,7 @@ internal static class SelfIntersectionRemover
                 continue;
             }
 
+            // Sample a point slightly to the left of the edge so we can query the winding number of that region.
             double nx = -dy / length;
             double ny = dx / length;
             double epsilon = Math.Max(1e-6, length * 1e-6);
@@ -613,6 +688,11 @@ internal static class SelfIntersectionRemover
         }
     }
 
+    /// <summary>
+    /// Extracts contours that separate filled and empty regions using the computed windings.
+    /// </summary>
+    /// <param name="graph">The graph to trace.</param>
+    /// <returns>A list of boundary contours following the positive fill rule.</returns>
     private static List<Contour> ExtractBoundaryContours(HalfEdgeGraph graph)
     {
         List<Contour> contours = [];
@@ -630,7 +710,8 @@ internal static class SelfIntersectionRemover
             int guard = 0;
             while (current != null && guard++ < 100000)
             {
-                visited.Add(current);
+                // Track which edges have already been walked so we do not duplicate contours.
+                _ = visited.Add(current);
                 Vertex point = current.Origin.Point;
                 if (contour.Count == 0 || !ArePointsClose(contour[^1], point))
                 {
@@ -660,6 +741,10 @@ internal static class SelfIntersectionRemover
         return contours;
     }
 
+    /// <summary>
+    /// Computes parent/child relationships and hole lists for the resulting polygon.
+    /// </summary>
+    /// <param name="polygon">The polygon whose contours will be linked.</param>
     private static void AssignHierarchy(Polygon polygon)
     {
         int count = polygon.Count;
@@ -694,6 +779,7 @@ internal static class SelfIntersectionRemover
                 Contour candidate = polygon[j];
                 if (PointInContour(testPoint, candidate))
                 {
+                    // Prefer the tightest bounding box to reduce the amount of hierarchy re-parenting later.
                     Box2 bounds = candidate.GetBoundingBox();
                     double width = bounds.Max.X - bounds.Min.X;
                     double height = bounds.Max.Y - bounds.Min.Y;
@@ -736,6 +822,11 @@ internal static class SelfIntersectionRemover
         }
     }
 
+    /// <summary>
+    /// Determines whether a half-edge borders a filled region on the left and empty space on the right.
+    /// </summary>
+    /// <param name="edge">The edge to test.</param>
+    /// <returns><see langword="true"/> when the edge contributes to the final boundary.</returns>
     private static bool IsBoundaryEdge(HalfEdge edge)
     {
         bool leftInside = edge.LeftWinding > 0;
@@ -743,6 +834,12 @@ internal static class SelfIntersectionRemover
         return leftInside && !rightInside;
     }
 
+    /// <summary>
+    /// Advances to the next boundary edge, wrapping when the walk returns to the starting edge.
+    /// </summary>
+    /// <param name="edge">The current boundary edge.</param>
+    /// <param name="start">The originating edge for cycle detection.</param>
+    /// <returns>The next boundary edge or <see langword="null"/> if traversal fails.</returns>
     private static HalfEdge? NextBoundaryEdge(HalfEdge edge, HalfEdge start)
     {
         HalfEdge? current = edge.Next;
@@ -764,6 +861,12 @@ internal static class SelfIntersectionRemover
         return null;
     }
 
+    /// <summary>
+    /// Computes the winding number of the arrangement at the specified point.
+    /// </summary>
+    /// <param name="point">The sample point.</param>
+    /// <param name="segments">The directed segments defining the arrangement.</param>
+    /// <returns>The winding number relative to the positive fill rule.</returns>
     private static int ComputeWindingNumber(Vertex point, List<DirectedSegment> segments)
     {
         int winding = 0;
@@ -791,9 +894,16 @@ internal static class SelfIntersectionRemover
         return winding;
     }
 
+    /// <summary>
+    /// Returns the signed area of the triangle formed by (a, b, p); positive values place p to the left of segment ab.
+    /// </summary>
     private static double IsLeft(Vertex a, Vertex b, Vertex p)
         => ((b.X - a.X) * (p.Y - a.Y)) - ((p.X - a.X) * (b.Y - a.Y));
 
+    /// <summary>
+    /// Removes degenerate vertices, collinear runs, and duplicate endpoints from a contour.
+    /// </summary>
+    /// <param name="contour">The contour to clean in-place.</param>
     private static void CleanupContour(Contour contour)
     {
         if (contour.Count == 0)
@@ -848,6 +958,12 @@ internal static class SelfIntersectionRemover
         }
     }
 
+    /// <summary>
+    /// Creates a circular doubly linked list from the supplied vertices.
+    /// </summary>
+    /// <param name="vertices">The vertex list to wrap.</param>
+    /// <param name="node">The resulting head node.</param>
+    /// <returns><see langword="true"/> when the list contains enough vertices.</returns>
     private static bool TryBuildContourNodes(List<Vertex> vertices, [NotNullWhen(true)] out ContourNode? node)
     {
         if (vertices.Count < 3)
@@ -874,24 +990,41 @@ internal static class SelfIntersectionRemover
         return true;
     }
 
+    /// <summary>
+    /// Checks whether the linked contour contains at least three distinct nodes.
+    /// </summary>
+    /// <param name="node">Any node within the contour.</param>
+    /// <returns><see langword="true"/> when the walk can continue.</returns>
     private static bool IsValidClosedPath(ContourNode? node)
         => node != null && node.Next != node && (node.Next != node.Prev || !IsVerySmallTriangle(node));
 
+    /// <summary>
+    /// Determines whether three consecutive nodes form a degenerate triangle.
+    /// </summary>
     private static bool IsVerySmallTriangle(ContourNode node)
         => node.Next.Next == node.Prev &&
             (PtsReallyClose(node.Prev.Point, node.Next.Point) ||
              PtsReallyClose(node.Point, node.Next.Point) ||
              PtsReallyClose(node.Point, node.Prev.Point));
 
+    /// <summary>
+    /// Tests whether a vertex list represents a triangle with clustered points.
+    /// </summary>
     private static bool IsVerySmallTriangle(List<Vertex> vertices)
         => vertices.Count == 3 &&
             (PtsReallyClose(vertices[0], vertices[1]) ||
              PtsReallyClose(vertices[1], vertices[2]) ||
              PtsReallyClose(vertices[2], vertices[0]));
 
+    /// <summary>
+    /// Determines whether two vertices are nearly coincident in screen space terms.
+    /// </summary>
     private static bool PtsReallyClose(Vertex a, Vertex b)
         => Math.Abs(a.X - b.X) < 2 && Math.Abs(a.Y - b.Y) < 2;
 
+    /// <summary>
+    /// Removes a node from the circular list and returns the next node (or null if exhausted).
+    /// </summary>
     private static ContourNode? DisposeNode(ContourNode node)
     {
         ContourNode? result = node.Next == node ? null : node.Next;
@@ -900,6 +1033,13 @@ internal static class SelfIntersectionRemover
         return result;
     }
 
+    /// <summary>
+    /// Removes nodes that are collinear (or almost) while optionally preserving explicitly collinear edges.
+    /// </summary>
+    /// <param name="start">The starting node for traversal.</param>
+    /// <param name="preserveCollinear">Whether perfectly collinear nodes should be retained.</param>
+    /// <param name="result">The new starting node when successful.</param>
+    /// <returns><see langword="true"/> when a valid closed path remains.</returns>
     private static bool TryCleanCollinear(ContourNode start, bool preserveCollinear, [NotNullWhen(true)] out ContourNode? result)
     {
         ContourNode? op2 = start;
@@ -938,6 +1078,11 @@ internal static class SelfIntersectionRemover
         return true;
     }
 
+    /// <summary>
+    /// Converts the linked contour back into a list of vertices while removing duplicates.
+    /// </summary>
+    /// <param name="start">The node from which to begin traversal.</param>
+    /// <returns>The ordered vertex path.</returns>
     private static List<Vertex> BuildPath(ContourNode start)
     {
         List<Vertex> path = [];
@@ -958,6 +1103,11 @@ internal static class SelfIntersectionRemover
         return path;
     }
 
+    /// <summary>
+    /// Trims remaining collinear vertices from an open path while keeping the polygon valid.
+    /// </summary>
+    /// <param name="path">The vertex sequence to trim.</param>
+    /// <returns>A simplified path or an empty list when it degenerates.</returns>
     private static List<Vertex> TrimCollinear(List<Vertex> path)
     {
         int len = path.Count;
@@ -1017,6 +1167,9 @@ internal static class SelfIntersectionRemover
         return result;
     }
 
+    /// <summary>
+    /// Tests whether three vertices lie on the same line within a small tolerance.
+    /// </summary>
     private static bool IsCollinear(Vertex a, Vertex b, Vertex c)
     {
         Vertex ac = c - a;
@@ -1032,9 +1185,15 @@ internal static class SelfIntersectionRemover
         return distance <= 1e-3;
     }
 
+    /// <summary>
+    /// Computes the dot product of two segments sharing the middle vertex.
+    /// </summary>
     private static double DotProduct(Vertex pt1, Vertex pt2, Vertex pt3)
         => Vertex.Dot(pt2 - pt1, pt3 - pt2);
 
+    /// <summary>
+    /// Checks whether two vertices are almost coincident using a tight epsilon.
+    /// </summary>
     private static bool ArePointsClose(Vertex a, Vertex b)
         => Math.Abs(a.X - b.X) <= 1e-5 && Math.Abs(a.Y - b.Y) <= 1e-5;
 
@@ -1243,66 +1402,96 @@ internal static class SelfIntersectionRemover
         eventQueue.Enqueue(r);
     }
 
+    /// <summary>
+    /// Represents a directed edge between two vertices in the arrangement.
+    /// </summary>
     private readonly record struct DirectedSegment(Vertex Source, Vertex Target);
 
     private sealed class Node
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Node"/> class.
+        /// </summary>
         public Node(Vertex point) => this.Point = point;
 
+        /// <summary>Gets the coordinate stored at this node.</summary>
         public Vertex Point { get; }
 
+        /// <summary>Gets the outgoing half-edges emanating from this node.</summary>
         public List<HalfEdge> Outgoing { get; } = [];
     }
 
     private sealed class HalfEdge
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="HalfEdge"/> class.
+        /// </summary>
         public HalfEdge(Node origin, Node destination)
         {
             this.Origin = origin;
             this.Destination = destination;
         }
 
+        /// <summary>Gets the node the half-edge originates from.</summary>
         public Node Origin { get; }
 
+        /// <summary>Gets the node the half-edge points to.</summary>
         public Node Destination { get; }
 
+        /// <summary>Gets or sets the opposite half-edge with reversed direction.</summary>
         public HalfEdge? Twin { get; set; }
 
+        /// <summary>Gets or sets the next half-edge when walking a face counter-clockwise.</summary>
         public HalfEdge? Next { get; set; }
 
+        /// <summary>Gets or sets the face to the left of this half-edge.</summary>
         public Face? Face { get; set; }
 
+        /// <summary>Gets or sets the cached polar angle used for sorting outgoing edges.</summary>
         public double Angle { get; set; }
 
+        /// <summary>Gets or sets the winding value of the region on the left-hand side.</summary>
         public int LeftWinding { get; set; }
     }
 
     private sealed class Face
     {
+        /// <summary>Gets the vertices that make up the face boundary.</summary>
         public List<Vertex> Boundary { get; } = [];
 
+        /// <summary>Gets the half-edges encountered when walking this face.</summary>
         public List<HalfEdge> Edges { get; } = [];
 
+        /// <summary>Gets or sets a value indicating whether this face represents exterior space.</summary>
         public bool IsExterior { get; set; }
 
+        /// <summary>Gets or sets the winding number for the region represented by this face.</summary>
         public int Winding { get; set; }
     }
 
     private sealed class HalfEdgeGraph
     {
+        /// <summary>Gets the collection of graph nodes.</summary>
         public List<Node> Nodes { get; } = [];
 
+        /// <summary>Gets the collection of half-edges (each physical edge contributes two entries).</summary>
         public List<HalfEdge> Edges { get; } = [];
     }
 
     private sealed class ContourNode
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ContourNode"/> class.
+        /// </summary>
         public ContourNode(Vertex point) => this.Point = point;
 
+        /// <summary>Gets or sets the vertex stored at this node.</summary>
         public Vertex Point { get; set; }
 
+        /// <summary>Gets or sets the previous node in the circular list.</summary>
         public ContourNode Prev { get; set; } = null!;
 
+        /// <summary>Gets or sets the next node in the circular list.</summary>
         public ContourNode Next { get; set; } = null!;
     }
 }
