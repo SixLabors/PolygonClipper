@@ -32,6 +32,8 @@ internal sealed class SweepEvent
         this.OtherEvent = otherEvent;
         this.PolygonType = polygonType;
         this.EdgeType = edgeType;
+        this.SegmentSource = point;
+        this.SegmentTarget = point;
     }
 
     /// <summary>
@@ -46,6 +48,8 @@ internal sealed class SweepEvent
         this.Left = left;
         this.PolygonType = polygonType;
         this.EdgeType = EdgeType.Normal;
+        this.SegmentSource = point;
+        this.SegmentTarget = point;
     }
 
     /// <summary>
@@ -61,6 +65,8 @@ internal sealed class SweepEvent
         this.ContourId = contourId;
         this.PolygonType = PolygonType.Subject;
         this.EdgeType = EdgeType.Normal;
+        this.SegmentSource = point;
+        this.SegmentTarget = point;
     }
 
     /// <summary>
@@ -84,6 +90,36 @@ internal sealed class SweepEvent
     /// Used to maintain original path ordering during contour reconstruction.
     /// </summary>
     public int SegmentIndex { get; set; }
+
+    /// <summary>
+    /// Gets or sets the cumulative winding count at this segment position.
+    /// Used for positive fill rule processing.
+    /// </summary>
+    public int WindingCount { get; set; }
+
+    /// <summary>
+    /// Gets or sets the winding direction delta for this edge (+1 or -1).
+    /// Based on the contour direction through this edge. Once set, this value
+    /// is stable and does not change when segments are split.
+    /// </summary>
+    public int WindDx { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether this event's point is the source (start)
+    /// of the segment in the original contour direction. This is needed to compute
+    /// winding contributions correctly for the positive fill rule.
+    /// </summary>
+    public bool IsContourSource { get; set; }
+
+    /// <summary>
+    /// Gets or sets the directed segment source point.
+    /// </summary>
+    public Vertex SegmentSource { get; set; }
+
+    /// <summary>
+    /// Gets or sets the directed segment target point.
+    /// </summary>
+    public Vertex SegmentTarget { get; set; }
 
     /// <summary>
     /// Gets index of the polygon to which the associated segment belongs to;
