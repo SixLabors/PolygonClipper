@@ -1,9 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -77,6 +74,7 @@ internal static class SelfIntersectionRemover
                 result.Add(contour);
             }
         }
+
         result.Sort(CompareContoursByLowestPoint);
         Polygon resultPolygon = [];
         for (int i = 0; i < result.Count; i++)
@@ -84,6 +82,7 @@ internal static class SelfIntersectionRemover
             resultPolygon.Add(result[i]);
         }
 
+        AssignHierarchy(resultPolygon);
         return resultPolygon;
     }
 
@@ -377,14 +376,11 @@ internal static class SelfIntersectionRemover
 
     private sealed class Node
     {
-        public Node(Vertex point)
-        {
-            this.Point = point;
-        }
+        public Node(Vertex point) => this.Point = point;
 
         public Vertex Point { get; }
 
-        public List<HalfEdge> Outgoing { get; } = new();
+        public List<HalfEdge> Outgoing { get; } = [];
     }
 
     private sealed class HalfEdge
@@ -412,9 +408,9 @@ internal static class SelfIntersectionRemover
 
     private sealed class Face
     {
-        public List<Vertex> Boundary { get; } = new();
+        public List<Vertex> Boundary { get; } = [];
 
-        public List<HalfEdge> Edges { get; } = new();
+        public List<HalfEdge> Edges { get; } = [];
 
         public bool IsExterior { get; set; }
 
@@ -423,9 +419,9 @@ internal static class SelfIntersectionRemover
 
     private sealed class HalfEdgeGraph
     {
-        public List<Node> Nodes { get; } = new();
+        public List<Node> Nodes { get; } = [];
 
-        public List<HalfEdge> Edges { get; } = new();
+        public List<HalfEdge> Edges { get; } = [];
     }
 
     private static List<DirectedSegment> BuildArrangementSegments(Polygon polygon)
@@ -556,7 +552,7 @@ internal static class SelfIntersectionRemover
     private static HalfEdgeGraph BuildHalfEdgeGraph(List<DirectedSegment> segments)
     {
         HalfEdgeGraph graph = new();
-        Dictionary<Vertex, Node> nodeMap = new();
+        Dictionary<Vertex, Node> nodeMap = [];
 
         Node GetNode(Vertex vertex)
         {
@@ -619,7 +615,7 @@ internal static class SelfIntersectionRemover
             edge.Next = outgoing[nextIdx];
         }
 
-        List<Face> faces = new();
+        List<Face> faces = [];
         foreach (HalfEdge edge in graph.Edges)
         {
             if (edge.Face != null)
@@ -678,8 +674,8 @@ internal static class SelfIntersectionRemover
 
     private static List<Contour> ExtractBoundaryContours(HalfEdgeGraph graph)
     {
-        List<Contour> contours = new();
-        HashSet<HalfEdge> visited = new();
+        List<Contour> contours = [];
+        HashSet<HalfEdge> visited = [];
 
         foreach (HalfEdge edge in graph.Edges)
         {
@@ -701,6 +697,11 @@ internal static class SelfIntersectionRemover
                 }
 
                 current = NextBoundaryEdge(current, edge);
+                if (current != null && current != edge && visited.Contains(current))
+                {
+                    break;
+                }
+
                 if (current == null || current == edge)
                 {
                     break;
@@ -716,6 +717,82 @@ internal static class SelfIntersectionRemover
         }
 
         return contours;
+    }
+
+    private static void AssignHierarchy(Polygon polygon)
+    {
+        int count = polygon.Count;
+        if (count == 0)
+        {
+            return;
+        }
+
+        int[] parentIndices = new int[count];
+        Array.Fill(parentIndices, -1);
+
+        for (int i = 0; i < count; i++)
+        {
+            polygon[i].ParentIndex = null;
+            polygon[i].Depth = 0;
+            polygon[i].ClearHoles();
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            Vertex testPoint = GetContourTestPoint(polygon[i]);
+            double smallestBounds = double.PositiveInfinity;
+            int parentIndex = -1;
+
+            for (int j = 0; j < count; j++)
+            {
+                if (i == j)
+                {
+                    continue;
+                }
+
+                Contour candidate = polygon[j];
+                if (PointInContour(testPoint, candidate))
+                {
+                    Box2 bounds = candidate.GetBoundingBox();
+                    double width = bounds.Max.X - bounds.Min.X;
+                    double height = bounds.Max.Y - bounds.Min.Y;
+                    double area = width * height;
+                    if (area < smallestBounds)
+                    {
+                        smallestBounds = area;
+                        parentIndex = j;
+                    }
+                }
+            }
+
+            parentIndices[i] = parentIndex;
+            if (parentIndex >= 0)
+            {
+                polygon[i].ParentIndex = parentIndex;
+            }
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            int depth = 0;
+            int current = parentIndices[i];
+            while (current >= 0)
+            {
+                depth++;
+                current = parentIndices[current];
+            }
+
+            polygon[i].Depth = depth;
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            int parentIndex = parentIndices[i];
+            if (parentIndex >= 0)
+            {
+                polygon[parentIndex].AddHoleIndex(i);
+            }
+        }
     }
 
     private static bool IsBoundaryEdge(HalfEdge edge)
@@ -861,10 +938,7 @@ internal static class SelfIntersectionRemover
 
     private sealed class ContourNode
     {
-        public ContourNode(Vertex point)
-        {
-            this.Point = point;
-        }
+        public ContourNode(Vertex point) => this.Point = point;
 
         public Vertex Point { get; set; }
 
@@ -884,8 +958,10 @@ internal static class SelfIntersectionRemover
         ContourNode prev = first;
         for (int i = 1; i < vertices.Count; i++)
         {
-            ContourNode node = new(vertices[i]);
-            node.Prev = prev;
+            ContourNode node = new(vertices[i])
+            {
+                Prev = prev
+            };
             prev.Next = node;
             prev = node;
         }
@@ -926,7 +1002,7 @@ internal static class SelfIntersectionRemover
         ContourNode? op2 = start;
         ContourNode? currentStart = start;
 
-        for (;;)
+        for (; ;)
         {
             if (IsCollinear(op2!.Prev.Point, op2.Point, op2.Next.Point) &&
                 (ArePointsClose(op2.Point, op2.Prev.Point) || ArePointsClose(op2.Point, op2.Next.Point) || !preserveCollinear ||
@@ -1791,7 +1867,7 @@ internal static class SelfIntersectionRemover
 
     private static Contour InitializeContourFromContext(SweepEvent sweepEvent, Polygon polygon, int contourId)
     {
-        Contour contour = new();
+        Contour contour = [];
 
         if (sweepEvent.PrevInResult != null)
         {
@@ -1875,7 +1951,6 @@ internal static class SelfIntersectionRemover
             found = true;
             return firstCandidate;
         }
-
 
         // Multiple candidates at same vertex: pick the best one based on angle.
         // The incoming edge is from resultEvents[pos] (a right event that was just marked processed).
