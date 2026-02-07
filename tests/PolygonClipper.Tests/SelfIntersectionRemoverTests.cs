@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System;
 using Clipper2Lib;
 
 namespace SixLabors.PolygonClipper.Tests;
@@ -1666,15 +1665,12 @@ public class SelfIntersectionRemoverTests
     }
 
     /// <summary>
-    /// Tests that actual self-intersections are detected and handled.
-    /// A figure-8 shape has a self-intersection at the center.
+    /// Tests that a self-intersecting bowtie stays as one filled region under positive fill.
     /// </summary>
     [Fact]
-    public void FigureEight_WithSelfIntersection_SplitsIntoTwoContours()
+    public void FigureEight_WithSelfIntersection_RemainsSingleContour()
     {
-        // Arrange: Figure-8 shape that crosses itself at (5, 0)
-        // First loop: (0,0) -> (10,5) -> (10,-5) -> (0,0) but path crosses at (5,0)
-        // Using a bowtie/hourglass shape that definitely crosses
+        // Arrange: Bowtie/hourglass that crosses itself at (5,0) so the winding stays >0 everywhere.
         Contour figure8 = [];
         figure8.Add(new Vertex(0, 5));    // Top-left
         figure8.Add(new Vertex(10, -5));  // Bottom-right (crosses the next segment)
@@ -1687,8 +1683,31 @@ public class SelfIntersectionRemoverTests
         // Act
         Polygon result = PolygonClipper.RemoveSelfIntersections(input);
 
-        // Assert: Should produce 2 separate triangular contours (the two halves of the bowtie)
-        Assert.Equal(2, result.Count);
+        PathsD clipperResult = RemoveSelfIntersectionsWithClipperD(input);
+        Assert.Equal(clipperResult.Count, result.Count);
+
+        // Assert: Positive fill treats the bowtie as a single filled region (same as Clipper).
+        Assert.Equal(1, result.Count);
+
+        for (int i = 0; i < clipperResult.Count; i++)
+        {
+            PathD expected = clipperResult[i];
+            PathD actual = ProjectContour(result[i]);
+            Assert.Equal(expected.Count, actual.Count);
+
+            for (int j = 0; j < expected.Count; j++)
+            {
+                PointD expectedPoint = expected[j];
+                PointD actualPoint = actual[j];
+
+                if (!ArePointsClose(expectedPoint, actualPoint))
+                {
+                    string message = $"Contour {i}, Vertex {j}: Expected ({expectedPoint.x}, {expectedPoint.y}), " +
+                                     $"Actual ({actualPoint.x}, {actualPoint.y})";
+                    Assert.Fail(message);
+                }
+            }
+        }
     }
 
     /// <summary>

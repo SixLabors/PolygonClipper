@@ -86,18 +86,6 @@ internal sealed class SweepEvent
     public int ContourId { get; set; }
 
     /// <summary>
-    /// Gets or sets the index of the segment within its original contour.
-    /// Used to maintain original path ordering during contour reconstruction.
-    /// </summary>
-    public int SegmentIndex { get; set; }
-
-    /// <summary>
-    /// Gets or sets the cumulative winding count at this segment position.
-    /// Used for positive fill rule processing.
-    /// </summary>
-    public int WindingCount { get; set; }
-
-    /// <summary>
     /// Gets or sets the winding direction delta for this edge (+1 or -1).
     /// Based on the contour direction through this edge. Once set, this value
     /// is stable and does not change when segments are split.

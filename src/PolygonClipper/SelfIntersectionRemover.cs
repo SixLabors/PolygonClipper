@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -345,83 +346,23 @@ internal static class SelfIntersectionRemover
             return false;
         }
 
-        double minX = Math.Min(a.X, b.X);
-        double maxX = Math.Max(a.X, b.X);
-        double minY = Math.Min(a.Y, b.Y);
-        double maxY = Math.Max(a.Y, b.Y);
+        Vertex min = Vertex.Min(a, b);
+        Vertex max = Vertex.Max(a, b);
 
-        return point.X >= minX && point.X <= maxX && point.Y >= minY && point.Y <= maxY;
+        return point.X >= min.X && point.X <= max.X && point.Y >= min.Y && point.Y <= max.Y;
     }
 
     private static double GetSignedArea(Contour contour)
     {
-        int count = contour.Count;
-        if (count < 3)
-        {
-            return 0D;
-        }
-
         double area = 0D;
-        for (int i = 0; i < count; i++)
+        for (int i = 0; i < contour.Count; i++)
         {
             Vertex current = contour[i];
-            Vertex next = contour[(i + 1) % count];
-            area += (current.X * next.Y) - (next.X * current.Y);
+            Vertex next = contour[(i + 1) % contour.Count];
+            area += Vertex.Cross(current, next);
         }
 
-        return area * 0.5;
-    }
-
-    private readonly record struct DirectedSegment(Vertex Source, Vertex Target);
-
-    private sealed class Node
-    {
-        public Node(Vertex point) => this.Point = point;
-
-        public Vertex Point { get; }
-
-        public List<HalfEdge> Outgoing { get; } = [];
-    }
-
-    private sealed class HalfEdge
-    {
-        public HalfEdge(Node origin, Node destination)
-        {
-            this.Origin = origin;
-            this.Destination = destination;
-        }
-
-        public Node Origin { get; }
-
-        public Node Destination { get; }
-
-        public HalfEdge? Twin { get; set; }
-
-        public HalfEdge? Next { get; set; }
-
-        public Face? Face { get; set; }
-
-        public double Angle { get; set; }
-
-        public int LeftWinding { get; set; }
-    }
-
-    private sealed class Face
-    {
-        public List<Vertex> Boundary { get; } = [];
-
-        public List<HalfEdge> Edges { get; } = [];
-
-        public bool IsExterior { get; set; }
-
-        public int Winding { get; set; }
-    }
-
-    private sealed class HalfEdgeGraph
-    {
-        public List<Node> Nodes { get; } = [];
-
-        public List<HalfEdge> Edges { get; } = [];
+        return area;
     }
 
     private static List<DirectedSegment> BuildArrangementSegments(Polygon polygon)
@@ -823,42 +764,6 @@ internal static class SelfIntersectionRemover
         return null;
     }
 
-    private static Vertex ComputeFaceSample(Face face)
-    {
-        HalfEdge edge = face.Edges[0];
-        Vertex a = edge.Origin.Point;
-        Vertex b = edge.Destination.Point;
-        double midX = (a.X + b.X) * 0.5;
-        double midY = (a.Y + b.Y) * 0.5;
-        double dx = b.X - a.X;
-        double dy = b.Y - a.Y;
-        double length = Math.Sqrt((dx * dx) + (dy * dy));
-        if (length == 0)
-        {
-            return new Vertex(midX, midY);
-        }
-
-        double nx = -dy / length;
-        double ny = dx / length;
-
-        double epsilon = Math.Max(1e-6, length * 1e-6);
-        return new Vertex(midX + (nx * epsilon), midY + (ny * epsilon));
-    }
-
-    private static double ComputeSignedArea(List<Vertex> vertices)
-    {
-        double area = 0;
-        int count = vertices.Count;
-        for (int i = 0; i < count; i++)
-        {
-            Vertex a = vertices[i];
-            Vertex b = vertices[(i + 1) % count];
-            area += (a.X * b.Y) - (b.X * a.Y);
-        }
-
-        return area * 0.5;
-    }
-
     private static int ComputeWindingNumber(Vertex point, List<DirectedSegment> segments)
     {
         int winding = 0;
@@ -896,21 +801,28 @@ internal static class SelfIntersectionRemover
             return;
         }
 
-        List<Vertex> vertices = contour.ToList();
+        // Copy to a mutable list so we can build a circular linked structure without touching the contour directly.
+        // The contour indexer is read-only, so we never mutate it via a setter; all changes happen through this temporary list
+        // and the ContourNode helpers before the contour is cleared and repopulated.
+        List<Vertex> vertices = [.. contour];
         if (vertices.Count > 1 && vertices[0] == vertices[^1])
         {
             vertices.RemoveAt(vertices.Count - 1);
         }
 
-        ContourNode? start = BuildContourNodes(vertices);
+        if (!TryBuildContourNodes(vertices, out ContourNode? start))
+        {
+            contour.Clear();
+            return;
+        }
+
         if (!IsValidClosedPath(start))
         {
             contour.Clear();
             return;
         }
 
-        start = CleanCollinear(start, preserveCollinear: false);
-        if (!IsValidClosedPath(start))
+        if (!TryCleanCollinear(start, preserveCollinear: false, out start) || !IsValidClosedPath(start))
         {
             contour.Clear();
             return;
@@ -936,39 +848,30 @@ internal static class SelfIntersectionRemover
         }
     }
 
-    private sealed class ContourNode
-    {
-        public ContourNode(Vertex point) => this.Point = point;
-
-        public Vertex Point { get; set; }
-
-        public ContourNode Prev { get; set; } = null!;
-
-        public ContourNode Next { get; set; } = null!;
-    }
-
-    private static ContourNode? BuildContourNodes(List<Vertex> vertices)
+    private static bool TryBuildContourNodes(List<Vertex> vertices, [NotNullWhen(true)] out ContourNode? node)
     {
         if (vertices.Count < 3)
         {
-            return null;
+            node = null;
+            return false;
         }
 
         ContourNode first = new(vertices[0]);
         ContourNode prev = first;
         for (int i = 1; i < vertices.Count; i++)
         {
-            ContourNode node = new(vertices[i])
+            ContourNode n = new(vertices[i])
             {
                 Prev = prev
             };
-            prev.Next = node;
-            prev = node;
+            prev.Next = n;
+            prev = n;
         }
 
         prev.Next = first;
         first.Prev = prev;
-        return first;
+        node = first;
+        return true;
     }
 
     private static bool IsValidClosedPath(ContourNode? node)
@@ -997,29 +900,30 @@ internal static class SelfIntersectionRemover
         return result;
     }
 
-    private static ContourNode? CleanCollinear(ContourNode start, bool preserveCollinear)
+    private static bool TryCleanCollinear(ContourNode start, bool preserveCollinear, [NotNullWhen(true)] out ContourNode? result)
     {
         ContourNode? op2 = start;
         ContourNode? currentStart = start;
 
-        for (; ;)
+        while (true)
         {
             if (IsCollinear(op2!.Prev.Point, op2.Point, op2.Next.Point) &&
                 (ArePointsClose(op2.Point, op2.Prev.Point) || ArePointsClose(op2.Point, op2.Next.Point) || !preserveCollinear ||
                  (DotProduct(op2.Prev.Point, op2.Point, op2.Next.Point) < 0)))
             {
-                if (op2 == currentStart)
-                {
-                    currentStart = op2.Prev;
-                }
-
+                bool removedStart = op2 == currentStart;
                 op2 = DisposeNode(op2);
                 if (!IsValidClosedPath(op2))
                 {
-                    return null;
+                    result = null;
+                    return false;
                 }
 
-                currentStart = op2;
+                if (removedStart)
+                {
+                    currentStart = op2;
+                }
+
                 continue;
             }
 
@@ -1030,7 +934,8 @@ internal static class SelfIntersectionRemover
             }
         }
 
-        return currentStart;
+        result = currentStart;
+        return true;
     }
 
     private static List<Vertex> BuildPath(ContourNode start)
@@ -1114,304 +1019,24 @@ internal static class SelfIntersectionRemover
 
     private static bool IsCollinear(Vertex a, Vertex b, Vertex c)
     {
-        double dx = c.X - a.X;
-        double dy = c.Y - a.Y;
-        double lenSq = (dx * dx) + (dy * dy);
+        Vertex ac = c - a;
+        double lenSq = ac.LengthSquared();
         if (lenSq <= double.Epsilon)
         {
             return true;
         }
 
-        double cross = Math.Abs((b.X - a.X) * dy - (b.Y - a.Y) * dx);
+        Vertex ab = b - a;
+        double cross = Math.Abs(Vertex.Cross(ab, ac));
         double distance = cross / Math.Sqrt(lenSq);
         return distance <= 1e-3;
     }
 
     private static double DotProduct(Vertex pt1, Vertex pt2, Vertex pt3)
-        => ((pt2.X - pt1.X) * (pt3.X - pt2.X)) + ((pt2.Y - pt1.Y) * (pt3.Y - pt2.Y));
+        => Vertex.Dot(pt2 - pt1, pt3 - pt2);
 
     private static bool ArePointsClose(Vertex a, Vertex b)
         => Math.Abs(a.X - b.X) <= 1e-5 && Math.Abs(a.Y - b.Y) <= 1e-5;
-
-    /// <summary>
-    /// Runs the sweep line algorithm with positive fill rule to process self-intersecting polygons.
-    /// </summary>
-    /// <param name="polygon">The input polygon.</param>
-    /// <returns>A polygon with self-intersections resolved using positive fill rule.</returns>
-    private static Polygon RunSweepWithPositiveFill(Polygon polygon)
-    {
-        // Create sweep events for all segments
-        SweepEventComparer comparer = new();
-        List<SweepEvent> unorderedEvents = new(polygon.VertexCount * 2);
-
-        int contourId = 0;
-        for (int i = 0; i < polygon.Count; i++)
-        {
-            Contour contour = polygon[i];
-            contourId++;
-
-            for (int j = 0; j < contour.Count - 1; j++)
-            {
-                Segment segment = contour.GetSegment(j);
-                if (segment.Source == segment.Target)
-                {
-                    // Skip degenerate zero-length segments
-                    continue;
-                }
-
-                // Create left and right events for the segment
-                // e1 is at Source (start of segment in contour), e2 is at Target (end)
-                SweepEvent e1 = new(segment.Source, true, PolygonType.Subject);
-                SweepEvent e2 = new(segment.Target, true, e1, PolygonType.Subject);
-                e1.OtherEvent = e2;
-                e1.ContourId = e2.ContourId = contourId;
-
-                // Track which point is the source in contour order
-                e1.IsContourSource = true;
-                e2.IsContourSource = false;
-
-                // Determine which endpoint is the left endpoint
-                if (comparer.Compare(e1, e2) < 0)
-                {
-                    e2.Left = false;
-                }
-                else
-                {
-                    e1.Left = false;
-                }
-
-                // Compute WindDx based on path direction relative to the sweep.
-                // In a left-to-right sweep (analogous to Clipper2's ascending/descending):
-                // - Path goes left to right (Source is left endpoint) → +1
-                // - Path goes right to left (Source is right endpoint) → -1
-                // e1 is always at Source, so e1.Left means Source is the left endpoint.
-                int windDx = e1.Left ? 1 : -1;
-                e1.WindDx = e2.WindDx = windDx;
-
-                unorderedEvents.Add(e1);
-                unorderedEvents.Add(e2);
-            }
-        }
-
-        if (unorderedEvents.Count == 0)
-        {
-            return [];
-        }
-
-        // Process events using the sweep line
-        StablePriorityQueue<SweepEvent, SweepEventComparer> eventQueue = new(comparer, unorderedEvents);
-        List<SweepEvent> sortedEvents = new(unorderedEvents.Count);
-        StatusLine statusLine = new(polygon.VertexCount >> 1);
-
-        // Track if any segments were split (indicating actual intersections)
-        bool hadIntersections = false;
-
-        // Safety limit to prevent infinite loops
-        int maxIterations = unorderedEvents.Count * 10;
-        int iterations = 0;
-
-        Span<SweepEvent> workspace = new SweepEvent[4];
-
-        while (eventQueue.Count > 0)
-        {
-            if (++iterations > maxIterations)
-            {
-                break;
-            }
-
-            SweepEvent sweepEvent = eventQueue.Dequeue();
-            sortedEvents.Add(sweepEvent);
-
-            if (sweepEvent.Left)
-            {
-                // Insert event into status line and get neighbors
-                int position = sweepEvent.PosSL = statusLine.Add(sweepEvent);
-                SweepEvent? prevEvent = statusLine.Prev(position);
-                SweepEvent? nextEvent = statusLine.Next(position);
-
-                // Compute winding for this segment based on what's below it
-                ComputeWindingFields(sweepEvent, prevEvent);
-
-                // Check for intersections with neighbors (ALL intersections, not just same contour)
-                if (nextEvent != null)
-                {
-                    int result = PossibleIntersection(sweepEvent, nextEvent, eventQueue, workspace, comparer);
-                    if (result > 0)
-                    {
-                        hadIntersections = true;
-                    }
-
-                    if (result == 2)
-                    {
-                        ComputeWindingFields(sweepEvent, prevEvent);
-                        ComputeWindingFields(nextEvent, sweepEvent);
-                    }
-                }
-
-                if (prevEvent != null)
-                {
-                    int result = PossibleIntersection(prevEvent, sweepEvent, eventQueue, workspace, comparer);
-                    if (result > 0)
-                    {
-                        hadIntersections = true;
-                    }
-
-                    if (result == 2)
-                    {
-                        SweepEvent? prevPrevEvent = statusLine.Prev(prevEvent.PosSL);
-                        ComputeWindingFields(prevEvent, prevPrevEvent);
-                        ComputeWindingFields(sweepEvent, prevEvent);
-                    }
-                }
-            }
-            else
-            {
-                // Remove event from status line
-                SweepEvent? leftEvent = sweepEvent.OtherEvent;
-                if (leftEvent != null && leftEvent.PosSL >= 0 && leftEvent.PosSL < statusLine.Count)
-                {
-                    int position = leftEvent.PosSL;
-                    SweepEvent? prevEvent = statusLine.Prev(position);
-                    SweepEvent? nextEvent = statusLine.Next(position);
-
-                    // Check for intersections between neighbors that are now adjacent
-                    if (prevEvent != null && nextEvent != null)
-                    {
-                        int result = PossibleIntersection(prevEvent, nextEvent, eventQueue, workspace, comparer);
-                        if (result > 0)
-                        {
-                            hadIntersections = true;
-                        }
-                    }
-
-
-
-                    statusLine.RemoveAt(position);
-                }
-            }
-        }
-
-        // If no intersections occurred, preserve original structure with hierarchy
-        if (!hadIntersections)
-        {
-            return BuildPolygonWithHierarchy(polygon, sortedEvents);
-        }
-
-        // Build result using positive fill rule
-        return ConnectEdgesWithPositiveFill(sortedEvents, comparer);
-    }
-
-    /// <summary>
-    /// Computes winding-related fields for a sweep event based on what's below it in the status line.
-    /// Implements Clipper2's SetWindCountForClosedPathEdge algorithm for positive fill rule.
-    /// <para>
-    /// Wind counts refer to polygon regions not edges, so an edge's WindingCount
-    /// indicates the higher of the wind counts for the two regions touching the edge.
-    /// Adjacent regions can only ever have their wind counts differ by one.
-    /// </para>
-    /// <para>
-    /// For positive fill rule, an edge contributes to the result when WindingCount == 1,
-    /// meaning it sits on the boundary between winding 0 (unfilled) and winding 1 (filled).
-    /// </para>
-    /// </summary>
-    /// <param name="sweepEvent">The sweep event to compute fields for.</param>
-    /// <param name="prev">The previous event in the status line (below this one).</param>
-    private static void ComputeWindingFields(SweepEvent sweepEvent, SweepEvent? prev)
-    {
-        int windDx = sweepEvent.WindDx;
-
-        if (prev == null)
-        {
-            sweepEvent.WindingCount = windDx;
-        }
-        else
-        {
-            // Clipper2's SetWindCountForClosedPathEdge for NonZero/Positive/Negative:
-            // All edges are same polygon type, so we always use same-type logic.
-            if (prev.WindingCount * prev.WindDx < 0)
-            {
-                // Opposite directions: 'e' is outside 'prev'
-                if (Math.Abs(prev.WindingCount) > 1)
-                {
-                    // Outside prev poly but still inside another
-                    if (prev.WindDx * windDx < 0)
-                    {
-                        // Reversing direction so use the same WC
-                        sweepEvent.WindingCount = prev.WindingCount;
-                    }
-                    else
-                    {
-                        // Keep 'reducing' the WC by 1 (towards 0)
-                        sweepEvent.WindingCount = prev.WindingCount + windDx;
-                    }
-                }
-                else
-                {
-                    // Now outside all polys of same polytype
-                    sweepEvent.WindingCount = windDx;
-                }
-            }
-            else
-            {
-                // 'e' must be inside 'prev'
-                if (prev.WindDx * windDx < 0)
-                {
-                    // Reversing direction so use the same WC
-                    sweepEvent.WindingCount = prev.WindingCount;
-                }
-                else
-                {
-                    // Keep 'increasing' the WC by 1 (away from 0)
-                    sweepEvent.WindingCount = prev.WindingCount + windDx;
-                }
-            }
-        }
-
-        // For positive fill: an edge is contributing when wind_cnt == 1.
-        // This means it's the boundary between winding 0 (unfilled) and winding 1 (filled).
-        bool inResult = sweepEvent.WindingCount == 1 && sweepEvent.EdgeType == EdgeType.Normal;
-
-        // Compute PrevInResult field
-        sweepEvent.PrevInResult = prev?.PrevInResult;
-        if (prev != null && prev.ResultTransition != ResultTransition.Neutral)
-        {
-            sweepEvent.PrevInResult = prev;
-        }
-
-        // Set ResultTransition for this edge
-        if (inResult)
-        {
-            // For positive fill with single polygon (self-union):
-            // wind_cnt == 1 means this edge borders a filled region.
-            // Determine direction: if windDx > 0, we're entering (Contributing);
-            // if windDx < 0, we're exiting (NonContributing).
-            sweepEvent.ResultTransition = windDx > 0
-                ? ResultTransition.Contributing
-                : ResultTransition.NonContributing;
-        }
-        else
-        {
-            sweepEvent.ResultTransition = ResultTransition.Neutral;
-        }
-
-        // Set InOut and OtherInOut for compatibility with overlap detection in PossibleIntersection
-        sweepEvent.InOut = sweepEvent.WindingCount != 1;
-        sweepEvent.OtherInOut = true;
-    }
-
-    /// <summary>
-    /// Gets the winding delta for a segment. Returns the pre-computed WindDx.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int GetWindingDelta(SweepEvent sweepEvent)
-        => sweepEvent.WindDx != 0 ? sweepEvent.WindDx : 1;
-
-    /// <summary>
-    /// Determines if a sweep event is part of the result using positive fill rule.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsInResultPositiveFill(SweepEvent sweepEvent)
-        => sweepEvent.InResult;
 
     /// <summary>
     /// Determines the possible intersection of two sweep line segments and handles splitting.
@@ -1618,396 +1243,66 @@ internal static class SelfIntersectionRemover
         eventQueue.Enqueue(r);
     }
 
-    /// <summary>
-    /// Builds a polygon preserving the original contour structure when no intersections occurred.
-    /// Computes hierarchy (depth and parent) based on containment using sweep events.
-    /// </summary>
-    private static Polygon BuildPolygonWithHierarchy(Polygon originalPolygon, List<SweepEvent> events)
+    private readonly record struct DirectedSegment(Vertex Source, Vertex Target);
+
+    private sealed class Node
     {
-        int[] contourDepth = new int[originalPolygon.Count];
-        int[] contourParent = new int[originalPolygon.Count];
-        for (int i = 0; i < originalPolygon.Count; i++)
-        {
-            contourParent[i] = -1;
-        }
+        public Node(Vertex point) => this.Point = point;
 
-        // Process events to find containment
-        Dictionary<int, bool> contourFirstEventSeen = new(originalPolygon.Count);
-        StatusLine statusLine = new(originalPolygon.VertexCount >> 1);
+        public Vertex Point { get; }
 
-        foreach (SweepEvent evt in events)
-        {
-            if (evt.Left)
-            {
-                int contourId = evt.ContourId;
-                bool isFirstEvent = !contourFirstEventSeen.ContainsKey(contourId);
-
-                int position = statusLine.Add(evt);
-                evt.PosSL = position;
-
-                if (isFirstEvent)
-                {
-                    contourFirstEventSeen[contourId] = true;
-
-                    // The segment immediately below tells us what we're inside of
-                    SweepEvent? prevEvent = statusLine.Prev(position);
-                    if (prevEvent != null && prevEvent.ContourId != contourId)
-                    {
-                        int parentIdx = prevEvent.ContourId - 1;
-                        int contourIdx = contourId - 1;
-
-                        if (contourIdx >= 0 && contourIdx < originalPolygon.Count &&
-                            parentIdx >= 0 && parentIdx < originalPolygon.Count)
-                        {
-                            contourParent[contourIdx] = parentIdx;
-                            contourDepth[contourIdx] = contourDepth[parentIdx] + 1;
-                        }
-                    }
-                }
-            }
-            else
-            {
-                SweepEvent? leftEvent = evt.OtherEvent;
-                if (leftEvent != null && leftEvent.PosSL >= 0 && leftEvent.PosSL < statusLine.Count)
-                {
-                    statusLine.RemoveAt(leftEvent.PosSL);
-                }
-            }
-        }
-
-        // Build result polygon with proper hierarchy
-        List<Contour> contours = new(originalPolygon.Count);
-        for (int i = 0; i < originalPolygon.Count; i++)
-        {
-            Contour copy = [];
-            Contour original = originalPolygon[i];
-            for (int j = 0; j < original.Count; j++)
-            {
-                copy.Add(original[j]);
-            }
-
-            copy.Depth = contourDepth[i];
-            if (contourParent[i] >= 0)
-            {
-                copy.ParentIndex = contourParent[i];
-            }
-
-            contours.Add(copy);
-        }
-
-        Polygon result = [];
-        for (int i = 0; i < contours.Count; i++)
-        {
-            result.Add(contours[i]);
-        }
-
-        return result;
+        public List<HalfEdge> Outgoing { get; } = [];
     }
 
-    /// <summary>
-    /// Connects edges using positive fill rule to build the result polygon.
-    /// Only edges that form the boundary between filled and unfilled regions are included.
-    /// </summary>
-    private static Polygon ConnectEdgesWithPositiveFill(List<SweepEvent> sortedEvents, SweepEventComparer comparer)
+    private sealed class HalfEdge
     {
-        // Collect result events - edges that are part of the boundary
-        List<SweepEvent> resultEvents = new(sortedEvents.Count);
-        for (int i = 0; i < sortedEvents.Count; i++)
+        public HalfEdge(Node origin, Node destination)
         {
-            SweepEvent se = sortedEvents[i];
-
-            if (se.Left && se.InResult)
-            {
-                resultEvents.Add(se);
-            }
-            else if (!se.Left && se.OtherEvent != null && se.OtherEvent.InResult)
-            {
-                resultEvents.Add(se);
-            }
+            this.Origin = origin;
+            this.Destination = destination;
         }
 
-        if (resultEvents.Count == 0)
-        {
-            return [];
-        }
+        public Node Origin { get; }
 
-        // Sort result events
-        bool sorted = false;
-        while (!sorted)
-        {
-            sorted = true;
-            for (int i = 0; i < resultEvents.Count - 1; i++)
-            {
-                if (comparer.Compare(resultEvents[i], resultEvents[i + 1]) > 0)
-                {
-                    (resultEvents[i], resultEvents[i + 1]) = (resultEvents[i + 1], resultEvents[i]);
-                    sorted = false;
-                }
-            }
-        }
+        public Node Destination { get; }
 
-        // Assign positions
-        for (int i = 0; i < resultEvents.Count; i++)
-        {
-            resultEvents[i].Pos = i;
-        }
+        public HalfEdge? Twin { get; set; }
 
-        for (int i = 0; i < resultEvents.Count; i++)
-        {
-            SweepEvent sweepEvent = resultEvents[i];
-            if (sweepEvent.Left)
-            {
-                (sweepEvent.OtherEvent!.Pos, sweepEvent.Pos) = (sweepEvent.Pos, sweepEvent.OtherEvent.Pos);
-            }
-        }
+        public HalfEdge? Next { get; set; }
 
-        ReadOnlySpan<int> iterationMap = PrecomputeIterationOrder(resultEvents);
+        public Face? Face { get; set; }
 
-        Polygon result = [];
-        Span<bool> processed = new bool[resultEvents.Count];
+        public double Angle { get; set; }
 
-        for (int i = 0; i < resultEvents.Count; i++)
-        {
-            if (processed[i])
-            {
-                continue;
-            }
-
-            int contourId = result.Count;
-            Contour contour = InitializeContourFromContext(resultEvents[i], result, contourId);
-
-            int pos = i;
-            Vertex initial = resultEvents[i].Point;
-            contour.Add(initial);
-
-            do
-            {
-                MarkProcessed(resultEvents[pos], processed, pos, contourId);
-                pos = resultEvents[pos].Pos;
-
-                MarkProcessed(resultEvents[pos], processed, pos, contourId);
-
-                contour.Add(resultEvents[pos].Point);
-                pos = NextPos(pos, resultEvents, processed, iterationMap, out bool found);
-                if (!found)
-                {
-                    break;
-                }
-            }
-            while (resultEvents[pos].Point != initial);
-
-            result.Add(contour);
-        }
-
-        return result;
+        public int LeftWinding { get; set; }
     }
 
-    private static ReadOnlySpan<int> PrecomputeIterationOrder(List<SweepEvent> data)
+    private sealed class Face
     {
-        Span<int> map = new int[data.Count];
+        public List<Vertex> Boundary { get; } = [];
 
-        int i = 0;
-        while (i < data.Count)
-        {
-            SweepEvent xRef = data[i];
+        public List<HalfEdge> Edges { get; } = [];
 
-            int rFrom = i;
-            while (i < data.Count && xRef.Point == data[i].Point && !data[i].Left)
-            {
-                i++;
-            }
+        public bool IsExterior { get; set; }
 
-            int rUptoExclusive = i;
-
-            int lFrom = i;
-            while (i < data.Count && xRef.Point == data[i].Point)
-            {
-                i++;
-            }
-
-            int lUptoExclusive = i;
-
-            bool hasREvents = rUptoExclusive > rFrom;
-            bool hasLEvents = lUptoExclusive > lFrom;
-
-            if (hasREvents)
-            {
-                int rUpto = rUptoExclusive - 1;
-
-                for (int j = rFrom; j < rUpto; j++)
-                {
-                    map[j] = j + 1;
-                }
-
-                map[rUpto] = hasLEvents ? lUptoExclusive - 1 : rFrom;
-            }
-
-            if (hasLEvents)
-            {
-                int lUpto = lUptoExclusive - 1;
-
-                for (int j = lFrom + 1; j <= lUpto; j++)
-                {
-                    map[j] = j - 1;
-                }
-
-                map[lFrom] = hasREvents ? rFrom : lUpto;
-            }
-        }
-
-        return map;
+        public int Winding { get; set; }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void MarkProcessed(SweepEvent sweepEvent, Span<bool> processed, int pos, int contourId)
+    private sealed class HalfEdgeGraph
     {
-        processed[pos] = true;
-        sweepEvent.OutputContourId = contourId;
+        public List<Node> Nodes { get; } = [];
+
+        public List<HalfEdge> Edges { get; } = [];
     }
 
-    private static Contour InitializeContourFromContext(SweepEvent sweepEvent, Polygon polygon, int contourId)
+    private sealed class ContourNode
     {
-        Contour contour = [];
+        public ContourNode(Vertex point) => this.Point = point;
 
-        if (sweepEvent.PrevInResult != null)
-        {
-            SweepEvent prevInResult = sweepEvent.PrevInResult;
-            int lowerContourId = prevInResult.OutputContourId;
-            ResultTransition lowerResultTransition = prevInResult.ResultTransition;
+        public Vertex Point { get; set; }
 
-            if (lowerResultTransition > 0)
-            {
-                Contour lowerContour = polygon[lowerContourId];
+        public ContourNode Prev { get; set; } = null!;
 
-                if (lowerContour.ParentIndex != null)
-                {
-                    int parentContourId = lowerContour.ParentIndex.Value;
-                    polygon[parentContourId].AddHoleIndex(contourId);
-                    contour.ParentIndex = parentContourId;
-                    contour.Depth = polygon[lowerContourId].Depth;
-                }
-                else
-                {
-                    polygon[lowerContourId].AddHoleIndex(contourId);
-                    contour.ParentIndex = lowerContourId;
-                    contour.Depth = polygon[lowerContourId].Depth + 1;
-                }
-            }
-            else
-            {
-                contour.ParentIndex = null;
-                contour.Depth = polygon[lowerContourId].Depth;
-            }
-        }
-        else
-        {
-            contour.ParentIndex = null;
-            contour.Depth = 0;
-        }
-
-        return contour;
-    }
-
-    private static int NextPos(
-        int pos,
-        List<SweepEvent> resultEvents,
-        ReadOnlySpan<bool> processed,
-        ReadOnlySpan<int> iterationMap,
-        out bool found)
-    {
-        int startPos = pos;
-
-        // Collect all unprocessed candidates at this vertex
-        int candidateCount = 0;
-        int firstCandidate = int.MinValue;
-        int current = pos;
-        while (true)
-        {
-            current = iterationMap[current];
-            if (current == startPos)
-            {
-                break;
-            }
-
-            if (!processed[current])
-            {
-                candidateCount++;
-                if (firstCandidate == int.MinValue)
-                {
-                    firstCandidate = current;
-                }
-            }
-        }
-
-        if (candidateCount == 0)
-        {
-            found = false;
-            return int.MinValue;
-        }
-
-        // If only one candidate, return it directly (fast path)
-        if (candidateCount == 1)
-        {
-            found = true;
-            return firstCandidate;
-        }
-
-        // Multiple candidates at same vertex: pick the best one based on angle.
-        // The incoming edge is from resultEvents[pos] (a right event that was just marked processed).
-        // We need the incoming direction: from the other endpoint toward this vertex.
-        SweepEvent arrivedAt = resultEvents[pos];
-        Vertex vertex = arrivedAt.Point;
-        Vertex incomingFrom = arrivedAt.OtherEvent?.Point ?? vertex;
-        double inDx = vertex.X - incomingFrom.X;
-        double inDy = vertex.Y - incomingFrom.Y;
-
-        // The incoming angle (direction we came from)
-        double inAngle = Math.Atan2(inDy, inDx);
-
-        int bestCandidate = firstCandidate;
-        double bestAngleDiff = double.MaxValue;
-
-        current = pos;
-        while (true)
-        {
-            current = iterationMap[current];
-            if (current == startPos)
-            {
-                break;
-            }
-
-            if (!processed[current])
-            {
-                // Get the outgoing direction of this candidate edge
-                SweepEvent candidate = resultEvents[current];
-                Vertex outgoingTo = candidate.OtherEvent?.Point ?? vertex;
-                double outDx = outgoingTo.X - vertex.X;
-                double outDy = outgoingTo.Y - vertex.Y;
-                double outAngle = Math.Atan2(outDy, outDx);
-
-                // Compute the clockwise angle from the incoming direction to the outgoing direction.
-                // We want the smallest clockwise turn (which corresponds to following the
-                // boundary of the filled region on the right side).
-                double angleDiff = inAngle - outAngle;
-                if (angleDiff < 0)
-                {
-                    angleDiff += 2 * Math.PI;
-                }
-
-                if (angleDiff < 1e-10)
-                {
-                    angleDiff += 2 * Math.PI; // Avoid zero (straight reversal)
-                }
-
-                if (angleDiff < bestAngleDiff)
-                {
-                    bestAngleDiff = angleDiff;
-                    bestCandidate = current;
-                }
-            }
-        }
-
-        found = true;
-        return bestCandidate;
+        public ContourNode Next { get; set; } = null!;
     }
 }
