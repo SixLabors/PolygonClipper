@@ -1550,6 +1550,416 @@ public class SelfIntersectionRemoverTests
         }
     }
 
+    [Fact]
+    public void Test_Failing_Dashed_Complex_Polygon()
+    {
+        Contour outer0 =
+        [
+            new Vertex(198.73223876953125, 148.73223876953125),
+            new Vertex(202.26776123046875, 152.26776123046875),
+            new Vertex(191.66116333007812, 162.87435913085938),
+            new Vertex(188.12564086914062, 159.33883666992188),
+            new Vertex(198.73223876953125, 148.73223876953125),
+        ];
+        Contour outer1 =
+        [
+            new Vertex(184.59010314941406, 162.87437438964844),
+            new Vertex(188.12562561035156, 166.40989685058594),
+            new Vertex(177.51902770996094, 177.01649475097656),
+            new Vertex(173.98350524902344, 173.48097229003906),
+            new Vertex(184.59010314941406, 162.87437438964844),
+        ];
+        Contour outer2 =
+        [
+            new Vertex(170.44796752929688, 177.01651000976562),
+            new Vertex(173.98348999023438, 180.55203247070312),
+            new Vertex(163.37689208984375, 191.15863037109375),
+            new Vertex(159.84136962890625, 187.62310791015625),
+            new Vertex(170.44796752929688, 177.01651000976562),
+        ];
+        Contour outer3 =
+        [
+            new Vertex(156.3058319091797, 191.1586456298828),
+            new Vertex(159.8413543701172, 194.6941680908203),
+            new Vertex(149.23475646972656, 205.30076599121094),
+            new Vertex(145.69923400878906, 201.76524353027344),
+            new Vertex(156.3058319091797, 191.1586456298828),
+        ];
+        Contour outer4 =
+        [
+            new Vertex(142.1636962890625, 205.30078125),
+            new Vertex(145.69921875, 208.8363037109375),
+            new Vertex(135.09262084960938, 219.44290161132812),
+            new Vertex(131.55709838867188, 215.90737915039062),
+            new Vertex(142.1636962890625, 205.30078125),
+        ];
+        Contour outer5 =
+        [
+            new Vertex(128.0215606689453, 219.4429168701172),
+            new Vertex(131.5570831298828, 222.9784393310547),
+            new Vertex(120.95049285888672, 233.5850372314453),
+            new Vertex(117.41495513916016, 230.0495147705078),
+            new Vertex(128.0215606689453, 219.4429168701172),
+        ];
+        Contour outer6 =
+        [
+            new Vertex(113.8794174194336, 233.58505249023438),
+            new Vertex(117.41495513916016, 237.12057495117188),
+            new Vertex(106.80835723876953, 247.7271728515625),
+            new Vertex(103.27281951904297, 244.191650390625),
+            new Vertex(113.8794174194336, 233.58505249023438),
+        ];
+        Contour outer7 =
+        [
+            new Vertex(99.7372817993164, 247.72718811035156),
+            new Vertex(103.27281951904297, 251.26271057128906),
+            new Vertex(92.66622161865234, 261.86932373046875),
+            new Vertex(89.13068389892578, 258.33380126953125),
+            new Vertex(99.7372817993164, 247.72718811035156),
+        ];
+        Contour outer8 =
+        [
+            new Vertex(85.59514617919922, 261.86932373046875),
+            new Vertex(89.13068389892578, 265.40484619140625),
+            new Vertex(78.52408599853516, 276.0114440917969),
+            new Vertex(74.9885482788086, 272.4759216308594),
+            new Vertex(85.59514617919922, 261.86932373046875),
+        ];
+        Contour outer9 =
+        [
+            new Vertex(71.45301055908203, 276.0114440917969),
+            new Vertex(74.9885482788086, 279.5469665527344),
+            new Vertex(64.38195037841797, 290.153564453125),
+            new Vertex(60.846412658691406, 286.6180419921875),
+            new Vertex(71.45301055908203, 276.0114440917969),
+        ];
+        Contour outer10 =
+        [
+            new Vertex(57.310882568359375, 290.153564453125),
+            new Vertex(60.84642028808594, 293.6890869140625),
+            new Vertex(52.26776885986328, 302.26776123046875),
+            new Vertex(48.0234489440918, 300.8415832519531),
+            new Vertex(47.6315803527832, 298.00054931640625),
+            new Vertex(52.58468246459961, 297.3173828125),
+            new Vertex(52.9765510559082, 300.1584167480469),
+            new Vertex(48.73223114013672, 298.73223876953125),
+            new Vertex(57.310882568359375, 290.153564453125),
+        ];
+        Contour outer11 =
+        [
+            new Vertex(51.90149688720703, 292.3642883300781),
+            new Vertex(46.948394775390625, 293.0474548339844),
+            new Vertex(44.898834228515625, 278.1881408691406),
+            new Vertex(49.85193634033203, 277.5049743652344),
+            new Vertex(51.90149688720703, 292.3642883300781),
+        ];
+        Contour outer12 =
+        [
+            new Vertex(49.16875076293945, 272.5518798828125),
+            new Vertex(44.21564865112305, 273.23504638671875),
+            new Vertex(42.16608810424805, 258.375732421875),
+            new Vertex(47.11919021606445, 257.69256591796875),
+            new Vertex(49.16875076293945, 272.5518798828125),
+        ];
+        Contour outer13 =
+        [
+            new Vertex(46.436004638671875, 252.73944091796875),
+            new Vertex(41.48290252685547, 253.42263793945312),
+            new Vertex(39.43334197998047, 238.56332397460938),
+            new Vertex(44.386444091796875, 237.880126953125),
+            new Vertex(46.436004638671875, 252.73944091796875),
+        ];
+        Contour outer14 =
+        [
+            new Vertex(43.7032585144043, 232.92701721191406),
+            new Vertex(38.75015640258789, 233.61021423339844),
+            new Vertex(36.70059585571289, 218.7509002685547),
+            new Vertex(41.6536979675293, 218.0677032470703),
+            new Vertex(43.7032585144043, 232.92701721191406),
+        ];
+        Contour outer15 =
+        [
+            new Vertex(40.97051239013672, 213.11459350585938),
+            new Vertex(36.01741027832031, 213.79779052734375),
+            new Vertex(33.96784973144531, 198.9384765625),
+            new Vertex(38.92095184326172, 198.25527954101562),
+            new Vertex(40.97051239013672, 213.11459350585938),
+        ];
+        Contour outer16 =
+        [
+            new Vertex(38.23776626586914, 193.3021697998047),
+            new Vertex(33.284664154052734, 193.98536682128906),
+            new Vertex(31.2351016998291, 179.1260528564453),
+            new Vertex(36.18820571899414, 178.44285583496094),
+            new Vertex(38.23776626586914, 193.3021697998047),
+        ];
+        Contour outer17 =
+        [
+            new Vertex(35.50502014160156, 173.48974609375),
+            new Vertex(30.551916122436523, 174.17294311523438),
+            new Vertex(28.502355575561523, 159.31362915039062),
+            new Vertex(33.45545959472656, 158.63043212890625),
+            new Vertex(35.50502014160156, 173.48974609375),
+        ];
+        Contour outer18 =
+        [
+            new Vertex(32.772274017333984, 153.6773223876953),
+            new Vertex(27.819168090820312, 154.3605194091797),
+            new Vertex(25.76960563659668, 139.50120544433594),
+            new Vertex(30.72271156311035, 138.81800842285156),
+            new Vertex(32.772274017333984, 153.6773223876953),
+        ];
+        Contour outer19 =
+        [
+            new Vertex(30.03952407836914, 133.86489868164062),
+            new Vertex(25.08641815185547, 134.548095703125),
+            new Vertex(23.036855697631836, 119.68877410888672),
+            new Vertex(27.989961624145508, 119.0055923461914),
+            new Vertex(30.03952407836914, 133.86489868164062),
+        ];
+        Contour outer20 =
+        [
+            new Vertex(27.306774139404297, 114.05248260498047),
+            new Vertex(22.353668212890625, 114.73566436767578),
+            new Vertex(20.304105758666992, 99.87635040283203),
+            new Vertex(25.257211685180664, 99.19316864013672),
+            new Vertex(27.306774139404297, 114.05248260498047),
+        ];
+        Contour outer21 =
+        [
+            new Vertex(24.574024200439453, 94.24005889892578),
+            new Vertex(19.62091827392578, 94.9232406616211),
+            new Vertex(17.57135772705078, 80.06392669677734),
+            new Vertex(22.524463653564453, 79.38074493408203),
+            new Vertex(24.574024200439453, 94.24005889892578),
+        ];
+        Contour outer22 =
+        [
+            new Vertex(21.841276168823242, 74.4276351928711),
+            new Vertex(16.88817024230957, 75.1108169555664),
+            new Vertex(14.83860969543457, 60.251502990722656),
+            new Vertex(19.791715621948242, 59.56831359863281),
+            new Vertex(21.841276168823242, 74.4276351928711),
+        ];
+        Contour outer23 =
+        [
+            new Vertex(19.10852813720703, 54.61520767211914),
+            new Vertex(14.15542221069336, 55.298397064208984),
+            new Vertex(12.105860710144043, 40.43907928466797),
+            new Vertex(17.0589656829834, 39.755889892578125),
+            new Vertex(19.10852813720703, 54.61520767211914),
+        ];
+        Contour outer24 =
+        [
+            new Vertex(16.375778198242188, 34.80278396606445),
+            new Vertex(11.422673225402832, 35.4859733581543),
+            new Vertex(9.373111724853516, 20.62665557861328),
+            new Vertex(14.326217651367188, 19.943470001220703),
+            new Vertex(16.375778198242188, 34.80278396606445),
+        ];
+        Contour outer25 =
+        [
+            new Vertex(13.643030166625977, 14.990363121032715),
+            new Vertex(8.689924240112305, 15.673550605773926),
+            new Vertex(8.023447036743164, 10.841593742370605),
+            new Vertex(11.98299789428711, 8.487360000610352),
+            new Vertex(20.13201141357422, 14.49189567565918),
+            new Vertex(17.166015625, 18.517175674438477),
+            new Vertex(9.01700210571289, 12.512639999389648),
+            new Vertex(12.976552963256836, 10.158406257629395),
+            new Vertex(13.643030166625977, 14.990363121032715),
+        ];
+        Contour outer26 =
+        [
+            new Vertex(21.191295623779297, 21.483171463012695),
+            new Vertex(24.157291412353516, 17.4578914642334),
+            new Vertex(36.23312759399414, 26.355876922607422),
+            new Vertex(33.26713180541992, 30.38115692138672),
+            new Vertex(21.191295623779297, 21.483171463012695),
+        ];
+        Contour outer27 =
+        [
+            new Vertex(37.29241180419922, 33.34715270996094),
+            new Vertex(40.25840759277344, 29.32187271118164),
+            new Vertex(52.33424377441406, 38.2198600769043),
+            new Vertex(49.368247985839844, 42.24513626098633),
+            new Vertex(37.29241180419922, 33.34715270996094),
+        ];
+        Contour outer28 =
+        [
+            new Vertex(53.39352798461914, 45.21113204956055),
+            new Vertex(56.35952377319336, 41.185855865478516),
+            new Vertex(68.43536376953125, 50.08384323120117),
+            new Vertex(65.4693603515625, 54.1091194152832),
+            new Vertex(53.39352798461914, 45.21113204956055),
+        ];
+        Contour outer29 =
+        [
+            new Vertex(69.49464416503906, 57.07511520385742),
+            new Vertex(72.46063232421875, 53.04983901977539),
+            new Vertex(84.53646850585938, 61.94782257080078),
+            new Vertex(81.57048034667969, 65.97309875488281),
+            new Vertex(69.49464416503906, 57.07511520385742),
+        ];
+        Contour outer30 =
+        [
+            new Vertex(85.59574890136719, 68.93909454345703),
+            new Vertex(88.56175231933594, 64.91381072998047),
+            new Vertex(100.63758850097656, 73.81179809570312),
+            new Vertex(97.67158508300781, 77.83708190917969),
+            new Vertex(85.59574890136719, 68.93909454345703),
+        ];
+        Contour outer31 =
+        [
+            new Vertex(101.69686126708984, 80.8030776977539),
+            new Vertex(104.6628646850586, 76.77779388427734),
+            new Vertex(116.73870086669922, 85.67578125),
+            new Vertex(113.77269744873047, 89.70106506347656),
+            new Vertex(101.69686126708984, 80.8030776977539),
+        ];
+        Contour outer32 =
+        [
+            new Vertex(117.79798126220703, 92.66706085205078),
+            new Vertex(120.76396942138672, 88.64177703857422),
+            new Vertex(132.83981323242188, 97.53975677490234),
+            new Vertex(129.87380981445312, 101.5650405883789),
+            new Vertex(117.79798126220703, 92.66706085205078),
+        ];
+        Contour outer33 =
+        [
+            new Vertex(133.8990936279297, 104.53103637695312),
+            new Vertex(136.86509704589844, 100.50575256347656),
+            new Vertex(148.94093322753906, 109.40373992919922),
+            new Vertex(145.9749298095703, 113.42902374267578),
+            new Vertex(133.8990936279297, 104.53103637695312),
+        ];
+        Contour outer34 =
+        [
+            new Vertex(150.00021362304688, 116.39501953125),
+            new Vertex(152.96621704101562, 112.36973571777344),
+            new Vertex(165.04205322265625, 121.2677230834961),
+            new Vertex(162.0760498046875, 125.29300689697266),
+            new Vertex(150.00021362304688, 116.39501953125),
+        ];
+        Contour outer35 =
+        [
+            new Vertex(166.10133361816406, 128.25900268554688),
+            new Vertex(169.0673370361328, 124.23371887207031),
+            new Vertex(181.14317321777344, 133.1317138671875),
+            new Vertex(178.1771697998047, 137.156982421875),
+            new Vertex(166.10133361816406, 128.25900268554688),
+        ];
+        Contour outer36 =
+        [
+            new Vertex(182.20245361328125, 140.1229705810547),
+            new Vertex(185.16845703125, 136.0977020263672),
+            new Vertex(197.24429321289062, 144.9956817626953),
+            new Vertex(194.27828979492188, 149.0209503173828),
+            new Vertex(182.20245361328125, 140.1229705810547),
+        ];
+        Contour outer37 =
+        [
+            new Vertex(198.30357360839844, 151.98695373535156),
+            new Vertex(201.2695770263672, 147.96168518066406),
+            new Vertex(201.98300170898438, 148.48736572265625),
+            new Vertex(199.01699829101562, 152.51263427734375),
+            new Vertex(198.30357360839844, 151.98695373535156),
+        ];
+        Contour outer38 =
+        [
+            new Vertex(35.29882049560547, 86.68524932861328),
+            new Vertex(39.70117950439453, 84.31475067138672),
+            new Vertex(46.81267547607422, 97.52181243896484),
+            new Vertex(42.410316467285156, 99.8923110961914),
+            new Vertex(35.29882049560547, 86.68524932861328),
+        ];
+        Contour outer39 =
+        [
+            new Vertex(44.78081512451172, 104.29467010498047),
+            new Vertex(49.18317413330078, 101.9241714477539),
+            new Vertex(56.29467010498047, 115.13124084472656),
+            new Vertex(51.892311096191406, 117.50173950195312),
+            new Vertex(44.78081512451172, 104.29467010498047),
+        ];
+        Contour outer40 =
+        [
+            new Vertex(54.262813568115234, 121.90409088134766),
+            new Vertex(58.665164947509766, 119.5335922241211),
+            new Vertex(65.77666473388672, 132.7406463623047),
+            new Vertex(61.37431335449219, 135.1111602783203),
+            new Vertex(54.262813568115234, 121.90409088134766),
+        ];
+        Contour outer41 =
+        [
+            new Vertex(68.14716339111328, 137.85699462890625),
+            new Vertex(63.74480438232422, 135.48648071289062),
+            new Vertex(70.8563003540039, 122.27942657470703),
+            new Vertex(75.25865936279297, 124.6499252319336),
+            new Vertex(68.14716339111328, 137.85699462890625),
+        ];
+        Contour outer42 =
+        [
+            new Vertex(77.62915802001953, 120.24756622314453),
+            new Vertex(73.22679901123047, 117.87706756591797),
+            new Vertex(80.33829498291016, 104.67000579833984),
+            new Vertex(84.74065399169922, 107.0405044555664),
+            new Vertex(77.62915802001953, 120.24756622314453),
+        ];
+        Contour outer43 =
+        [
+            new Vertex(87.11115264892578, 102.63814544677734),
+            new Vertex(82.70879364013672, 100.26764678955078),
+            new Vertex(89.82029724121094, 87.06058502197266),
+            new Vertex(94.22265625, 89.43108367919922),
+            new Vertex(87.11115264892578, 102.63814544677734),
+        ];
+        Contour outer44 =
+        [
+            new Vertex(91.61859893798828, 83),
+            new Vertex(91.61859893798828, 88),
+            new Vertex(76.61859893798828, 88),
+            new Vertex(76.61859893798828, 83),
+            new Vertex(91.61859893798828, 83),
+        ];
+        Contour outer45 =
+        [
+            new Vertex(71.61859893798828, 83),
+            new Vertex(71.61859893798828, 88),
+            new Vertex(56.61859893798828, 88),
+            new Vertex(56.61859893798828, 83),
+            new Vertex(71.61859893798828, 83),
+        ];
+        Contour outer46 =
+        [
+            new Vertex(51.61859893798828, 83),
+            new Vertex(51.61859893798828, 88),
+            new Vertex(37.5, 88),
+            new Vertex(37.5, 83),
+            new Vertex(51.61859893798828, 83),
+        ];
+
+        Polygon input = [outer0, outer1, outer2, outer3, outer4, outer5, outer6, outer7, outer8, outer9,
+                         outer10, outer11, outer12, outer13, outer14, outer15, outer16, outer17, outer18,
+                         outer19, outer20, outer21, outer22, outer23, outer24, outer25, outer26,
+                         outer27, outer28, outer29, outer30, outer31, outer32, outer33, outer34,
+                         outer35, outer36, outer37, outer38, outer39, outer40, outer41,
+                         outer42, outer43, outer44, outer45, outer46];
+
+        // Act
+        Polygon result = PolygonClipper.RemoveSelfIntersections(input);
+
+        // Assert
+        PathsD clipperResult = RemoveSelfIntersectionsWithClipperD(input);
+        Assert.Equal(clipperResult.Count, result.Count);
+
+        for (int i = 0; i < clipperResult.Count; i++)
+        {
+            PathD expected = clipperResult[i];
+            PathD actual = ProjectContour(result[i]);
+            Assert.Equal(expected.Count, actual.Count);
+        }
+    }
+
     /// <summary>
     /// Tests with even larger vertex counts to stress test the algorithm.
     /// </summary>
@@ -1658,6 +2068,107 @@ public class SelfIntersectionRemoverTests
         Assert.True(result[0].IsExternal);
         Assert.False(result[1].IsExternal);
         Assert.False(result[2].IsExternal);
+    }
+
+    /// <summary>
+    /// Tests that two adjacent rectangles sharing an edge are merged into a single contour.
+    /// </summary>
+    [Fact]
+    public void TwoTouchingRectangles_MergeIntoSingleContour()
+    {
+        // Arrange: Two rectangles sharing edge at X=10
+        // Rectangle A: (0,0)-(10,0)-(10,10)-(0,10)
+        // Rectangle B: (10,0)-(20,0)-(20,10)-(10,10)
+        Contour rectA = [];
+        rectA.Add(new Vertex(0, 0));
+        rectA.Add(new Vertex(10, 0));
+        rectA.Add(new Vertex(10, 10));
+        rectA.Add(new Vertex(0, 10));
+        rectA.Add(new Vertex(0, 0));
+
+        Contour rectB = [];
+        rectB.Add(new Vertex(10, 0));
+        rectB.Add(new Vertex(20, 0));
+        rectB.Add(new Vertex(20, 10));
+        rectB.Add(new Vertex(10, 10));
+        rectB.Add(new Vertex(10, 0));
+
+        Polygon input = [rectA, rectB];
+
+        // Act
+        Polygon result = PolygonClipper.RemoveSelfIntersections(input);
+
+        // Assert: Should merge into a single rectangle (0,0)-(20,0)-(20,10)-(0,10)
+        PathsD clipperResult = RemoveSelfIntersectionsWithClipperD(input);
+        Assert.Equal(clipperResult.Count, result.Count);
+
+        // Clipper2 produces 1 merged contour
+        Assert.Equal(1, result.Count);
+
+        // The merged contour should have 4 vertices (plus closing)
+        Assert.Equal(5, result[0].Count);
+    }
+
+    /// <summary>
+    /// Tests that a rectangle and a parallelogram sharing part of an edge at Y=88 are merged.
+    /// This mimics the failing test case geometry.
+    /// </summary>
+    [Fact]
+    public void RectangleAndParallelogramTouchingAtHorizontalEdge_MergeCorrectly()
+    {
+        // Arrange: Horizontal rectangle at Y=83-88
+        Contour rect = [];
+        rect.Add(new Vertex(37.5, 83));
+        rect.Add(new Vertex(51.61859893798828, 83));
+        rect.Add(new Vertex(51.61859893798828, 88));
+        rect.Add(new Vertex(37.5, 88));
+        rect.Add(new Vertex(37.5, 83));
+
+        // Parallelogram that overlaps the rectangle (diagonal shape from ~Y=84-99)
+        Contour para = [];
+        para.Add(new Vertex(35.29882049560547, 86.68524932861328));
+        para.Add(new Vertex(39.70117950439453, 84.31475067138672));
+        para.Add(new Vertex(46.81267547607422, 97.52181243896484));
+        para.Add(new Vertex(42.410316467285156, 99.8923110961914));
+        para.Add(new Vertex(35.29882049560547, 86.68524932861328));
+
+        Polygon input = [rect, para];
+
+        // Act
+        Polygon result = PolygonClipper.RemoveSelfIntersections(input);
+
+        // Assert: Compare with Clipper2
+        PathsD clipperResult = RemoveSelfIntersectionsWithClipperD(input);
+
+        // Diagnostic output
+        System.Text.StringBuilder sb = new();
+        sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"Clipper2 count: {clipperResult.Count}, Our count: {result.Count}");
+        for (int i = 0; i < clipperResult.Count; i++)
+        {
+            sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"Clipper2[{i}]: {clipperResult[i].Count} vertices");
+            foreach (PointD pt in clipperResult[i])
+            {
+                sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"  ({pt.x:R}, {pt.y:R})");
+            }
+        }
+
+        for (int i = 0; i < result.Count; i++)
+        {
+            sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"Our[{i}]: {result[i].Count} vertices");
+            foreach (Vertex pt in result[i])
+            {
+                sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"  ({pt.X:R}, {pt.Y:R})");
+            }
+        }
+
+        Assert.True(clipperResult.Count == result.Count, sb.ToString());
+
+        for (int i = 0; i < clipperResult.Count; i++)
+        {
+            PathD expected = clipperResult[i];
+            PathD actual = ProjectContour(result[i]);
+            Assert.True(expected.Count == actual.Count, $"Contour {i}: expected {expected.Count}, got {actual.Count}\n{sb}");
+        }
     }
 
     /// <summary>
