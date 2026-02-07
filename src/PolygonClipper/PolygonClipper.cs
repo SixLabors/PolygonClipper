@@ -107,16 +107,6 @@ public class PolygonClipper
     /// </summary>
     /// <param name="polygon">The polygon to process.</param>
     /// <returns>A new <see cref="Polygon"/> without self-intersections.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses a dedicated sweep line algorithm that:
-    /// </para>
-    /// <list type="number">
-    /// <item><description>Detects all self-intersection points within the polygon.</description></item>
-    /// <item><description>Splits segments at intersection points.</description></item>
-    /// <item><description>Rebuilds contours by connecting segments at shared endpoints.</description></item>
-    /// </list>
-    /// </remarks>
     public static Polygon RemoveSelfIntersections(Polygon polygon)
         => SelfIntersectionRemover.Process(polygon);
 
