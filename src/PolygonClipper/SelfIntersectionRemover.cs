@@ -522,55 +522,172 @@ internal static class SelfIntersectionRemover
         }
 
         List<Vertex> vertices = contour.ToList();
-
-        // Remove consecutive duplicates
-        for (int i = vertices.Count - 2; i >= 0; i--)
-        {
-            if (vertices[i] == vertices[i + 1])
-            {
-                vertices.RemoveAt(i + 1);
-            }
-        }
-
         if (vertices.Count > 1 && vertices[0] == vertices[^1])
         {
             vertices.RemoveAt(vertices.Count - 1);
         }
 
-        // Remove collinear points
-        const double epsilon = 1e-12;
-        int index = 0;
-        while (vertices.Count >= 3 && index < vertices.Count)
+        ContourNode? start = BuildContourNodes(vertices);
+        if (!IsValidClosedPath(start))
         {
-            Vertex prev = vertices[(index - 1 + vertices.Count) % vertices.Count];
-            Vertex curr = vertices[index];
-            Vertex next = vertices[(index + 1) % vertices.Count];
-
-            double area = IsLeft(prev, curr, next);
-            if (Math.Abs(area) <= epsilon)
-            {
-                vertices.RemoveAt(index);
-                if (vertices.Count < 3)
-                {
-                    break;
-                }
-                continue;
-            }
-
-            index++;
+            contour.Clear();
+            return;
         }
 
-        if (vertices.Count > 0 && vertices[0] != vertices[^1])
+        start = CleanCollinear(start, preserveCollinear: true);
+        if (!IsValidClosedPath(start))
         {
-            vertices.Add(vertices[0]);
+            contour.Clear();
+            return;
+        }
+
+        List<Vertex> cleaned = BuildPath(start);
+        if (cleaned.Count < 3 || (cleaned.Count == 3 && IsVerySmallTriangle(cleaned)))
+        {
+            contour.Clear();
+            return;
+        }
+
+        if (cleaned[0] != cleaned[^1])
+        {
+            cleaned.Add(cleaned[0]);
         }
 
         contour.Clear();
-        for (int i = 0; i < vertices.Count; i++)
+        for (int i = 0; i < cleaned.Count; i++)
         {
-            contour.Add(vertices[i]);
+            contour.Add(cleaned[i]);
         }
     }
+
+    private sealed class ContourNode
+    {
+        public ContourNode(Vertex point)
+        {
+            this.Point = point;
+        }
+
+        public Vertex Point { get; set; }
+
+        public ContourNode Prev { get; set; } = null!;
+
+        public ContourNode Next { get; set; } = null!;
+    }
+
+    private static ContourNode? BuildContourNodes(List<Vertex> vertices)
+    {
+        if (vertices.Count < 3)
+        {
+            return null;
+        }
+
+        ContourNode first = new(vertices[0]);
+        ContourNode prev = first;
+        for (int i = 1; i < vertices.Count; i++)
+        {
+            ContourNode node = new(vertices[i]);
+            node.Prev = prev;
+            prev.Next = node;
+            prev = node;
+        }
+
+        prev.Next = first;
+        first.Prev = prev;
+        return first;
+    }
+
+    private static bool IsValidClosedPath(ContourNode? node)
+        => node != null && node.Next != node && (node.Next != node.Prev || !IsVerySmallTriangle(node));
+
+    private static bool IsVerySmallTriangle(ContourNode node)
+        => node.Next.Next == node.Prev &&
+            (PtsReallyClose(node.Prev.Point, node.Next.Point) ||
+             PtsReallyClose(node.Point, node.Next.Point) ||
+             PtsReallyClose(node.Point, node.Prev.Point));
+
+    private static bool IsVerySmallTriangle(List<Vertex> vertices)
+        => vertices.Count == 3 &&
+            (PtsReallyClose(vertices[0], vertices[1]) ||
+             PtsReallyClose(vertices[1], vertices[2]) ||
+             PtsReallyClose(vertices[2], vertices[0]));
+
+    private static bool PtsReallyClose(Vertex a, Vertex b)
+        => Math.Abs(a.X - b.X) < 2 && Math.Abs(a.Y - b.Y) < 2;
+
+    private static ContourNode? DisposeNode(ContourNode node)
+    {
+        ContourNode? result = node.Next == node ? null : node.Next;
+        node.Prev.Next = node.Next;
+        node.Next.Prev = node.Prev;
+        return result;
+    }
+
+    private static ContourNode? CleanCollinear(ContourNode start, bool preserveCollinear)
+    {
+        ContourNode? op2 = start;
+        ContourNode? currentStart = start;
+
+        for (;;)
+        {
+            if (IsCollinear(op2!.Prev.Point, op2.Point, op2.Next.Point) &&
+                ((op2.Point == op2.Prev.Point) || (op2.Point == op2.Next.Point) || !preserveCollinear ||
+                 (DotProduct(op2.Prev.Point, op2.Point, op2.Next.Point) < 0)))
+            {
+                if (op2 == currentStart)
+                {
+                    currentStart = op2.Prev;
+                }
+
+                op2 = DisposeNode(op2);
+                if (!IsValidClosedPath(op2))
+                {
+                    return null;
+                }
+
+                currentStart = op2;
+                continue;
+            }
+
+            op2 = op2.Next;
+            if (op2 == currentStart)
+            {
+                break;
+            }
+        }
+
+        return currentStart;
+    }
+
+    private static List<Vertex> BuildPath(ContourNode start)
+    {
+        List<Vertex> path = [];
+        Vertex last = start.Point;
+        path.Add(last);
+        ContourNode node = start.Next;
+        while (node != start)
+        {
+            if (node.Point != last)
+            {
+                last = node.Point;
+                path.Add(last);
+            }
+
+            node = node.Next;
+        }
+
+        return path;
+    }
+
+    private static bool IsCollinear(Vertex a, Vertex b, Vertex c)
+    {
+        double area = IsLeft(a, b, c);
+        double scale = Math.Abs(a.X) + Math.Abs(a.Y) + Math.Abs(b.X) + Math.Abs(b.Y) + Math.Abs(c.X) + Math.Abs(c.Y) + 1;
+        double tolerance = 1e-9 * scale;
+        return Math.Abs(area) <= tolerance;
+    }
+
+    private static double DotProduct(Vertex pt1, Vertex pt2, Vertex pt3)
+        => ((pt1.X - pt2.X) * (pt3.X - pt2.X)) + ((pt1.Y - pt2.Y) * (pt3.Y - pt2.Y));
 
     /// <summary>
     /// Runs the sweep line algorithm with positive fill rule to process self-intersecting polygons.
