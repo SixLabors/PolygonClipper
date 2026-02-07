@@ -55,7 +55,8 @@ internal static class SelfIntersectionRemover
             return [];
         }
 
-        List<DirectedSegment> segments = BuildArrangementSegments(polygon);
+        Polygon orientedPolygon = OrientContoursForPositiveFill(polygon);
+        List<DirectedSegment> segments = BuildArrangementSegments(orientedPolygon);
         if (segments.Count == 0)
         {
             return [];
@@ -77,6 +78,201 @@ internal static class SelfIntersectionRemover
         }
 
         return PolygonUtilities.BuildNormalizedPolygon(result);
+    }
+
+    private static Polygon OrientContoursForPositiveFill(Polygon polygon)
+    {
+        if (polygon.Count == 0)
+        {
+            return polygon;
+        }
+
+        int count = polygon.Count;
+        int[] parentIndices = new int[count];
+        Array.Fill(parentIndices, -1);
+
+        bool hasHierarchy = false;
+        for (int i = 0; i < count; i++)
+        {
+            Contour contour = polygon[i];
+            if (contour.ParentIndex != null || contour.HoleCount > 0)
+            {
+                hasHierarchy = true;
+                break;
+            }
+        }
+
+        if (hasHierarchy)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                parentIndices[i] = polygon[i].ParentIndex ?? -1;
+            }
+        }
+        else
+        {
+            for (int i = 0; i < count; i++)
+            {
+                Vertex testPoint = GetContourTestPoint(polygon[i]);
+                double smallestArea = double.PositiveInfinity;
+                int parentIndex = -1;
+
+                for (int j = 0; j < count; j++)
+                {
+                    if (i == j)
+                    {
+                        continue;
+                    }
+
+                    Contour candidate = polygon[j];
+                    if (PointInContour(testPoint, candidate))
+                    {
+                        double area = Math.Abs(GetSignedArea(candidate));
+                        if (area < smallestArea)
+                        {
+                            smallestArea = area;
+                            parentIndex = j;
+                        }
+                    }
+                }
+
+                parentIndices[i] = parentIndex;
+            }
+        }
+
+        int[] depths = new int[count];
+        for (int i = 0; i < count; i++)
+        {
+            depths[i] = GetDepth(i, parentIndices);
+        }
+
+        Polygon oriented = [];
+        for (int i = 0; i < count; i++)
+        {
+            Contour copy = [];
+            Contour original = polygon[i];
+            for (int j = 0; j < original.Count; j++)
+            {
+                copy.Add(original[j]);
+            }
+
+            if (depths[i] % 2 == 0)
+            {
+                copy.SetCounterClockwise();
+            }
+            else
+            {
+                copy.SetClockwise();
+            }
+
+            oriented.Add(copy);
+        }
+
+        return oriented;
+    }
+
+    private static int GetDepth(int index, int[] parentIndices)
+    {
+        int depth = 0;
+        int current = parentIndices[index];
+        while (current >= 0)
+        {
+            depth++;
+            current = parentIndices[current];
+        }
+
+        return depth;
+    }
+
+    private static Vertex GetContourTestPoint(Contour contour)
+    {
+        if (contour.Count == 0)
+        {
+            return default;
+        }
+
+        Vertex first = contour[0];
+        if (contour.Count > 1 && first == contour[^1])
+        {
+            return contour[1];
+        }
+
+        return first;
+    }
+
+    private static bool PointInContour(in Vertex point, Contour contour)
+    {
+        int count = contour.Count;
+        if (count < 3)
+        {
+            return false;
+        }
+
+        bool inside = false;
+        Vertex previous = contour[count - 1];
+
+        for (int i = 0; i < count; i++)
+        {
+            Vertex current = contour[i];
+            if (current == previous)
+            {
+                previous = current;
+                continue;
+            }
+
+            if (IsPointOnSegment(point, previous, current))
+            {
+                return true;
+            }
+
+            bool intersects = (current.Y > point.Y) != (previous.Y > point.Y);
+            if (intersects)
+            {
+                double xIntersection = ((previous.X - current.X) * (point.Y - current.Y) / (previous.Y - current.Y)) + current.X;
+                if (point.X < xIntersection)
+                {
+                    inside = !inside;
+                }
+            }
+
+            previous = current;
+        }
+
+        return inside;
+    }
+
+    private static bool IsPointOnSegment(in Vertex point, in Vertex a, in Vertex b)
+    {
+        if (PolygonUtilities.SignedArea(a, b, point) != 0D)
+        {
+            return false;
+        }
+
+        double minX = Math.Min(a.X, b.X);
+        double maxX = Math.Max(a.X, b.X);
+        double minY = Math.Min(a.Y, b.Y);
+        double maxY = Math.Max(a.Y, b.Y);
+
+        return point.X >= minX && point.X <= maxX && point.Y >= minY && point.Y <= maxY;
+    }
+
+    private static double GetSignedArea(Contour contour)
+    {
+        int count = contour.Count;
+        if (count < 3)
+        {
+            return 0D;
+        }
+
+        double area = 0D;
+        for (int i = 0; i < count; i++)
+        {
+            Vertex current = contour[i];
+            Vertex next = contour[(i + 1) % count];
+            area += (current.X * next.Y) - (next.X * current.Y);
+        }
+
+        return area * 0.5;
     }
 
     private readonly record struct DirectedSegment(Vertex Source, Vertex Target);
@@ -400,7 +596,11 @@ internal static class SelfIntersectionRemover
             while (current != null && guard++ < 100000)
             {
                 visited.Add(current);
-                contour.Add(current.Origin.Point);
+                Vertex point = current.Origin.Point;
+                if (contour.Count == 0 || !ArePointsClose(contour[^1], point))
+                {
+                    contour.Add(point);
+                }
 
                 current = NextBoundaryEdge(current, edge);
                 if (current == null || current == edge)
@@ -422,8 +622,8 @@ internal static class SelfIntersectionRemover
 
     private static bool IsBoundaryEdge(HalfEdge edge)
     {
-        bool leftInside = (edge.LeftWinding & 1) != 0;
-        bool rightInside = edge.Twin != null && (edge.Twin.LeftWinding & 1) != 0;
+        bool leftInside = edge.LeftWinding > 0;
+        bool rightInside = edge.Twin != null && edge.Twin.LeftWinding > 0;
         return leftInside && !rightInside;
     }
 
@@ -534,7 +734,7 @@ internal static class SelfIntersectionRemover
             return;
         }
 
-        start = CleanCollinear(start, preserveCollinear: true);
+        start = CleanCollinear(start, preserveCollinear: false);
         if (!IsValidClosedPath(start))
         {
             contour.Clear();
@@ -542,6 +742,7 @@ internal static class SelfIntersectionRemover
         }
 
         List<Vertex> cleaned = BuildPath(start);
+        cleaned = TrimCollinear(cleaned);
         if (cleaned.Count < 3 || (cleaned.Count == 3 && IsVerySmallTriangle(cleaned)))
         {
             contour.Clear();
@@ -630,7 +831,7 @@ internal static class SelfIntersectionRemover
         for (;;)
         {
             if (IsCollinear(op2!.Prev.Point, op2.Point, op2.Next.Point) &&
-                ((op2.Point == op2.Prev.Point) || (op2.Point == op2.Next.Point) || !preserveCollinear ||
+                (ArePointsClose(op2.Point, op2.Prev.Point) || ArePointsClose(op2.Point, op2.Next.Point) || !preserveCollinear ||
                  (DotProduct(op2.Prev.Point, op2.Point, op2.Next.Point) < 0)))
             {
                 if (op2 == currentStart)
@@ -666,7 +867,7 @@ internal static class SelfIntersectionRemover
         ContourNode node = start.Next;
         while (node != start)
         {
-            if (node.Point != last)
+            if (!ArePointsClose(node.Point, last))
             {
                 last = node.Point;
                 path.Add(last);
@@ -678,16 +879,85 @@ internal static class SelfIntersectionRemover
         return path;
     }
 
+    private static List<Vertex> TrimCollinear(List<Vertex> path)
+    {
+        int len = path.Count;
+        if (len < 3)
+        {
+            return path;
+        }
+
+        int i = 0;
+        while (i < len - 1 && IsCollinear(path[len - 1], path[i], path[i + 1]))
+        {
+            i++;
+        }
+
+        while (i < len - 1 && IsCollinear(path[len - 2], path[len - 1], path[i]))
+        {
+            len--;
+        }
+
+        if (len - i < 3)
+        {
+            return [];
+        }
+
+        List<Vertex> result = new(len - i);
+        Vertex last = path[i];
+        result.Add(last);
+
+        for (i++; i < len - 1; i++)
+        {
+            if (IsCollinear(last, path[i], path[i + 1]))
+            {
+                continue;
+            }
+
+            last = path[i];
+            result.Add(last);
+        }
+
+        if (!IsCollinear(last, path[len - 1], result[0]))
+        {
+            result.Add(path[len - 1]);
+        }
+        else
+        {
+            while (result.Count > 2 && IsCollinear(result[^1], result[^2], result[0]))
+            {
+                result.RemoveAt(result.Count - 1);
+            }
+
+            if (result.Count < 3)
+            {
+                result.Clear();
+            }
+        }
+
+        return result;
+    }
+
     private static bool IsCollinear(Vertex a, Vertex b, Vertex c)
     {
-        double area = IsLeft(a, b, c);
-        double scale = Math.Abs(a.X) + Math.Abs(a.Y) + Math.Abs(b.X) + Math.Abs(b.Y) + Math.Abs(c.X) + Math.Abs(c.Y) + 1;
-        double tolerance = 1e-9 * scale;
-        return Math.Abs(area) <= tolerance;
+        double dx = c.X - a.X;
+        double dy = c.Y - a.Y;
+        double lenSq = (dx * dx) + (dy * dy);
+        if (lenSq <= double.Epsilon)
+        {
+            return true;
+        }
+
+        double cross = Math.Abs((b.X - a.X) * dy - (b.Y - a.Y) * dx);
+        double distance = cross / Math.Sqrt(lenSq);
+        return distance <= 1e-3;
     }
 
     private static double DotProduct(Vertex pt1, Vertex pt2, Vertex pt3)
-        => ((pt1.X - pt2.X) * (pt3.X - pt2.X)) + ((pt1.Y - pt2.Y) * (pt3.Y - pt2.Y));
+        => ((pt2.X - pt1.X) * (pt3.X - pt2.X)) + ((pt2.Y - pt1.Y) * (pt3.Y - pt2.Y));
+
+    private static bool ArePointsClose(Vertex a, Vertex b)
+        => Math.Abs(a.X - b.X) <= 1e-5 && Math.Abs(a.Y - b.Y) <= 1e-5;
 
     /// <summary>
     /// Runs the sweep line algorithm with positive fill rule to process self-intersecting polygons.
