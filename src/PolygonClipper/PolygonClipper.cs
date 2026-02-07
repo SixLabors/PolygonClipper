@@ -116,9 +116,6 @@ public class PolygonClipper
     /// <item><description>Splits segments at intersection points.</description></item>
     /// <item><description>Rebuilds contours by connecting segments at shared endpoints.</description></item>
     /// </list>
-    /// <para>
-    /// For polygons with no self-intersections, this method returns a copy with the same structure.
-    /// </para>
     /// </remarks>
     public static Polygon RemoveSelfIntersections(Polygon polygon)
         => SelfIntersectionRemover.Process(polygon);
