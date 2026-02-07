@@ -67,17 +67,115 @@ internal static class SelfIntersectionRemover
         ComputeEdgeWinding(graph, segments);
         List<Contour> contours = ExtractBoundaryContours(graph);
 
-        Polygon result = [];
+        List<Contour> result = [];
         foreach (Contour contour in contours)
         {
             CleanupContour(contour);
             if (contour.Count > 2)
             {
+                RotateContourToLowestPoint(contour);
                 result.Add(contour);
             }
         }
+        result.Sort(CompareContoursByLowestPoint);
+        Polygon resultPolygon = [];
+        for (int i = 0; i < result.Count; i++)
+        {
+            resultPolygon.Add(result[i]);
+        }
 
-        return PolygonUtilities.BuildNormalizedPolygon(result);
+        return resultPolygon;
+    }
+
+    private static int CompareContoursByLowestPoint(Contour left, Contour right)
+    {
+        Vertex leftPoint = GetLowestPoint(left);
+        Vertex rightPoint = GetLowestPoint(right);
+
+        if (leftPoint.Y < rightPoint.Y)
+        {
+            return -1;
+        }
+
+        if (leftPoint.Y > rightPoint.Y)
+        {
+            return 1;
+        }
+
+        return rightPoint.X.CompareTo(leftPoint.X);
+    }
+
+    private static Vertex GetLowestPoint(Contour contour)
+    {
+        int count = contour.Count;
+        if (count == 0)
+        {
+            return default;
+        }
+
+        int lastIndex = count - 1;
+        if (count > 1 && contour[0] == contour[^1])
+        {
+            lastIndex = count - 2;
+        }
+
+        Vertex lowest = contour[0];
+        for (int i = 1; i <= lastIndex; i++)
+        {
+            Vertex candidate = contour[i];
+            if (candidate.Y < lowest.Y || (candidate.Y == lowest.Y && candidate.X > lowest.X))
+            {
+                lowest = candidate;
+            }
+        }
+
+        return lowest;
+    }
+
+    private static void RotateContourToLowestPoint(Contour contour)
+    {
+        int count = contour.Count;
+        if (count < 2)
+        {
+            return;
+        }
+
+        bool isClosed = contour[0] == contour[^1];
+        int limit = isClosed ? count - 1 : count;
+
+        int lowestIndex = 0;
+        Vertex lowest = contour[0];
+        for (int i = 1; i < limit; i++)
+        {
+            Vertex candidate = contour[i];
+            if (candidate.Y < lowest.Y || (candidate.Y == lowest.Y && candidate.X > lowest.X))
+            {
+                lowest = candidate;
+                lowestIndex = i;
+            }
+        }
+
+        if (lowestIndex == 0)
+        {
+            return;
+        }
+
+        List<Vertex> rotated = new(limit + (isClosed ? 1 : 0));
+        for (int i = 0; i < limit; i++)
+        {
+            rotated.Add(contour[(i + lowestIndex) % limit]);
+        }
+
+        if (isClosed)
+        {
+            rotated.Add(rotated[0]);
+        }
+
+        contour.Clear();
+        for (int i = 0; i < rotated.Count; i++)
+        {
+            contour.Add(rotated[i]);
+        }
     }
 
     private static Polygon OrientContoursForPositiveFill(Polygon polygon)
@@ -1521,17 +1619,8 @@ internal static class SelfIntersectionRemover
             contours.Add(copy);
         }
 
-        // Build final polygon sorted by depth
         Polygon result = [];
-        List<int> indices = new(contours.Count);
         for (int i = 0; i < contours.Count; i++)
-        {
-            indices.Add(i);
-        }
-
-        indices.Sort((a, b) => contourDepth[a].CompareTo(contourDepth[b]));
-
-        foreach (int i in indices)
         {
             result.Add(contours[i]);
         }
@@ -1634,24 +1723,7 @@ internal static class SelfIntersectionRemover
             result.Add(contour);
         }
 
-        // Build final polygon with externals first, then holes
-        Polygon polygon = [];
-        for (int i = 0; i < result.Count; i++)
-        {
-            Contour contour = result[i];
-            if (contour.IsExternal)
-            {
-                polygon.Add(contour);
-
-                for (int j = 0; j < contour.HoleCount; j++)
-                {
-                    int holeId = contour.GetHoleIndex(j);
-                    polygon.Add(result[holeId]);
-                }
-            }
-        }
-
-        return polygon;
+        return result;
     }
 
     private static ReadOnlySpan<int> PrecomputeIterationOrder(List<SweepEvent> data)

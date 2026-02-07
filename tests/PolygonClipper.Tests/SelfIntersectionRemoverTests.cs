@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System;
+using Clipper2Lib;
 
 namespace SixLabors.PolygonClipper.Tests;
 
@@ -1530,10 +1531,28 @@ public class SelfIntersectionRemoverTests
         // Assert: The "9" shape is more complex than the "O" shape. The input contours contain
         // self-intersections that, when resolved with positive fill rule, produce 4 contours.
         // This matches Clipper2's output with positive fill rule.
-        Assert.Equal(4, result.Count);
+        PathsD clipperResult = RemoveSelfIntersectionsWithClipperD(input);
+        Assert.Equal(clipperResult.Count, result.Count);
 
-        int[] counts = result.Select(contour => contour.Count).ToArray();
-        Assert.Equal(new[] { 216, 221, 145, 145 }, counts);
+        for (int i = 0; i < clipperResult.Count; i++)
+        {
+            PathD expected = clipperResult[i];
+            PathD actual = ProjectContour(result[i]);
+            Assert.Equal(expected.Count, actual.Count);
+
+            for (int j = 0; j < expected.Count; j++)
+            {
+                PointD expectedPoint = expected[j];
+                PointD actualPoint = actual[j];
+
+                if (!ArePointsClose(expectedPoint, actualPoint))
+                {
+                    string message = $"Contour {i}, Vertex {j}: Expected ({expectedPoint.x}, {expectedPoint.y}), " +
+                                     $"Actual ({actualPoint.x}, {actualPoint.y})";
+                    Assert.Fail(message);
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -1697,4 +1716,109 @@ public class SelfIntersectionRemoverTests
 
         return contour;
     }
+
+    private static PathsD RemoveSelfIntersectionsWithClipperD(Polygon polygon, int precision = 6)
+    {
+        PathsD subject = new(polygon.Count);
+        for (int i = 0; i < polygon.Count; i++)
+        {
+            Contour contour = polygon[i];
+            PathD path = new(contour.Count);
+            for (int j = 0; j < contour.Count; j++)
+            {
+                Vertex vertex = contour[j];
+                path.Add(new PointD(vertex.X, vertex.Y));
+            }
+
+            subject.Add(path);
+        }
+
+        GetLowestPathInfo(subject, out int lowestPathIdx, out bool isNegArea);
+        bool pathsReversed = lowestPathIdx >= 0 && isNegArea;
+        FillRule fillRule = pathsReversed ? FillRule.Negative : FillRule.Positive;
+
+        ClipperD clipper = new(precision)
+        {
+            PreserveCollinear = false,
+            ReverseSolution = pathsReversed
+        };
+
+        clipper.AddSubject(subject);
+        PathsD solution = [];
+        clipper.Execute(ClipType.Union, fillRule, solution);
+        return solution;
+    }
+
+    private static void GetLowestPathInfo(PathsD paths, out int lowestPathIdx, out bool isNegArea)
+    {
+        lowestPathIdx = -1;
+        isNegArea = false;
+
+        if (paths.Count == 0)
+        {
+            return;
+        }
+
+        PointD lowestPoint = default;
+        bool hasPoint = false;
+
+        for (int i = 0; i < paths.Count; i++)
+        {
+            PathD path = paths[i];
+            if (path.Count == 0)
+            {
+                continue;
+            }
+
+            PointD candidate = GetLowestPoint(path);
+            if (!hasPoint || candidate.y > lowestPoint.y ||
+                (candidate.y == lowestPoint.y && candidate.x < lowestPoint.x))
+            {
+                lowestPoint = candidate;
+                lowestPathIdx = i;
+                hasPoint = true;
+            }
+        }
+
+        if (lowestPathIdx >= 0)
+        {
+            isNegArea = Clipper.Area(paths[lowestPathIdx]) < 0;
+        }
+    }
+
+    private static PointD GetLowestPoint(PathD path)
+    {
+        PointD lowest = path[0];
+        for (int i = 1; i < path.Count; i++)
+        {
+            PointD candidate = path[i];
+            if (candidate.y > lowest.y || (candidate.y == lowest.y && candidate.x < lowest.x))
+            {
+                lowest = candidate;
+            }
+        }
+
+        return lowest;
+    }
+
+    private static PathD ProjectContour(Contour contour)
+    {
+        int count = contour.Count;
+        if (count > 1 && contour[0] == contour[^1])
+        {
+            count--;
+        }
+
+        PathD path = new(count);
+        for (int i = 0; i < count; i++)
+        {
+            Vertex vertex = contour[i];
+            path.Add(new PointD(vertex.X, vertex.Y));
+        }
+
+        return path;
+    }
+
+    private static bool ArePointsClose(PointD expected, PointD actual)
+        => Math.Abs(expected.x - actual.x) <= 1e-6 && Math.Abs(expected.y - actual.y) <= 1e-6;
 }

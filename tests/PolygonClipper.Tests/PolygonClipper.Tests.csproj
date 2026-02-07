@@ -25,6 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\..\AngusJohnson\Clipper2\CSharp\Clipper2Lib\Clipper2Lib.csproj" />
     <ProjectReference Include="..\..\src\PolygonClipper\PolygonClipper.csproj" />
     <ProjectReference Include="..\GeoJson\GeoJson.csproj" />
   </ItemGroup>
