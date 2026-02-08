@@ -491,8 +491,7 @@ internal static class SelfIntersectionRemover
     {
         SweepEventComparer comparer = new();
         List<SweepEvent> unorderedEvents = new(polygon.VertexCount * 2);
-        List<(Vertex Source, Vertex Target, int WindDelta)> segmentEndpoints = new(polygon.VertexCount);
-        List<List<Vertex>> segmentSplits = new(polygon.VertexCount);
+        List<SegmentSplit> segmentSplits = new(polygon.VertexCount);
 
         int contourId = 0;
         int segmentId = 0;
@@ -542,8 +541,7 @@ internal static class SelfIntersectionRemover
                 unorderedEvents.Add(e1);
                 unorderedEvents.Add(e2);
 
-                segmentEndpoints.Add((segment.Source, segment.Target, windDelta));
-                segmentSplits.Add([segment.Source, segment.Target]);
+                segmentSplits.Add(new SegmentSplit(segment.Source, segment.Target, windDelta));
                 segmentId++;
             }
         }
@@ -555,6 +553,7 @@ internal static class SelfIntersectionRemover
 
         StablePriorityQueue<SweepEvent, SweepEventComparer> eventQueue = new(comparer, unorderedEvents);
         StatusLine statusLine = new(polygon.VertexCount >> 1);
+        Span<SegmentSplit> segmentSplitSpan = CollectionsMarshal.AsSpan(segmentSplits);
 
         // Guard against pathological input that could otherwise leave the sweep stuck in an infinite loop.
         int maxIterations = unorderedEvents.Count * 10;
@@ -579,12 +578,12 @@ internal static class SelfIntersectionRemover
 
                 if (nextEvent != null)
                 {
-                    _ = PossibleIntersection(sweepEvent, nextEvent, eventQueue, workspace, comparer, segmentSplits);
+                    _ = PossibleIntersection(sweepEvent, nextEvent, eventQueue, workspace, comparer, segmentSplitSpan);
                 }
 
                 if (prevEvent != null)
                 {
-                    _ = PossibleIntersection(prevEvent, sweepEvent, eventQueue, workspace, comparer, segmentSplits);
+                    _ = PossibleIntersection(prevEvent, sweepEvent, eventQueue, workspace, comparer, segmentSplitSpan);
                 }
             }
             else
@@ -599,7 +598,7 @@ internal static class SelfIntersectionRemover
 
                     if (prevEvent != null && nextEvent != null)
                     {
-                        _ = PossibleIntersection(prevEvent, nextEvent, eventQueue, workspace, comparer, segmentSplits);
+                        _ = PossibleIntersection(prevEvent, nextEvent, eventQueue, workspace, comparer, segmentSplitSpan);
                     }
 
                     statusLine.RemoveAt(position);
@@ -607,28 +606,39 @@ internal static class SelfIntersectionRemover
             }
         }
 
-        List<DirectedSegment> segments = BuildSegmentsFromSplits(segmentEndpoints, segmentSplits);
+        List<DirectedSegment> segments = BuildSegmentsFromSplits(segmentSplits);
         return MergeDuplicateSegments(segments);
     }
 
     /// <summary>
     /// Builds the final directed segments by sorting and emitting split points per original segment.
     /// </summary>
-    private static List<DirectedSegment> BuildSegmentsFromSplits(
-        List<(Vertex Source, Vertex Target, int WindDelta)> segmentEndpoints,
-        List<List<Vertex>> segmentSplits)
+    private static List<DirectedSegment> BuildSegmentsFromSplits(List<SegmentSplit> segmentSplits)
     {
         List<DirectedSegment> segments = new(segmentSplits.Count * 2);
 
         for (int i = 0; i < segmentSplits.Count; i++)
         {
-            List<Vertex> splits = segmentSplits[i];
+            SegmentSplit segmentSplit = segmentSplits[i];
+            List<Vertex>? splits = segmentSplit.Splits;
+            if (splits == null)
+            {
+                if (segmentSplit.Source != segmentSplit.Target)
+                {
+                    segments.Add(new DirectedSegment(segmentSplit.Source, segmentSplit.Target, segmentSplit.WindDelta));
+                }
+
+                continue;
+            }
+
             if (splits.Count < 2)
             {
                 continue;
             }
 
-            (Vertex source, Vertex target, int windDelta) = segmentEndpoints[i];
+            Vertex source = segmentSplit.Source;
+            Vertex target = segmentSplit.Target;
+            int windDelta = segmentSplit.WindDelta;
             double dx = target.X - source.X;
             double dy = target.Y - source.Y;
             if (dx == 0D && dy == 0D)
@@ -811,7 +821,6 @@ internal static class SelfIntersectionRemover
             while (current != null && current.Face == null && guard++ < graph.Edges.Count)
             {
                 current.Face = face;
-                face.Boundary.Add(current.Origin.Point);
                 face.Edges.Add(current);
                 current = current.Next;
                 if (current == edge)
@@ -820,7 +829,7 @@ internal static class SelfIntersectionRemover
                 }
             }
 
-            if (face.Boundary.Count > 0)
+            if (face.Edges.Count > 0)
             {
                 faces.Add(face);
             }
@@ -844,17 +853,17 @@ internal static class SelfIntersectionRemover
             return;
         }
 
-        const int Unassigned = int.MinValue;
+        const int unassigned = int.MinValue;
         for (int i = 0; i < faces.Count; i++)
         {
-            faces[i].Winding = Unassigned;
+            faces[i].Winding = unassigned;
         }
 
         Stack<Face> stack = new();
         for (int i = 0; i < faces.Count; i++)
         {
             Face face = faces[i];
-            if (face.Winding != Unassigned)
+            if (face.Winding != unassigned)
             {
                 continue;
             }
@@ -878,7 +887,7 @@ internal static class SelfIntersectionRemover
 
                     // left - right = windDelta, so right = left - windDelta.
                     int neighborWinding = current.Winding - edge.WindDelta;
-                    if (neighbor.Winding == Unassigned)
+                    if (neighbor.Winding == unassigned)
                     {
                         neighbor.Winding = neighborWinding;
                         stack.Push(neighbor);
@@ -1016,11 +1025,11 @@ internal static class SelfIntersectionRemover
     /// Tests whether a point lies strictly inside the face boundary.
     /// </summary>
     /// <param name="point">The point to test.</param>
-    /// <param name="face">The face boundary.</param>
+    /// <param name="face">The face to test.</param>
     /// <returns><see langword="true"/> if the point is inside the face.</returns>
     private static bool IsPointInsideFace(in Vertex point, Face face)
     {
-        int count = face.Boundary.Count;
+        int count = face.Edges.Count;
         if (count < 3)
         {
             return false;
@@ -1028,11 +1037,11 @@ internal static class SelfIntersectionRemover
 
         // Standard ray-casting, but treat boundary points as outside to avoid ambiguous samples.
         bool inside = false;
-        Vertex previous = face.Boundary[^1];
+        Vertex previous = face.Edges[^1].Origin.Point;
 
         for (int i = 0; i < count; i++)
         {
-            Vertex current = face.Boundary[i];
+            Vertex current = face.Edges[i].Origin.Point;
             if (current == previous)
             {
                 previous = current;
@@ -1090,7 +1099,7 @@ internal static class SelfIntersectionRemover
                 }
 
                 // Follow the boundary by taking the smallest CCW turn at each vertex.
-                current = NextBoundaryEdge(current, edge);
+                current = NextBoundaryEdge(current);
                 if (current != null && current != edge && current.Visited)
                 {
                     break;
@@ -1220,8 +1229,10 @@ internal static class SelfIntersectionRemover
         List<Vertex> rightVerts = BuildRotatedVertices(right, rightIndex);
 
         // Stitch the two boundary cycles at the shared vertex, keeping explicit closure.
-        Contour merged = new(leftVerts.Count + rightVerts.Count + 1);
-        merged.Add(shared);
+        Contour merged = new(leftVerts.Count + rightVerts.Count + 1)
+        {
+            shared
+        };
         for (int i = 1; i < leftVerts.Count; i++)
         {
             merged.Add(leftVerts[i]);
@@ -1335,9 +1346,8 @@ internal static class SelfIntersectionRemover
     /// Advances to the next boundary edge, wrapping when the walk returns to the starting edge.
     /// </summary>
     /// <param name="edge">The current boundary edge.</param>
-    /// <param name="start">The originating edge for cycle detection.</param>
     /// <returns>The next boundary edge or <see langword="null"/> if traversal fails.</returns>
-    private static HalfEdge? NextBoundaryEdge(HalfEdge edge, HalfEdge start)
+    private static HalfEdge? NextBoundaryEdge(HalfEdge edge)
     {
         List<HalfEdge> outgoing = edge.Destination.Outgoing;
         if (outgoing.Count == 0)
@@ -1725,8 +1735,25 @@ internal static class SelfIntersectionRemover
     /// <summary>
     /// Adds a split point to a segment's split list, ignoring near-duplicates.
     /// </summary>
-    private static void AddSplitPoint(List<Vertex> splits, Vertex point)
+    private static void AddSplitPoint(ref SegmentSplit segmentSplit, Vertex point)
     {
+        if (segmentSplit.Splits == null)
+        {
+            if (ArePointsClose(segmentSplit.Source, point) || ArePointsClose(segmentSplit.Target, point))
+            {
+                return;
+            }
+
+            segmentSplit.Splits = new List<Vertex>(4)
+            {
+                segmentSplit.Source,
+                segmentSplit.Target,
+                point
+            };
+            return;
+        }
+
+        List<Vertex> splits = segmentSplit.Splits;
         for (int i = 0; i < splits.Count; i++)
         {
             if (ArePointsClose(splits[i], point))
@@ -1756,7 +1783,7 @@ internal static class SelfIntersectionRemover
         StablePriorityQueue<SweepEvent, SweepEventComparer> eventQueue,
         Span<SweepEvent> workspace,
         SweepEventComparer comparer,
-        List<List<Vertex>> segmentSplits)
+        Span<SegmentSplit> segmentSplits)
     {
         if (le1.OtherEvent == null || le2.OtherEvent == null)
         {
@@ -1777,21 +1804,21 @@ internal static class SelfIntersectionRemover
         // Record split points for both segments so we can rebuild all sub-segments after the sweep.
         if (nIntersections >= 1)
         {
-            if (le1.SegmentId >= 0 && le1.SegmentId < segmentSplits.Count)
+            if (le1.SegmentId >= 0 && le1.SegmentId < segmentSplits.Length)
             {
-                AddSplitPoint(segmentSplits[le1.SegmentId], ip1);
+                AddSplitPoint(ref segmentSplits[le1.SegmentId], ip1);
                 if (nIntersections == 2)
                 {
-                    AddSplitPoint(segmentSplits[le1.SegmentId], ip2);
+                    AddSplitPoint(ref segmentSplits[le1.SegmentId], ip2);
                 }
             }
 
-            if (le2.SegmentId >= 0 && le2.SegmentId < segmentSplits.Count)
+            if (le2.SegmentId >= 0 && le2.SegmentId < segmentSplits.Length)
             {
-                AddSplitPoint(segmentSplits[le2.SegmentId], ip1);
+                AddSplitPoint(ref segmentSplits[le2.SegmentId], ip1);
                 if (nIntersections == 2)
                 {
-                    AddSplitPoint(segmentSplits[le2.SegmentId], ip2);
+                    AddSplitPoint(ref segmentSplits[le2.SegmentId], ip2);
                 }
             }
         }
@@ -1974,6 +2001,35 @@ internal static class SelfIntersectionRemover
     private readonly record struct DirectedSegment(Vertex Source, Vertex Target, int WindDelta);
 
     /// <summary>
+    /// Holds split points for a segment, allocating only when intersections occur.
+    /// </summary>
+    private struct SegmentSplit
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="SegmentSplit"/> struct.
+        /// </summary>
+        public SegmentSplit(Vertex source, Vertex target, int windDelta)
+        {
+            this.Source = source;
+            this.Target = target;
+            this.WindDelta = windDelta;
+            this.Splits = null;
+        }
+
+        /// <summary>Gets the segment source.</summary>
+        public Vertex Source { get; }
+
+        /// <summary>Gets the segment target.</summary>
+        public Vertex Target { get; }
+
+        /// <summary>Gets the winding delta for the segment.</summary>
+        public int WindDelta { get; }
+
+        /// <summary>Gets or sets the split point list when intersections occur.</summary>
+        public List<Vertex>? Splits { get; set; }
+    }
+
+    /// <summary>
     /// Represents a graph vertex with a collection of outgoing half-edges.
     /// </summary>
     private sealed class Node
@@ -2040,9 +2096,6 @@ internal static class SelfIntersectionRemover
     /// </summary>
     private sealed class Face
     {
-        /// <summary>Gets the vertices that make up the face boundary.</summary>
-        public List<Vertex> Boundary { get; } = [];
-
         /// <summary>Gets the half-edges encountered when walking this face.</summary>
         public List<HalfEdge> Edges { get; } = [];
 
