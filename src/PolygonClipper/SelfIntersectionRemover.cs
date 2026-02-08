@@ -64,8 +64,8 @@ internal static class SelfIntersectionRemover
 
         // Build half-edges, enumerate faces, and classify boundary edges by winding.
         HalfEdgeGraph graph = BuildHalfEdgeGraph(segments);
-        _ = EnumerateFaces(graph);
-        ComputeEdgeWinding(graph, segments);
+        List<Face> faces = EnumerateFaces(graph);
+        ComputeFaceWindings(graph, faces, segments);
         List<Contour> contours = ExtractBoundaryContours(graph);
         List<Contour> mergedContours = MergeTouchingContours(contours);
 
@@ -491,7 +491,7 @@ internal static class SelfIntersectionRemover
     {
         SweepEventComparer comparer = new();
         List<SweepEvent> unorderedEvents = new(polygon.VertexCount * 2);
-        List<(Vertex Source, Vertex Target)> segmentEndpoints = new(polygon.VertexCount);
+        List<(Vertex Source, Vertex Target, int WindDelta)> segmentEndpoints = new(polygon.VertexCount);
         List<List<Vertex>> segmentSplits = new(polygon.VertexCount);
 
         int contourId = 0;
@@ -500,6 +500,9 @@ internal static class SelfIntersectionRemover
         {
             Contour contour = polygon[i];
             contourId++;
+
+            // Each original segment contributes +1 to the winding delta for positive fill.
+            const int windDelta = 1;
 
             for (int j = 0; j < contour.Count - 1; j++)
             {
@@ -539,7 +542,7 @@ internal static class SelfIntersectionRemover
                 unorderedEvents.Add(e1);
                 unorderedEvents.Add(e2);
 
-                segmentEndpoints.Add((segment.Source, segment.Target));
+                segmentEndpoints.Add((segment.Source, segment.Target, windDelta));
                 segmentSplits.Add([segment.Source, segment.Target]);
                 segmentId++;
             }
@@ -604,14 +607,15 @@ internal static class SelfIntersectionRemover
             }
         }
 
-        return BuildSegmentsFromSplits(segmentEndpoints, segmentSplits);
+        List<DirectedSegment> segments = BuildSegmentsFromSplits(segmentEndpoints, segmentSplits);
+        return MergeDuplicateSegments(segments);
     }
 
     /// <summary>
     /// Builds the final directed segments by sorting and emitting split points per original segment.
     /// </summary>
     private static List<DirectedSegment> BuildSegmentsFromSplits(
-        List<(Vertex Source, Vertex Target)> segmentEndpoints,
+        List<(Vertex Source, Vertex Target, int WindDelta)> segmentEndpoints,
         List<List<Vertex>> segmentSplits)
     {
         List<DirectedSegment> segments = new(segmentSplits.Count * 2);
@@ -624,7 +628,7 @@ internal static class SelfIntersectionRemover
                 continue;
             }
 
-            (Vertex source, Vertex target) = segmentEndpoints[i];
+            (Vertex source, Vertex target, int windDelta) = segmentEndpoints[i];
             double dx = target.X - source.X;
             double dy = target.Y - source.Y;
             if (dx == 0D && dy == 0D)
@@ -653,12 +657,49 @@ internal static class SelfIntersectionRemover
                 }
 
                 // Emit directed sub-segments that follow the original segment direction.
-                segments.Add(new DirectedSegment(last, next));
+                segments.Add(new DirectedSegment(last, next, windDelta));
                 last = next;
             }
         }
 
         return segments;
+    }
+
+    /// <summary>
+    /// Combines identical directed segments so their winding deltas accumulate once per unique edge.
+    /// </summary>
+    /// <param name="segments">The raw directed segments.</param>
+    /// <returns>The merged segment list.</returns>
+    private static List<DirectedSegment> MergeDuplicateSegments(List<DirectedSegment> segments)
+    {
+        if (segments.Count < 2)
+        {
+            return segments;
+        }
+
+        // Merge overlapping directed segments so winding deltas accumulate once per unique edge.
+        Dictionary<(Vertex Source, Vertex Target), int> merged = new(segments.Count);
+        for (int i = 0; i < segments.Count; i++)
+        {
+            DirectedSegment segment = segments[i];
+            (Vertex Source, Vertex Target) key = (segment.Source, segment.Target);
+            merged[key] = merged.TryGetValue(key, out int count)
+                ? count + segment.WindDelta
+                : segment.WindDelta;
+        }
+
+        List<DirectedSegment> result = new(merged.Count);
+        foreach (KeyValuePair<(Vertex Source, Vertex Target), int> entry in merged)
+        {
+            if (entry.Value == 0)
+            {
+                continue;
+            }
+
+            result.Add(new DirectedSegment(entry.Key.Source, entry.Key.Target, entry.Value));
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -693,6 +734,8 @@ internal static class SelfIntersectionRemover
             HalfEdge twin = new(destination, origin);
             edge.Twin = twin;
             twin.Twin = edge;
+            edge.WindDelta = segment.WindDelta;
+            twin.WindDelta = -segment.WindDelta;
 
             // Pre-compute polar angles so outgoing edges can be sorted counter-clockwise per node.
             edge.Angle = Math.Atan2(destination.Point.Y - origin.Point.Y, destination.Point.X - origin.Point.X);
@@ -774,21 +817,123 @@ internal static class SelfIntersectionRemover
     }
 
     /// <summary>
-    /// Samples each half-edge to determine the winding number of the region on its left.
+    /// Computes winding numbers per face by sampling one face per connected component and propagating across edges.
     /// </summary>
     /// <param name="graph">The graph containing the half-edges.</param>
-    /// <param name="segments">The original segments used for winding queries.</param>
-    private static void ComputeEdgeWinding(HalfEdgeGraph graph, List<DirectedSegment> segments)
+    /// <param name="faces">The faces produced by the half-edge traversal.</param>
+    /// <param name="segments">The original segments used to seed component windings.</param>
+    private static void ComputeFaceWindings(HalfEdgeGraph graph, List<Face> faces, List<DirectedSegment> segments)
     {
-        foreach (HalfEdge edge in graph.Edges)
+        // If the topology is ambiguous (multiple edges with identical angles), fall back to per-edge sampling.
+        if (HasAmbiguousVertices(graph))
         {
+            ComputeEdgeWindingBySampling(graph, segments);
+            return;
+        }
+
+        const int Unassigned = int.MinValue;
+        for (int i = 0; i < faces.Count; i++)
+        {
+            faces[i].Winding = Unassigned;
+        }
+
+        Stack<Face> stack = new();
+        for (int i = 0; i < faces.Count; i++)
+        {
+            Face face = faces[i];
+            if (face.Winding != Unassigned)
+            {
+                continue;
+            }
+
+            // Seed each connected component by sampling a point inside one of its faces.
+            Vertex sample = GetFaceSamplePoint(face);
+            face.Winding = ComputeWindingNumber(sample, segments);
+            stack.Push(face);
+
+            while (stack.Count > 0)
+            {
+                Face current = stack.Pop();
+                for (int e = 0; e < current.Edges.Count; e++)
+                {
+                    HalfEdge edge = current.Edges[e];
+                    Face? neighbor = edge.Twin?.Face;
+                    if (neighbor == null)
+                    {
+                        continue;
+                    }
+
+                    // left - right = windDelta, so right = left - windDelta.
+                    int neighborWinding = current.Winding - edge.WindDelta;
+                    if (neighbor.Winding == Unassigned)
+                    {
+                        neighbor.Winding = neighborWinding;
+                        stack.Push(neighbor);
+                    }
+                }
+            }
+        }
+
+        for (int i = 0; i < graph.Edges.Count; i++)
+        {
+            HalfEdge edge = graph.Edges[i];
+            edge.LeftWinding = edge.Face?.Winding ?? 0;
+        }
+    }
+
+    /// <summary>
+    /// Detects vertices where multiple outgoing edges share the same direction.
+    /// </summary>
+    /// <param name="graph">The half-edge graph to inspect.</param>
+    /// <returns><see langword="true"/> when collinear ambiguity is detected.</returns>
+    private static bool HasAmbiguousVertices(HalfEdgeGraph graph)
+    {
+        const double angleEpsilon = 1e-12;
+        const double twoPi = Math.PI * 2D;
+
+        // Outgoing edges with identical direction imply overlapping/collinear edges or non-manifold joins.
+        for (int i = 0; i < graph.Nodes.Count; i++)
+        {
+            List<HalfEdge> outgoing = graph.Nodes[i].Outgoing;
+            int count = outgoing.Count;
+            if (count < 2)
+            {
+                continue;
+            }
+
+            for (int j = 1; j < count; j++)
+            {
+                if (Math.Abs(outgoing[j].Angle - outgoing[j - 1].Angle) <= angleEpsilon)
+                {
+                    return true;
+                }
+            }
+
+            double wrapDelta = Math.Abs((outgoing[0].Angle + twoPi) - outgoing[^1].Angle);
+            if (wrapDelta <= angleEpsilon)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Computes windings by sampling a point to the left of each edge.
+    /// </summary>
+    /// <param name="graph">The half-edge graph.</param>
+    /// <param name="segments">The directed segments used for winding tests.</param>
+    private static void ComputeEdgeWindingBySampling(HalfEdgeGraph graph, List<DirectedSegment> segments)
+    {
+        // Sample per edge when face propagation cannot safely resolve windings.
+        for (int i = 0; i < graph.Edges.Count; i++)
+        {
+            HalfEdge edge = graph.Edges[i];
             Vertex a = edge.Origin.Point;
             Vertex b = edge.Destination.Point;
-            double midX = (a.X + b.X) * 0.5;
-            double midY = (a.Y + b.Y) * 0.5;
-            double dx = b.X - a.X;
-            double dy = b.Y - a.Y;
-            double length = Math.Sqrt((dx * dx) + (dy * dy));
+            Vertex delta = b - a;
+            double length = delta.Length();
             if (length == 0)
             {
                 edge.LeftWinding = 0;
@@ -796,12 +941,110 @@ internal static class SelfIntersectionRemover
             }
 
             // Sample a point slightly to the left of the edge so we can query the winding number of that region.
-            double nx = -dy / length;
-            double ny = dx / length;
             double epsilon = Math.Max(1e-6, length * 1e-6);
-            Vertex sample = new(midX + (nx * epsilon), midY + (ny * epsilon));
+            Vertex midpoint = (a + b) * 0.5;
+            Vertex normal = new Vertex(-delta.Y, delta.X) / length;
+            Vertex sample = midpoint + (normal * epsilon);
             edge.LeftWinding = ComputeWindingNumber(sample, segments);
         }
+    }
+
+    /// <summary>
+    /// Finds a point that lies strictly inside the face boundary.
+    /// </summary>
+    /// <param name="face">The face to sample.</param>
+    /// <returns>A point inside the face or a best-effort fallback.</returns>
+    private static Vertex GetFaceSamplePoint(Face face)
+    {
+        int edgeCount = face.Edges.Count;
+        if (edgeCount == 0)
+        {
+            return default;
+        }
+
+        // Try offsets from multiple edges to find a sample strictly inside the face boundary.
+        for (int i = 0; i < edgeCount; i++)
+        {
+            HalfEdge edge = face.Edges[i];
+            Vertex candidate = OffsetAlongLeftNormal(edge);
+            if (IsPointInsideFace(candidate, face))
+            {
+                return candidate;
+            }
+        }
+
+        return OffsetAlongLeftNormal(face.Edges[0]);
+    }
+
+    /// <summary>
+    /// Offsets a midpoint slightly to the left of the given edge.
+    /// </summary>
+    /// <param name="edge">The edge providing the direction.</param>
+    /// <returns>The offset point.</returns>
+    private static Vertex OffsetAlongLeftNormal(HalfEdge edge)
+    {
+        // Move slightly to the left of the edge so we query the face on its left side.
+        Vertex a = edge.Origin.Point;
+        Vertex b = edge.Destination.Point;
+        Vertex delta = b - a;
+        double length = delta.Length();
+        if (length == 0)
+        {
+            return a;
+        }
+
+        double epsilon = Math.Max(1e-6, length * 1e-6);
+        Vertex midpoint = (a + b) * 0.5;
+        Vertex normal = new Vertex(-delta.Y, delta.X) / length;
+        return midpoint + (normal * epsilon);
+    }
+
+    /// <summary>
+    /// Tests whether a point lies strictly inside the face boundary.
+    /// </summary>
+    /// <param name="point">The point to test.</param>
+    /// <param name="face">The face boundary.</param>
+    /// <returns><see langword="true"/> if the point is inside the face.</returns>
+    private static bool IsPointInsideFace(in Vertex point, Face face)
+    {
+        int count = face.Boundary.Count;
+        if (count < 3)
+        {
+            return false;
+        }
+
+        // Standard ray-casting, but treat boundary points as outside to avoid ambiguous samples.
+        bool inside = false;
+        Vertex previous = face.Boundary[^1];
+
+        for (int i = 0; i < count; i++)
+        {
+            Vertex current = face.Boundary[i];
+            if (current == previous)
+            {
+                previous = current;
+                continue;
+            }
+
+            if (IsPointOnSegment(point, previous, current))
+            {
+                return false;
+            }
+
+            bool intersects = (current.Y > point.Y) != (previous.Y > point.Y);
+            if (intersects)
+            {
+                double xIntersection = ((previous.X - current.X) * (point.Y - current.Y) / (previous.Y - current.Y)) + current.X;
+                if (point.X < xIntersection)
+                {
+                    inside = !inside;
+                }
+            }
+
+            previous = current;
+        }
+
+        return inside;
     }
 
     /// <summary>
@@ -1716,7 +1959,7 @@ internal static class SelfIntersectionRemover
     /// <summary>
     /// Represents a directed edge between two vertices in the arrangement.
     /// </summary>
-    private readonly record struct DirectedSegment(Vertex Source, Vertex Target);
+    private readonly record struct DirectedSegment(Vertex Source, Vertex Target, int WindDelta);
 
     /// <summary>
     /// Represents a graph vertex with a collection of outgoing half-edges.
@@ -1769,6 +2012,9 @@ internal static class SelfIntersectionRemover
 
         /// <summary>Gets or sets the winding value of the region on the left-hand side.</summary>
         public int LeftWinding { get; set; }
+
+        /// <summary>Gets or sets the winding delta across this edge (left minus right).</summary>
+        public int WindDelta { get; set; }
     }
 
     /// <summary>
