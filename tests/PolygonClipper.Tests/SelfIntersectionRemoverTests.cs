@@ -2298,6 +2298,35 @@ public class SelfIntersectionRemoverTests
     }
 
     /// <summary>
+    /// Tests polygons that touch at a single vertex on an edge are merged by union.
+    /// </summary>
+    [Fact]
+    public void PointTouchingContours_MergeIntoSingleContour()
+    {
+        // Arrange: Triangle touches the rectangle at a single edge point.
+        Contour rect = [];
+        rect.Add(new Vertex(0, 0));
+        rect.Add(new Vertex(10, 0));
+        rect.Add(new Vertex(10, 10));
+        rect.Add(new Vertex(0, 10));
+        rect.Add(new Vertex(0, 0));
+
+        Contour tri = [];
+        tri.Add(new Vertex(10, 5));
+        tri.Add(new Vertex(14, 3));
+        tri.Add(new Vertex(14, 7));
+        tri.Add(new Vertex(10, 5));
+
+        Polygon input = [rect, tri];
+
+        // Act
+        Polygon result = PolygonClipper.RemoveSelfIntersections(input);
+
+        // Assert: A point-touch should be merged into one contour for union (Clipper2 has known edge cases here).
+        Assert.Equal(1, result.Count);
+    }
+
+    /// <summary>
     /// Helper method to create a regular octagon centered at (cx, cy) with given radius.
     /// </summary>
     private static Contour CreateOctagon(double cx, double cy, double radius)

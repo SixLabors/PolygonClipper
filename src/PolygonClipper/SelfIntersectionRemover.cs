@@ -67,9 +67,10 @@ internal static class SelfIntersectionRemover
         _ = EnumerateFaces(graph);
         ComputeEdgeWinding(graph, segments);
         List<Contour> contours = ExtractBoundaryContours(graph);
+        List<Contour> mergedContours = MergeTouchingContours(contours);
 
         List<Contour> result = [];
-        foreach (Contour contour in contours)
+        foreach (Contour contour in mergedContours)
         {
             CleanupContour(contour);
             if (contour.Count > 2)
@@ -855,6 +856,122 @@ internal static class SelfIntersectionRemover
         }
 
         return contours;
+    }
+
+    // Merge boundary cycles that meet at a single vertex so the union is represented as one contour.
+    private static List<Contour> MergeTouchingContours(List<Contour> contours)
+    {
+        if (contours.Count < 2)
+        {
+            return contours;
+        }
+
+        bool merged = true;
+        while (merged)
+        {
+            merged = false;
+            for (int i = 0; i < contours.Count && !merged; i++)
+            {
+                for (int j = i + 1; j < contours.Count && !merged; j++)
+                {
+                    if (!TryFindSharedVertex(contours[i], contours[j], out int leftIndex, out int rightIndex, out Vertex shared))
+                    {
+                        continue;
+                    }
+
+                    Contour mergedContour = MergeContoursAtSharedVertex(contours[i], leftIndex, contours[j], rightIndex, shared);
+                    contours[i] = mergedContour;
+                    contours.RemoveAt(j);
+                    merged = true;
+                }
+            }
+        }
+
+        return contours;
+    }
+
+    private static bool TryFindSharedVertex(
+        Contour left,
+        Contour right,
+        out int leftIndex,
+        out int rightIndex,
+        out Vertex shared)
+    {
+        leftIndex = -1;
+        rightIndex = -1;
+        shared = default;
+
+        int leftCount = GetContourPointCount(left);
+        int rightCount = GetContourPointCount(right);
+
+        for (int i = 0; i < leftCount; i++)
+        {
+            Vertex leftPoint = left[i];
+            for (int j = 0; j < rightCount; j++)
+            {
+                if (!ArePointsClose(leftPoint, right[j]))
+                {
+                    continue;
+                }
+
+                leftIndex = i;
+                rightIndex = j;
+                shared = leftPoint;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static int GetContourPointCount(Contour contour)
+    {
+        int count = contour.Count;
+        if (count > 1 && contour[0] == contour[^1])
+        {
+            return count - 1;
+        }
+
+        return count;
+    }
+
+    private static List<Vertex> BuildRotatedVertices(Contour contour, int startIndex)
+    {
+        int count = GetContourPointCount(contour);
+        List<Vertex> rotated = new(count);
+        for (int i = 0; i < count; i++)
+        {
+            rotated.Add(contour[(startIndex + i) % count]);
+        }
+
+        return rotated;
+    }
+
+    private static Contour MergeContoursAtSharedVertex(
+        Contour left,
+        int leftIndex,
+        Contour right,
+        int rightIndex,
+        Vertex shared)
+    {
+        List<Vertex> leftVerts = BuildRotatedVertices(left, leftIndex);
+        List<Vertex> rightVerts = BuildRotatedVertices(right, rightIndex);
+
+        Contour merged = [];
+        merged.Add(shared);
+        for (int i = 1; i < leftVerts.Count; i++)
+        {
+            merged.Add(leftVerts[i]);
+        }
+
+        merged.Add(shared);
+        for (int i = 1; i < rightVerts.Count; i++)
+        {
+            merged.Add(rightVerts[i]);
+        }
+
+        merged.Add(shared);
+        return merged;
     }
 
     /// <summary>
