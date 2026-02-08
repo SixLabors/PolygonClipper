@@ -93,6 +93,11 @@ internal sealed class SweepEvent
     public int WindDx { get; set; }
 
     /// <summary>
+    /// Gets or sets the identifier for the original contour segment.
+    /// </summary>
+    public int SegmentId { get; set; } = -1;
+
+    /// <summary>
     /// Gets or sets a value indicating whether this event's point is the source (start)
     /// of the segment in the original contour direction. This is needed to compute
     /// winding contributions correctly for the positive fill rule.

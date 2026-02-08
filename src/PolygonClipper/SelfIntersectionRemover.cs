@@ -97,17 +97,17 @@ internal static class SelfIntersectionRemover
         Vertex leftPoint = GetLowestPoint(left);
         Vertex rightPoint = GetLowestPoint(right);
 
-        if (leftPoint.Y < rightPoint.Y)
+        if (leftPoint.Y > rightPoint.Y)
         {
             return -1;
         }
 
-        if (leftPoint.Y > rightPoint.Y)
+        if (leftPoint.Y < rightPoint.Y)
         {
             return 1;
         }
 
-        return rightPoint.X.CompareTo(leftPoint.X);
+        return leftPoint.X.CompareTo(rightPoint.X);
     }
 
     /// <summary>
@@ -133,7 +133,7 @@ internal static class SelfIntersectionRemover
         for (int i = 1; i <= lastIndex; i++)
         {
             Vertex candidate = contour[i];
-            if (candidate.Y < lowest.Y || (candidate.Y == lowest.Y && candidate.X > lowest.X))
+            if (candidate.Y > lowest.Y || (candidate.Y == lowest.Y && candidate.X < lowest.X))
             {
                 lowest = candidate;
             }
@@ -162,7 +162,7 @@ internal static class SelfIntersectionRemover
         for (int i = 1; i < limit; i++)
         {
             Vertex candidate = contour[i];
-            if (candidate.Y < lowest.Y || (candidate.Y == lowest.Y && candidate.X > lowest.X))
+            if (candidate.Y > lowest.Y || (candidate.Y == lowest.Y && candidate.X < lowest.X))
             {
                 lowest = candidate;
                 lowestIndex = i;
@@ -228,6 +228,12 @@ internal static class SelfIntersectionRemover
         }
         else
         {
+            Box2[] bounds = new Box2[count];
+            for (int i = 0; i < count; i++)
+            {
+                bounds[i] = polygon[i].GetBoundingBox();
+            }
+
             for (int i = 0; i < count; i++)
             {
                 Vertex testPoint = GetContourTestPoint(polygon[i]);
@@ -241,9 +247,19 @@ internal static class SelfIntersectionRemover
                         continue;
                     }
 
+                    if (!BoundsOverlap(bounds[i], bounds[j]) || !PointInBounds(testPoint, bounds[j]))
+                    {
+                        continue;
+                    }
+
                     Contour candidate = polygon[j];
                     if (PointInContour(testPoint, candidate))
                     {
+                        if (ContoursHaveIntersection(polygon[i], candidate, bounds[i], bounds[j]))
+                        {
+                            continue;
+                        }
+
                         double area = Math.Abs(GetSignedArea(candidate));
                         if (area < smallestArea)
                         {
@@ -286,6 +302,47 @@ internal static class SelfIntersectionRemover
         }
 
         return oriented;
+    }
+
+    private static bool BoundsOverlap(in Box2 left, in Box2 right)
+        => left.Min.X <= right.Max.X && left.Max.X >= right.Min.X &&
+           left.Min.Y <= right.Max.Y && left.Max.Y >= right.Min.Y;
+
+    private static bool PointInBounds(in Vertex point, in Box2 bounds)
+        => point.X >= bounds.Min.X && point.X <= bounds.Max.X &&
+           point.Y >= bounds.Min.Y && point.Y <= bounds.Max.Y;
+
+    private static bool ContoursHaveIntersection(Contour subject, Contour clipping, Box2 subjectBounds, Box2 clippingBounds)
+    {
+        if (!BoundsOverlap(subjectBounds, clippingBounds))
+        {
+            return false;
+        }
+
+        for (int i = 0; i < subject.Count; i++)
+        {
+            Segment subjectSegment = subject.GetSegment(i);
+            if (subjectSegment.IsDegenerate())
+            {
+                continue;
+            }
+
+            for (int j = 0; j < clipping.Count; j++)
+            {
+                Segment clippingSegment = clipping.GetSegment(j);
+                if (clippingSegment.IsDegenerate())
+                {
+                    continue;
+                }
+
+                if (PolygonUtilities.FindIntersection(subjectSegment, clippingSegment, out _, out _) != 0)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -422,8 +479,11 @@ internal static class SelfIntersectionRemover
     {
         SweepEventComparer comparer = new();
         List<SweepEvent> unorderedEvents = new(polygon.VertexCount * 2);
+        List<(Vertex Source, Vertex Target)> segmentEndpoints = [];
+        List<List<Vertex>> segmentSplits = [];
 
         int contourId = 0;
+        int segmentId = 0;
         for (int i = 0; i < polygon.Count; i++)
         {
             Contour contour = polygon[i];
@@ -442,6 +502,7 @@ internal static class SelfIntersectionRemover
                 SweepEvent e2 = new(segment.Target, true, e1, PolygonType.Subject);
                 e1.OtherEvent = e2;
                 e1.ContourId = e2.ContourId = contourId;
+                e1.SegmentId = e2.SegmentId = segmentId;
                 e1.IsContourSource = true;
                 e2.IsContourSource = false;
                 e1.SegmentSource = segment.Source;
@@ -463,6 +524,10 @@ internal static class SelfIntersectionRemover
 
                 unorderedEvents.Add(e1);
                 unorderedEvents.Add(e2);
+
+                segmentEndpoints.Add((segment.Source, segment.Target));
+                segmentSplits.Add([segment.Source, segment.Target]);
+                segmentId++;
             }
         }
 
@@ -498,12 +563,12 @@ internal static class SelfIntersectionRemover
 
                 if (nextEvent != null)
                 {
-                    _ = PossibleIntersection(sweepEvent, nextEvent, eventQueue, workspace, comparer);
+                    _ = PossibleIntersection(sweepEvent, nextEvent, eventQueue, workspace, comparer, segmentSplits);
                 }
 
                 if (prevEvent != null)
                 {
-                    _ = PossibleIntersection(prevEvent, sweepEvent, eventQueue, workspace, comparer);
+                    _ = PossibleIntersection(prevEvent, sweepEvent, eventQueue, workspace, comparer, segmentSplits);
                 }
             }
             else
@@ -517,7 +582,7 @@ internal static class SelfIntersectionRemover
 
                     if (prevEvent != null && nextEvent != null)
                     {
-                        _ = PossibleIntersection(prevEvent, nextEvent, eventQueue, workspace, comparer);
+                        _ = PossibleIntersection(prevEvent, nextEvent, eventQueue, workspace, comparer, segmentSplits);
                     }
 
                     statusLine.RemoveAt(position);
@@ -525,21 +590,54 @@ internal static class SelfIntersectionRemover
             }
         }
 
-        List<DirectedSegment> segments = new(sortedEvents.Count);
-        for (int i = 0; i < sortedEvents.Count; i++)
+        return BuildSegmentsFromSplits(segmentEndpoints, segmentSplits);
+    }
+
+    /// <summary>
+    /// Builds the final directed segments by sorting and emitting split points per original segment.
+    /// </summary>
+    private static List<DirectedSegment> BuildSegmentsFromSplits(
+        List<(Vertex Source, Vertex Target)> segmentEndpoints,
+        List<List<Vertex>> segmentSplits)
+    {
+        List<DirectedSegment> segments = [];
+
+        for (int i = 0; i < segmentSplits.Count; i++)
         {
-            SweepEvent sweepEvent = sortedEvents[i];
-            if (!sweepEvent.Left || sweepEvent.OtherEvent == null)
+            List<Vertex> splits = segmentSplits[i];
+            if (splits.Count < 2)
             {
                 continue;
             }
 
-            // After sorting we can emit the canonical orientation for each segment in the arrangement.
-            Vertex source = sweepEvent.SegmentSource;
-            Vertex target = sweepEvent.SegmentTarget;
-            if (source != target)
+            (Vertex source, Vertex target) = segmentEndpoints[i];
+            double dx = target.X - source.X;
+            double dy = target.Y - source.Y;
+            if (dx == 0D && dy == 0D)
             {
-                segments.Add(new DirectedSegment(source, target));
+                continue;
+            }
+
+            if (Math.Abs(dx) >= Math.Abs(dy))
+            {
+                splits.Sort((a, b) => ((a.X - source.X) / dx).CompareTo((b.X - source.X) / dx));
+            }
+            else
+            {
+                splits.Sort((a, b) => ((a.Y - source.Y) / dy).CompareTo((b.Y - source.Y) / dy));
+            }
+
+            Vertex last = splits[0];
+            for (int j = 1; j < splits.Count; j++)
+            {
+                Vertex next = splits[j];
+                if (ArePointsClose(last, next))
+                {
+                    continue;
+                }
+
+                segments.Add(new DirectedSegment(last, next));
+                last = next;
             }
         }
 
@@ -842,23 +940,38 @@ internal static class SelfIntersectionRemover
     /// <returns>The next boundary edge or <see langword="null"/> if traversal fails.</returns>
     private static HalfEdge? NextBoundaryEdge(HalfEdge edge, HalfEdge start)
     {
-        HalfEdge? current = edge.Next;
-        int guard = 0;
-        while (current != null && guard++ < 100000)
+        List<HalfEdge> outgoing = edge.Destination.Outgoing;
+        if (outgoing.Count == 0)
         {
-            if (IsBoundaryEdge(current))
+            return null;
+        }
+
+        double inAngle = edge.Angle;
+        double bestDelta = double.PositiveInfinity;
+        HalfEdge? best = null;
+
+        for (int i = 0; i < outgoing.Count; i++)
+        {
+            HalfEdge candidate = outgoing[i];
+            if (!IsBoundaryEdge(candidate))
             {
-                return current;
+                continue;
             }
 
-            current = current.Next;
-            if (current == start)
+            double delta = candidate.Angle - inAngle;
+            if (delta < 0)
             {
-                return current;
+                delta += Math.PI * 2;
+            }
+
+            if (delta < bestDelta)
+            {
+                bestDelta = delta;
+                best = candidate;
             }
         }
 
-        return null;
+        return best;
     }
 
     /// <summary>
@@ -1198,6 +1311,22 @@ internal static class SelfIntersectionRemover
         => Math.Abs(a.X - b.X) <= 1e-5 && Math.Abs(a.Y - b.Y) <= 1e-5;
 
     /// <summary>
+    /// Adds a split point to a segment's split list, ignoring near-duplicates.
+    /// </summary>
+    private static void AddSplitPoint(List<Vertex> splits, Vertex point)
+    {
+        for (int i = 0; i < splits.Count; i++)
+        {
+            if (ArePointsClose(splits[i], point))
+            {
+                return;
+            }
+        }
+
+        splits.Add(point);
+    }
+
+    /// <summary>
     /// Determines the possible intersection of two sweep line segments and handles splitting.
     /// </summary>
     /// <param name="le1">The first sweep event.</param>
@@ -1205,6 +1334,7 @@ internal static class SelfIntersectionRemover
     /// <param name="eventQueue">The event queue to add new events to.</param>
     /// <param name="workspace">Scratch space for temporary storage.</param>
     /// <param name="comparer">The sweep event comparer.</param>
+    /// <param name="segmentSplits">The split-point lists keyed by original segment ID.</param>
     /// <returns>
     /// 0 if no intersection, 1 if single point intersection, 2 if overlapping with shared left endpoint, 3 otherwise.
     /// </returns>
@@ -1213,7 +1343,8 @@ internal static class SelfIntersectionRemover
         SweepEvent le2,
         StablePriorityQueue<SweepEvent, SweepEventComparer> eventQueue,
         Span<SweepEvent> workspace,
-        SweepEventComparer comparer)
+        SweepEventComparer comparer,
+        List<List<Vertex>> segmentSplits)
     {
         if (le1.OtherEvent == null || le2.OtherEvent == null)
         {
@@ -1224,11 +1355,32 @@ internal static class SelfIntersectionRemover
             le1.GetSegment(),
             le2.GetSegment(),
             out Vertex ip1,
-            out Vertex _);
+            out Vertex ip2);
 
         if (nIntersections == 0)
         {
             return 0;
+        }
+
+        if (nIntersections >= 1)
+        {
+            if (le1.SegmentId >= 0 && le1.SegmentId < segmentSplits.Count)
+            {
+                AddSplitPoint(segmentSplits[le1.SegmentId], ip1);
+                if (nIntersections == 2)
+                {
+                    AddSplitPoint(segmentSplits[le1.SegmentId], ip2);
+                }
+            }
+
+            if (le2.SegmentId >= 0 && le2.SegmentId < segmentSplits.Count)
+            {
+                AddSplitPoint(segmentSplits[le2.SegmentId], ip1);
+                if (nIntersections == 2)
+                {
+                    AddSplitPoint(segmentSplits[le2.SegmentId], ip2);
+                }
+            }
         }
 
         // Ignore intersection if it occurs at the exact left or right endpoint of both segments
@@ -1362,6 +1514,7 @@ internal static class SelfIntersectionRemover
 
         // Assign the same contour ID to maintain connectivity
         r.ContourId = l.ContourId = le.ContourId;
+        r.SegmentId = l.SegmentId = le.SegmentId;
 
         // Preserve contour direction: split the segment while keeping original direction.
         Vertex source = le.SegmentSource;
