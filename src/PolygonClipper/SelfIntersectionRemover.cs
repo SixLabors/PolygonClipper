@@ -69,7 +69,7 @@ internal static class SelfIntersectionRemover
         List<Contour> contours = ExtractBoundaryContours(graph);
         List<Contour> mergedContours = MergeTouchingContours(contours);
 
-        List<Contour> result = [];
+        List<Contour> result = new(mergedContours.Count);
         foreach (Contour contour in mergedContours)
         {
             CleanupContour(contour);
@@ -491,8 +491,8 @@ internal static class SelfIntersectionRemover
     {
         SweepEventComparer comparer = new();
         List<SweepEvent> unorderedEvents = new(polygon.VertexCount * 2);
-        List<(Vertex Source, Vertex Target)> segmentEndpoints = [];
-        List<List<Vertex>> segmentSplits = [];
+        List<(Vertex Source, Vertex Target)> segmentEndpoints = new(polygon.VertexCount);
+        List<List<Vertex>> segmentSplits = new(polygon.VertexCount);
 
         int contourId = 0;
         int segmentId = 0;
@@ -614,7 +614,7 @@ internal static class SelfIntersectionRemover
         List<(Vertex Source, Vertex Target)> segmentEndpoints,
         List<List<Vertex>> segmentSplits)
     {
-        List<DirectedSegment> segments = [];
+        List<DirectedSegment> segments = new(segmentSplits.Count * 2);
 
         for (int i = 0; i < segmentSplits.Count; i++)
         {
@@ -741,7 +741,7 @@ internal static class SelfIntersectionRemover
             edge.Next = outgoing[nextIdx];
         }
 
-        List<Face> faces = [];
+        List<Face> faces = new(graph.Edges.Count / 2);
         foreach (HalfEdge edge in graph.Edges)
         {
             if (edge.Face != null)
@@ -811,7 +811,7 @@ internal static class SelfIntersectionRemover
     /// <returns>A list of boundary contours following the positive fill rule.</returns>
     private static List<Contour> ExtractBoundaryContours(HalfEdgeGraph graph)
     {
-        List<Contour> contours = [];
+        List<Contour> contours = new(graph.Edges.Count / 2);
         HashSet<HalfEdge> visited = [];
 
         foreach (HalfEdge edge in graph.Edges)
@@ -874,6 +874,7 @@ internal static class SelfIntersectionRemover
             {
                 for (int j = i + 1; j < contours.Count && !merged; j++)
                 {
+                    // Merge the first pair of contours that share a vertex, then restart the scan.
                     if (!TryFindSharedVertex(contours[i], contours[j], out int leftIndex, out int rightIndex, out Vertex shared))
                     {
                         continue;
@@ -901,6 +902,7 @@ internal static class SelfIntersectionRemover
         rightIndex = -1;
         shared = default;
 
+        // Ignore duplicated closing vertices when searching for a shared point.
         int leftCount = GetContourPointCount(left);
         int rightCount = GetContourPointCount(right);
 
@@ -909,6 +911,7 @@ internal static class SelfIntersectionRemover
             Vertex leftPoint = left[i];
             for (int j = 0; j < rightCount; j++)
             {
+                // Use a tight epsilon so numerically close endpoints are treated as the same vertex.
                 if (!ArePointsClose(leftPoint, right[j]))
                 {
                     continue;
@@ -927,6 +930,8 @@ internal static class SelfIntersectionRemover
     private static int GetContourPointCount(Contour contour)
     {
         int count = contour.Count;
+
+        // Contours may be explicitly closed; drop the duplicate terminal vertex when present.
         if (count > 1 && contour[0] == contour[^1])
         {
             return count - 1;
@@ -939,6 +944,8 @@ internal static class SelfIntersectionRemover
     {
         int count = GetContourPointCount(contour);
         List<Vertex> rotated = new(count);
+
+        // Rotate so the shared vertex is at index 0, preserving the original winding order.
         for (int i = 0; i < count; i++)
         {
             rotated.Add(contour[(startIndex + i) % count]);
@@ -957,6 +964,7 @@ internal static class SelfIntersectionRemover
         List<Vertex> leftVerts = BuildRotatedVertices(left, leftIndex);
         List<Vertex> rightVerts = BuildRotatedVertices(right, rightIndex);
 
+        // Stitch the two boundary cycles at the shared vertex, keeping explicit closure.
         Contour merged = [];
         merged.Add(shared);
         for (int i = 1; i < leftVerts.Count; i++)
