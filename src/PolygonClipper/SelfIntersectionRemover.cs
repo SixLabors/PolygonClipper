@@ -52,13 +52,17 @@ internal static class SelfIntersectionRemover
             return [];
         }
 
+        // Normalize contour orientation so positive fill (Clipper2 union) is consistent.
         Polygon orientedPolygon = OrientContoursForPositiveFill(polygon);
+
+        // Sweep and split to build a planar arrangement with explicit intersection vertices.
         List<DirectedSegment> segments = BuildArrangementSegments(orientedPolygon);
         if (segments.Count == 0)
         {
             return [];
         }
 
+        // Build half-edges, enumerate faces, and classify boundary edges by winding.
         HalfEdgeGraph graph = BuildHalfEdgeGraph(segments);
         _ = EnumerateFaces(graph);
         ComputeEdgeWinding(graph, segments);
@@ -75,6 +79,7 @@ internal static class SelfIntersectionRemover
             }
         }
 
+        // Match Clipper2 ordering: highest Y (then lowest X) first.
         result.Sort(CompareContoursByLowestPoint);
         Polygon resultPolygon = [];
         for (int i = 0; i < result.Count; i++)
@@ -92,6 +97,7 @@ internal static class SelfIntersectionRemover
     /// <param name="left">The first contour to compare.</param>
     /// <param name="right">The second contour to compare.</param>
     /// <returns>A value indicating the relative ordering for sorting.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int CompareContoursByLowestPoint(Contour left, Contour right)
     {
         Vertex leftPoint = GetLowestPoint(left);
@@ -203,6 +209,7 @@ internal static class SelfIntersectionRemover
         int[] parentIndices = new int[count];
         Array.Fill(parentIndices, -1);
 
+        // If the input already carries hierarchy info, keep it; otherwise infer containment.
         bool hasHierarchy = false;
         for (int i = 0; i < count; i++)
         {
@@ -242,6 +249,7 @@ internal static class SelfIntersectionRemover
                         continue;
                     }
 
+                    // Quick reject on bounds before doing full containment and intersection checks.
                     if (!BoundsOverlap(bounds[i], bounds[j]) || !PointInBounds(testPoint, bounds[j]))
                     {
                         continue;
@@ -250,11 +258,13 @@ internal static class SelfIntersectionRemover
                     Contour candidate = polygon[j];
                     if (PointInContour(testPoint, candidate))
                     {
+                        // If contours intersect or touch, do not treat the candidate as a parent.
                         if (ContoursHaveIntersection(polygon[i], candidate, bounds[i], bounds[j]))
                         {
                             continue;
                         }
 
+                        // Choose the tightest containing contour as the parent.
                         double area = Math.Abs(GetSignedArea(candidate));
                         if (area < smallestArea)
                         {
@@ -271,6 +281,7 @@ internal static class SelfIntersectionRemover
         int[] depths = new int[count];
         for (int i = 0; i < count; i++)
         {
+            // Depth parity determines external vs hole orientation.
             depths[i] = GetDepth(i, parentIndices);
         }
 
@@ -299,10 +310,12 @@ internal static class SelfIntersectionRemover
         return oriented;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool BoundsOverlap(in Box2 left, in Box2 right)
         => left.Min.X <= right.Max.X && left.Max.X >= right.Min.X &&
            left.Min.Y <= right.Max.Y && left.Max.Y >= right.Min.Y;
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool PointInBounds(in Vertex point, in Box2 bounds)
         => point.X >= bounds.Min.X && point.X <= bounds.Max.X &&
            point.Y >= bounds.Min.Y && point.Y <= bounds.Max.Y;
@@ -314,6 +327,7 @@ internal static class SelfIntersectionRemover
             return false;
         }
 
+        // If any segment pair intersects, containment is ambiguous, so avoid nesting.
         for (int i = 0; i < subject.Count; i++)
         {
             Segment subjectSegment = subject.GetSegment(i);
@@ -364,6 +378,7 @@ internal static class SelfIntersectionRemover
     /// </summary>
     /// <param name="contour">The contour to examine.</param>
     /// <returns>A vertex guaranteed not to be the duplicated closing point.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Vertex GetContourTestPoint(Contour contour)
     {
         if (contour.Count == 0)
@@ -434,6 +449,7 @@ internal static class SelfIntersectionRemover
     /// <param name="a">Segment start.</param>
     /// <param name="b">Segment end.</param>
     /// <returns><see langword="true"/> when the point is collinear and within the segment bounds.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsPointOnSegment(in Vertex point, in Vertex a, in Vertex b)
     {
         if (PolygonUtilities.SignedArea(a, b, point) != 0D)
@@ -492,6 +508,7 @@ internal static class SelfIntersectionRemover
                     continue;
                 }
 
+                // Track the original segment so we can accumulate all split points by ID.
                 // Each vertex pair produces two sweep events (left/right) so the sweep-line can detect intersections.
                 SweepEvent e1 = new(segment.Source, true, PolygonType.Subject);
                 SweepEvent e2 = new(segment.Target, true, e1, PolygonType.Subject);
@@ -514,6 +531,7 @@ internal static class SelfIntersectionRemover
                     e1.Left = false;
                 }
 
+                // WindDx stays with the original segment orientation even as it is split.
                 int windDx = e1.Left ? 1 : -1;
                 e1.WindDx = e2.WindDx = windDx;
 
@@ -550,6 +568,7 @@ internal static class SelfIntersectionRemover
 
             if (sweepEvent.Left)
             {
+                // Add to the sweep line, then check for intersections with immediate neighbors.
                 int position = sweepEvent.PosSL = statusLine.Add(sweepEvent);
                 SweepEvent? prevEvent = statusLine.Prev(position);
                 SweepEvent? nextEvent = statusLine.Next(position);
@@ -566,6 +585,7 @@ internal static class SelfIntersectionRemover
             }
             else
             {
+                // Remove the corresponding left event and check for new neighbor intersections.
                 SweepEvent? leftEvent = sweepEvent.OtherEvent;
                 if (leftEvent != null && leftEvent.PosSL >= 0 && leftEvent.PosSL < statusLine.Count)
                 {
@@ -611,6 +631,8 @@ internal static class SelfIntersectionRemover
                 continue;
             }
 
+            // Sort split points by parameter along the original segment to preserve direction.
+            // Use the dominant axis to avoid unstable division when one component is near zero.
             if (Math.Abs(dx) >= Math.Abs(dy))
             {
                 splits.Sort((a, b) => ((a.X - source.X) / dx).CompareTo((b.X - source.X) / dx));
@@ -629,6 +651,7 @@ internal static class SelfIntersectionRemover
                     continue;
                 }
 
+                // Emit directed sub-segments that follow the original segment direction.
                 segments.Add(new DirectedSegment(last, next));
                 last = next;
             }
@@ -699,6 +722,7 @@ internal static class SelfIntersectionRemover
 
         foreach (HalfEdge edge in graph.Edges)
         {
+            // For a half-edge, the next edge on its left face is the previous outgoing edge at the destination.
             Node dest = edge.Destination;
             List<HalfEdge> outgoing = dest.Outgoing;
             int idx = outgoing.IndexOf(edge.Twin!);
@@ -809,6 +833,7 @@ internal static class SelfIntersectionRemover
                     contour.Add(point);
                 }
 
+                // Follow the boundary by taking the smallest CCW turn at each vertex.
                 current = NextBoundaryEdge(current, edge);
                 if (current != null && current != edge && visited.Contains(current))
                 {
@@ -918,6 +943,7 @@ internal static class SelfIntersectionRemover
     /// </summary>
     /// <param name="edge">The edge to test.</param>
     /// <returns><see langword="true"/> when the edge contributes to the final boundary.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsBoundaryEdge(HalfEdge edge)
     {
         bool leftInside = edge.LeftWinding > 0;
@@ -939,6 +965,7 @@ internal static class SelfIntersectionRemover
             return null;
         }
 
+        // Prefer the smallest positive delta in angle to keep a consistent boundary walk.
         double inAngle = edge.Angle;
         double bestDelta = double.PositiveInfinity;
         HalfEdge? best = null;
@@ -981,6 +1008,7 @@ internal static class SelfIntersectionRemover
             Vertex a = segments[i].Source;
             Vertex b = segments[i].Target;
 
+            // Standard winding-number test using upward/downward crossings of a horizontal ray.
             if (a.Y <= point.Y)
             {
                 if (b.Y > point.Y && IsLeft(a, b, point) > 0)
@@ -1003,6 +1031,7 @@ internal static class SelfIntersectionRemover
     /// <summary>
     /// Returns the signed area of the triangle formed by (a, b, p); positive values place p to the left of segment ab.
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static double IsLeft(Vertex a, Vertex b, Vertex p)
         => ((b.X - a.X) * (p.Y - a.Y)) - ((p.X - a.X) * (b.Y - a.Y));
 
@@ -1017,6 +1046,7 @@ internal static class SelfIntersectionRemover
             return;
         }
 
+        // Move through a linked structure so removals are O(1) without reallocating the contour.
         // Copy to a mutable list so we can build a circular linked structure without touching the contour directly.
         // The contour indexer is read-only, so we never mutate it via a setter; all changes happen through this temporary list
         // and the ContourNode helpers before the contour is cleared and repopulated.
@@ -1038,6 +1068,7 @@ internal static class SelfIntersectionRemover
             return;
         }
 
+        // Remove collinear or duplicate runs, then rebuild a simplified vertex list.
         if (!TryCleanCollinear(start, preserveCollinear: false, out start) || !IsValidClosedPath(start))
         {
             contour.Clear();
@@ -1057,6 +1088,7 @@ internal static class SelfIntersectionRemover
             cleaned.Add(cleaned[0]);
         }
 
+        // Replace the original contour with the cleaned vertex list.
         contour.Clear();
         for (int i = 0; i < cleaned.Count; i++)
         {
@@ -1078,6 +1110,7 @@ internal static class SelfIntersectionRemover
             return false;
         }
 
+        // Build a circular doubly linked list for efficient removals during cleanup.
         ContourNode first = new(vertices[0]);
         ContourNode prev = first;
         for (int i = 1; i < vertices.Count; i++)
@@ -1101,12 +1134,14 @@ internal static class SelfIntersectionRemover
     /// </summary>
     /// <param name="node">Any node within the contour.</param>
     /// <returns><see langword="true"/> when the walk can continue.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsValidClosedPath(ContourNode? node)
         => node != null && node.Next != node && (node.Next != node.Prev || !IsVerySmallTriangle(node));
 
     /// <summary>
     /// Determines whether three consecutive nodes form a degenerate triangle.
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsVerySmallTriangle(ContourNode node)
         => node.Next.Next == node.Prev &&
             (PtsReallyClose(node.Prev.Point, node.Next.Point) ||
@@ -1116,6 +1151,7 @@ internal static class SelfIntersectionRemover
     /// <summary>
     /// Tests whether a vertex list represents a triangle with clustered points.
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsVerySmallTriangle(List<Vertex> vertices)
         => vertices.Count == 3 &&
             (PtsReallyClose(vertices[0], vertices[1]) ||
@@ -1125,6 +1161,7 @@ internal static class SelfIntersectionRemover
     /// <summary>
     /// Determines whether two vertices are nearly coincident in screen space terms.
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool PtsReallyClose(Vertex a, Vertex b)
         => Math.Abs(a.X - b.X) < 2 && Math.Abs(a.Y - b.Y) < 2;
 
@@ -1294,12 +1331,14 @@ internal static class SelfIntersectionRemover
     /// <summary>
     /// Computes the dot product of two segments sharing the middle vertex.
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static double DotProduct(Vertex pt1, Vertex pt2, Vertex pt3)
         => Vertex.Dot(pt2 - pt1, pt3 - pt2);
 
     /// <summary>
     /// Checks whether two vertices are almost coincident using a tight epsilon.
     /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool ArePointsClose(Vertex a, Vertex b)
         => Math.Abs(a.X - b.X) <= 1e-5 && Math.Abs(a.Y - b.Y) <= 1e-5;
 
@@ -1355,6 +1394,7 @@ internal static class SelfIntersectionRemover
             return 0;
         }
 
+        // Record split points for both segments so we can rebuild all sub-segments after the sweep.
         if (nIntersections >= 1)
         {
             if (le1.SegmentId >= 0 && le1.SegmentId < segmentSplits.Count)
@@ -1553,6 +1593,9 @@ internal static class SelfIntersectionRemover
     /// </summary>
     private readonly record struct DirectedSegment(Vertex Source, Vertex Target);
 
+    /// <summary>
+    /// Represents a graph vertex with a collection of outgoing half-edges.
+    /// </summary>
     private sealed class Node
     {
         /// <summary>
@@ -1567,6 +1610,9 @@ internal static class SelfIntersectionRemover
         public List<HalfEdge> Outgoing { get; } = [];
     }
 
+    /// <summary>
+    /// Represents a directed edge in the arrangement, paired with a twin in opposite direction.
+    /// </summary>
     private sealed class HalfEdge
     {
         /// <summary>
@@ -1600,6 +1646,9 @@ internal static class SelfIntersectionRemover
         public int LeftWinding { get; set; }
     }
 
+    /// <summary>
+    /// Represents a face boundary and metadata discovered during graph traversal.
+    /// </summary>
     private sealed class Face
     {
         /// <summary>Gets the vertices that make up the face boundary.</summary>
@@ -1615,6 +1664,9 @@ internal static class SelfIntersectionRemover
         public int Winding { get; set; }
     }
 
+    /// <summary>
+    /// Container for the half-edge graph used during boundary extraction.
+    /// </summary>
     private sealed class HalfEdgeGraph
     {
         /// <summary>Gets the collection of graph nodes.</summary>
@@ -1624,6 +1676,9 @@ internal static class SelfIntersectionRemover
         public List<HalfEdge> Edges { get; } = [];
     }
 
+    /// <summary>
+    /// Linked-list node used to clean and simplify contour vertex lists.
+    /// </summary>
     private sealed class ContourNode
     {
         /// <summary>
