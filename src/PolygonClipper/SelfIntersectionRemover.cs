@@ -2180,5 +2180,3 @@ internal static class SelfIntersectionRemover
         public ContourNode Next { get; set; } = null!;
     }
 }
-
-

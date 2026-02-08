@@ -759,21 +759,10 @@ public class SelfIntersectionRemoverTests
 
         Polygon input = [outer, inner];
 
-        // Act
-        Polygon result = PolygonClipper.RemoveSelfIntersections(input);
-
         // Assert: The input has 2 compound contours (each containing two loops connected by bridge segments).
         // When processed with positive fill rule, this produces 4 contours.
         // Only the contour and vertex counts are validated; vertex ordering may differ from Clipper2.
-        PathsD clipperResult = RemoveSelfIntersectionsWithClipperD(input);
-        Assert.Equal(clipperResult.Count, result.Count);
-
-        for (int i = 0; i < clipperResult.Count; i++)
-        {
-            PathD expected = clipperResult[i];
-            PathD actual = ProjectContour(result[i]);
-            Assert.Equal(expected.Count, actual.Count);
-        }
+        AssertMatchesClipperByCount(input);
     }
 
     [Fact]
@@ -1533,21 +1522,10 @@ public class SelfIntersectionRemoverTests
 
         Polygon input = [outer, inner];
 
-        // Act
-        Polygon result = PolygonClipper.RemoveSelfIntersections(input);
-
         // Assert: The "9" shape is more complex than the "O" shape. The input contours contain
         // self-intersections that, when resolved with positive fill rule, produce 4 contours.
         // Only the contour and vertex counts are validated; vertex ordering may differ from Clipper2.
-        PathsD clipperResult = RemoveSelfIntersectionsWithClipperD(input);
-        Assert.Equal(clipperResult.Count, result.Count);
-
-        for (int i = 0; i < clipperResult.Count; i++)
-        {
-            PathD expected = clipperResult[i];
-            PathD actual = ProjectContour(result[i]);
-            Assert.Equal(expected.Count, actual.Count);
-        }
+        AssertMatchesClipperByCount(input);
     }
 
     [Fact]
@@ -1945,19 +1923,8 @@ public class SelfIntersectionRemoverTests
                          outer35, outer36, outer37, outer38, outer39, outer40, outer41,
                          outer42, outer43, outer44, outer45, outer46];
 
-        // Act
-        Polygon result = PolygonClipper.RemoveSelfIntersections(input);
-
-        // Assert
-        PathsD clipperResult = RemoveSelfIntersectionsWithClipperD(input);
-        Assert.Equal(clipperResult.Count, result.Count);
-
-        for (int i = 0; i < clipperResult.Count; i++)
-        {
-            PathD expected = clipperResult[i];
-            PathD actual = ProjectContour(result[i]);
-            Assert.Equal(expected.Count, actual.Count);
-        }
+        // Act + Assert
+        AssertMatchesClipperByCount(input);
     }
 
     /// <summary>
@@ -2099,14 +2066,12 @@ public class SelfIntersectionRemoverTests
         Polygon result = PolygonClipper.RemoveSelfIntersections(input);
 
         // Assert: Should merge into a single rectangle (0,0)-(20,0)-(20,10)-(0,10)
-        PathsD clipperResult = RemoveSelfIntersectionsWithClipperD(input);
-        Assert.Equal(clipperResult.Count, result.Count);
-
-        // Clipper2 produces 1 merged contour
         Assert.Equal(1, result.Count);
 
         // The merged contour should have 4 vertices (plus closing)
         Assert.Equal(5, result[0].Count);
+
+        AssertMatchesClipperByCount(input);
     }
 
     /// <summary>
@@ -2134,41 +2099,8 @@ public class SelfIntersectionRemoverTests
 
         Polygon input = [rect, para];
 
-        // Act
-        Polygon result = PolygonClipper.RemoveSelfIntersections(input);
-
-        // Assert: Compare with Clipper2
-        PathsD clipperResult = RemoveSelfIntersectionsWithClipperD(input);
-
-        // Diagnostic output
-        System.Text.StringBuilder sb = new();
-        sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"Clipper2 count: {clipperResult.Count}, Our count: {result.Count}");
-        for (int i = 0; i < clipperResult.Count; i++)
-        {
-            sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"Clipper2[{i}]: {clipperResult[i].Count} vertices");
-            foreach (PointD pt in clipperResult[i])
-            {
-                sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"  ({pt.x:R}, {pt.y:R})");
-            }
-        }
-
-        for (int i = 0; i < result.Count; i++)
-        {
-            sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"Our[{i}]: {result[i].Count} vertices");
-            foreach (Vertex pt in result[i])
-            {
-                sb.AppendLine(System.Globalization.CultureInfo.InvariantCulture, $"  ({pt.X:R}, {pt.Y:R})");
-            }
-        }
-
-        Assert.True(clipperResult.Count == result.Count, sb.ToString());
-
-        for (int i = 0; i < clipperResult.Count; i++)
-        {
-            PathD expected = clipperResult[i];
-            PathD actual = ProjectContour(result[i]);
-            Assert.True(expected.Count == actual.Count, $"Contour {i}: expected {expected.Count}, got {actual.Count}\n{sb}");
-        }
+        // Act + Assert
+        AssertMatchesClipperByCount(input);
     }
 
     /// <summary>
@@ -2190,18 +2122,9 @@ public class SelfIntersectionRemoverTests
         // Act
         Polygon result = PolygonClipper.RemoveSelfIntersections(input);
 
-        PathsD clipperResult = RemoveSelfIntersectionsWithClipperD(input);
-        Assert.Equal(clipperResult.Count, result.Count);
-
         // Assert: Positive fill treats the bowtie as a single filled region (same as Clipper).
         Assert.Equal(1, result.Count);
-
-        for (int i = 0; i < clipperResult.Count; i++)
-        {
-            PathD expected = clipperResult[i];
-            PathD actual = ProjectContour(result[i]);
-            Assert.Equal(expected.Count, actual.Count);
-        }
+        AssertMatchesClipperByCount(input);
     }
 
     /// <summary>
