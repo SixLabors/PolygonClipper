@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
-VisualStudioVersion = 18.2.11415.280 d18.0
+VisualStudioVersion = 18.2.11415.280
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PolygonClipper", "src\PolygonClipper\PolygonClipper.csproj", "{3C8D945E-6074-437E-B6EA-237BD0C80411}"
 EndProject
@@ -50,8 +50,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ISSUE_TEMPLATE", "ISSUE_TEM
 		.github\ISSUE_TEMPLATE\oss-bug-report.yml = .github\ISSUE_TEMPLATE\oss-bug-report.yml
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clipper2Lib", "..\..\AngusJohnson\Clipper2\CSharp\Clipper2Lib\Clipper2Lib.csproj", "{442C0648-BED0-CD51-39C6-4D54ACAEC5B3}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -74,10 +72,6 @@ Global
 		{F1965B36-D896-4BC1-8941-7FE6CEB82CD5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F1965B36-D896-4BC1-8941-7FE6CEB82CD5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F1965B36-D896-4BC1-8941-7FE6CEB82CD5}.Release|Any CPU.Build.0 = Release|Any CPU
-		{442C0648-BED0-CD51-39C6-4D54ACAEC5B3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{442C0648-BED0-CD51-39C6-4D54ACAEC5B3}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{442C0648-BED0-CD51-39C6-4D54ACAEC5B3}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{442C0648-BED0-CD51-39C6-4D54ACAEC5B3}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -91,7 +85,6 @@ Global
 		{F1965B36-D896-4BC1-8941-7FE6CEB82CD5} = {84C4B358-492B-46FC-9F11-FBB76B06BD3F}
 		{68A8CC40-6AED-4E96-B524-31B1158FDEEA} = {F0882E95-667C-48FE-B43A-24FC55D9F354}
 		{02EA681E-C7D8-13C7-8484-4AC65E1B71E8} = {6F7A3AE6-C7D1-441F-A203-BA6575931CE2}
-		{442C0648-BED0-CD51-39C6-4D54ACAEC5B3} = {F0882E95-667C-48FE-B43A-24FC55D9F354}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {2C73BEEC-091B-45E4-A0BD-7D7CD16A8451}
