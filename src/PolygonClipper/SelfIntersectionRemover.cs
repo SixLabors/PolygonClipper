@@ -640,11 +640,25 @@ internal static class SelfIntersectionRemover
             // Use the dominant axis to avoid unstable division when one component is near zero.
             if (Math.Abs(dx) >= Math.Abs(dy))
             {
-                splits.Sort((a, b) => ((a.X - source.X) / dx).CompareTo((b.X - source.X) / dx));
+                if (dx > 0D)
+                {
+                    splits.Sort((a, b) => a.X.CompareTo(b.X));
+                }
+                else
+                {
+                    splits.Sort((a, b) => b.X.CompareTo(a.X));
+                }
             }
             else
             {
-                splits.Sort((a, b) => ((a.Y - source.Y) / dy).CompareTo((b.Y - source.Y) / dy));
+                if (dy > 0D)
+                {
+                    splits.Sort((a, b) => a.Y.CompareTo(b.Y));
+                }
+                else
+                {
+                    splits.Sort((a, b) => b.Y.CompareTo(a.Y));
+                }
             }
 
             Vertex last = splits[0];
@@ -709,8 +723,9 @@ internal static class SelfIntersectionRemover
     /// <returns>A populated half-edge graph.</returns>
     private static HalfEdgeGraph BuildHalfEdgeGraph(List<DirectedSegment> segments)
     {
-        HalfEdgeGraph graph = new();
-        Dictionary<Vertex, Node> nodeMap = [];
+        int edgeCapacity = segments.Count * 2;
+        HalfEdgeGraph graph = new(segments.Count, edgeCapacity);
+        Dictionary<Vertex, Node> nodeMap = new(segments.Count);
 
         Node GetNode(Vertex vertex)
         {
@@ -762,6 +777,10 @@ internal static class SelfIntersectionRemover
         {
             // Sorting outgoing edges by polar angle lets us stitch the half-edge cycle for each face.
             node.Outgoing.Sort((a, b) => a.Angle.CompareTo(b.Angle));
+            for (int i = 0; i < node.Outgoing.Count; i++)
+            {
+                node.Outgoing[i].OutgoingIndex = i;
+            }
         }
 
         foreach (HalfEdge edge in graph.Edges)
@@ -769,13 +788,7 @@ internal static class SelfIntersectionRemover
             // For a half-edge, the next edge on its left face is the previous outgoing edge at the destination.
             Node dest = edge.Destination;
             List<HalfEdge> outgoing = dest.Outgoing;
-            int idx = outgoing.IndexOf(edge.Twin!);
-            if (idx < 0)
-            {
-                continue;
-            }
-
-            int nextIdx = idx - 1;
+            int nextIdx = edge.Twin!.OutgoingIndex - 1;
             if (nextIdx < 0)
             {
                 nextIdx = outgoing.Count - 1;
@@ -1055,11 +1068,10 @@ internal static class SelfIntersectionRemover
     private static List<Contour> ExtractBoundaryContours(HalfEdgeGraph graph)
     {
         List<Contour> contours = new(graph.Edges.Count / 2);
-        HashSet<HalfEdge> visited = [];
 
         foreach (HalfEdge edge in graph.Edges)
         {
-            if (!IsBoundaryEdge(edge) || visited.Contains(edge))
+            if (!IsBoundaryEdge(edge) || edge.Visited)
             {
                 continue;
             }
@@ -1070,7 +1082,7 @@ internal static class SelfIntersectionRemover
             while (current != null && guard++ < 100000)
             {
                 // Track which edges have already been walked so we do not duplicate contours.
-                _ = visited.Add(current);
+                current.Visited = true;
                 Vertex point = current.Origin.Point;
                 if (contour.Count == 0 || !ArePointsClose(contour[^1], point))
                 {
@@ -1079,7 +1091,7 @@ internal static class SelfIntersectionRemover
 
                 // Follow the boundary by taking the smallest CCW turn at each vertex.
                 current = NextBoundaryEdge(current, edge);
-                if (current != null && current != edge && visited.Contains(current))
+                if (current != null && current != edge && current.Visited)
                 {
                     break;
                 }
@@ -2015,6 +2027,12 @@ internal static class SelfIntersectionRemover
 
         /// <summary>Gets or sets the winding delta across this edge (left minus right).</summary>
         public int WindDelta { get; set; }
+
+        /// <summary>Gets or sets the index of this half-edge in its origin node's outgoing list.</summary>
+        public int OutgoingIndex { get; set; }
+
+        /// <summary>Gets or sets a value indicating whether this half-edge has been walked during contour extraction.</summary>
+        public bool Visited { get; set; }
     }
 
     /// <summary>
@@ -2040,11 +2058,20 @@ internal static class SelfIntersectionRemover
     /// </summary>
     private sealed class HalfEdgeGraph
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="HalfEdgeGraph"/> class with pre-sized collections.
+        /// </summary>
+        public HalfEdgeGraph(int nodeCapacity, int edgeCapacity)
+        {
+            this.Nodes = new List<Node>(nodeCapacity);
+            this.Edges = new List<HalfEdge>(edgeCapacity);
+        }
+
         /// <summary>Gets the collection of graph nodes.</summary>
-        public List<Node> Nodes { get; } = [];
+        public List<Node> Nodes { get; }
 
         /// <summary>Gets the collection of half-edges (each physical edge contributes two entries).</summary>
-        public List<HalfEdge> Edges { get; } = [];
+        public List<HalfEdge> Edges { get; }
     }
 
     /// <summary>
