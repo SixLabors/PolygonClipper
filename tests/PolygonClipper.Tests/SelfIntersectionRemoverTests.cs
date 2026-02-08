@@ -2205,6 +2205,99 @@ public class SelfIntersectionRemoverTests
     }
 
     /// <summary>
+    /// Tests multiple intersections along a single segment to ensure all split points are retained.
+    /// </summary>
+    [Fact]
+    public void MultipleIntersectionsOnSingleSegment_SplitsAll()
+    {
+        // Arrange: A long rectangle edge intersected by multiple vertical rectangles.
+        Contour baseRect = [];
+        baseRect.Add(new Vertex(0, 0));
+        baseRect.Add(new Vertex(30, 0));
+        baseRect.Add(new Vertex(30, 4));
+        baseRect.Add(new Vertex(0, 4));
+        baseRect.Add(new Vertex(0, 0));
+
+        Contour post1 = [];
+        post1.Add(new Vertex(4, -2));
+        post1.Add(new Vertex(7, -2));
+        post1.Add(new Vertex(7, 8));
+        post1.Add(new Vertex(4, 8));
+        post1.Add(new Vertex(4, -2));
+
+        Contour post2 = [];
+        post2.Add(new Vertex(13, -2));
+        post2.Add(new Vertex(16, -2));
+        post2.Add(new Vertex(16, 8));
+        post2.Add(new Vertex(13, 8));
+        post2.Add(new Vertex(13, -2));
+
+        Contour post3 = [];
+        post3.Add(new Vertex(22, -2));
+        post3.Add(new Vertex(25, -2));
+        post3.Add(new Vertex(25, 8));
+        post3.Add(new Vertex(22, 8));
+        post3.Add(new Vertex(22, -2));
+
+        Polygon input = [baseRect, post1, post2, post3];
+
+        // Act + Assert
+        AssertMatchesClipperByCount(input);
+    }
+
+    /// <summary>
+    /// Tests partially overlapping collinear edges to validate overlap handling.
+    /// </summary>
+    [Fact]
+    public void PartialOverlap_CollinearEdges_MatchesClipper()
+    {
+        // Arrange: Two rectangles with a partial overlap on the shared horizontal edges.
+        Contour rectA = [];
+        rectA.Add(new Vertex(0, 0));
+        rectA.Add(new Vertex(12, 0));
+        rectA.Add(new Vertex(12, 4));
+        rectA.Add(new Vertex(0, 4));
+        rectA.Add(new Vertex(0, 0));
+
+        Contour rectB = [];
+        rectB.Add(new Vertex(6, 0));
+        rectB.Add(new Vertex(18, 0));
+        rectB.Add(new Vertex(18, 4));
+        rectB.Add(new Vertex(6, 4));
+        rectB.Add(new Vertex(6, 0));
+
+        Polygon input = [rectA, rectB];
+
+        // Act + Assert
+        AssertMatchesClipperByCount(input);
+    }
+
+    /// <summary>
+    /// Tests disjoint polygons whose bounding boxes overlap to guard against false nesting.
+    /// </summary>
+    [Fact]
+    public void DisjointPolygonsWithOverlappingBounds_RemainSeparate()
+    {
+        // Arrange: Two disjoint triangles with overlapping bounding boxes.
+        Contour triA = [];
+        triA.Add(new Vertex(0, 0));
+        triA.Add(new Vertex(4, 0));
+        triA.Add(new Vertex(0, 4));
+        triA.Add(new Vertex(0, 0));
+
+        Contour triB = [];
+        triB.Add(new Vertex(3, 3));
+        triB.Add(new Vertex(7, 3));
+        triB.Add(new Vertex(7, 7));
+        triB.Add(new Vertex(3, 3));
+
+        Polygon input = [triA, triB];
+
+        // Act + Assert
+        AssertMatchesClipperByCount(input);
+    }
+
+    /// <summary>
     /// Helper method to create a regular octagon centered at (cx, cy) with given radius.
     /// </summary>
     private static Contour CreateOctagon(double cx, double cy, double radius)
@@ -2228,6 +2321,84 @@ public class SelfIntersectionRemoverTests
         contour.Add(new Vertex(cx + radius, cy)); // Same as first vertex (angle=0)
 
         return contour;
+    }
+
+    private static void AssertMatchesClipperByCount(Polygon input)
+    {
+        Polygon result = PolygonClipper.RemoveSelfIntersections(input);
+        PathsD clipperResult = RemoveSelfIntersectionsWithClipperD(input);
+
+        List<PathD> expected = SortPathsByLowestPoint(clipperResult);
+        List<Contour> actual = SortContoursByLowestPoint(result);
+
+        Assert.Equal(expected.Count, actual.Count);
+
+        for (int i = 0; i < expected.Count; i++)
+        {
+            PathD actualPath = ProjectContour(actual[i]);
+            Assert.Equal(expected[i].Count, actualPath.Count);
+        }
+    }
+
+    private static List<PathD> SortPathsByLowestPoint(PathsD paths)
+    {
+        List<PathD> sorted = new(paths);
+        sorted.Sort((left, right) => CompareLowestPoint(GetLowestPoint(left), GetLowestPoint(right)));
+        return sorted;
+    }
+
+    private static List<Contour> SortContoursByLowestPoint(Polygon polygon)
+    {
+        List<Contour> sorted = new(polygon.Count);
+        for (int i = 0; i < polygon.Count; i++)
+        {
+            sorted.Add(polygon[i]);
+        }
+
+        sorted.Sort((left, right) => CompareLowestPoint(GetLowestPoint(left), GetLowestPoint(right)));
+        return sorted;
+    }
+
+    private static int CompareLowestPoint(PointD left, PointD right)
+    {
+        if (left.y > right.y)
+        {
+            return -1;
+        }
+
+        if (left.y < right.y)
+        {
+            return 1;
+        }
+
+        return left.x.CompareTo(right.x);
+    }
+
+    private static PointD GetLowestPoint(Contour contour)
+    {
+        int count = contour.Count;
+        if (count == 0)
+        {
+            return default;
+        }
+
+        int lastIndex = count - 1;
+        if (count > 1 && contour[0] == contour[^1])
+        {
+            lastIndex = count - 2;
+        }
+
+        Vertex lowest = contour[0];
+        for (int i = 1; i <= lastIndex; i++)
+        {
+            Vertex candidate = contour[i];
+            if (candidate.Y > lowest.Y || (candidate.Y == lowest.Y && candidate.X < lowest.X))
+            {
+                lowest = candidate;
+            }
+        }
+
+        return new PointD(lowest.X, lowest.Y);
     }
 
     private static PathsD RemoveSelfIntersectionsWithClipperD(Polygon polygon, int precision = 6)
