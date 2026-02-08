@@ -82,7 +82,7 @@ internal static class SelfIntersectionRemover
 
         // Match Clipper2 ordering: highest Y (then lowest X) first.
         result.Sort(CompareContoursByLowestPoint);
-        Polygon resultPolygon = [];
+        Polygon resultPolygon = new(result.Count);
         for (int i = 0; i < result.Count; i++)
         {
             resultPolygon.Add(result[i]);
@@ -286,7 +286,7 @@ internal static class SelfIntersectionRemover
             depths[i] = GetDepth(i, parentIndices);
         }
 
-        Polygon oriented = [];
+        Polygon oriented = new(count);
         for (int i = 0; i < count; i++)
         {
             Contour copy = [];
@@ -965,7 +965,7 @@ internal static class SelfIntersectionRemover
         List<Vertex> rightVerts = BuildRotatedVertices(right, rightIndex);
 
         // Stitch the two boundary cycles at the shared vertex, keeping explicit closure.
-        Contour merged = [];
+        Contour merged = new(leftVerts.Count + rightVerts.Count + 1);
         merged.Add(shared);
         for (int i = 1; i < leftVerts.Count; i++)
         {

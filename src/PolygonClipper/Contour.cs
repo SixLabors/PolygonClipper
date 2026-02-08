@@ -21,13 +21,26 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     /// <summary>
     /// Set of vertices conforming the external contour
     /// </summary>
-    private readonly List<Vertex> vertices = [];
+    private readonly List<Vertex> vertices;
 
     /// <summary>
     /// Holes of the contour. They are stored as the indexes of
     /// the holes in a polygon class
     /// </summary>
     private readonly List<int> holeIndices = [];
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Contour"/> class.
+    /// </summary>
+    public Contour()
+        => this.vertices = [];
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Contour"/> class with a vertex capacity.
+    /// </summary>
+    /// <param name="vertexCapacity">The initial vertex capacity.</param>
+    public Contour(int vertexCapacity)
+        => this.vertices = new List<Vertex>(vertexCapacity);
 
     /// <summary>
     /// Gets the number of vertices.

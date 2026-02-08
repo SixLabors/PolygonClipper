@@ -16,7 +16,20 @@ public sealed class Polygon : IReadOnlyCollection<Contour>
     /// <summary>
     /// The collection of contours that make up the polygon.
     /// </summary>
-    private readonly List<Contour> contours = [];
+    private readonly List<Contour> contours;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Polygon"/> class.
+    /// </summary>
+    public Polygon()
+        => this.contours = [];
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Polygon"/> class with a contour capacity.
+    /// </summary>
+    /// <param name="contourCapacity">The initial contour capacity.</param>
+    public Polygon(int contourCapacity)
+        => this.contours = new List<Contour>(contourCapacity);
 
     /// <summary>
     /// Gets the number of contours in the polygon.
