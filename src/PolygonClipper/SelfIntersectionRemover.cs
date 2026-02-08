@@ -31,7 +31,7 @@ namespace SixLabors.PolygonClipper;
 /// </description></item>
 /// <item><description>
 /// <b>Boundary Extraction:</b> Computes winding numbers and keeps only edges that
-/// form the boundary between filled (winding > 0) and unfilled (winding ≤ 0) regions.
+/// form the boundary between filled (winding &gt; 0) and unfilled (winding &lt;= 0) regions.
 /// </description></item>
 /// </list>
 /// </remarks>
@@ -311,16 +311,36 @@ internal static class SelfIntersectionRemover
         return oriented;
     }
 
+    /// <summary>
+    /// Determines whether two bounding boxes overlap.
+    /// </summary>
+    /// <param name="left">The first bounding box.</param>
+    /// <param name="right">The second bounding box.</param>
+    /// <returns><see langword="true"/> if the boxes overlap.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool BoundsOverlap(in Box2 left, in Box2 right)
         => left.Min.X <= right.Max.X && left.Max.X >= right.Min.X &&
            left.Min.Y <= right.Max.Y && left.Max.Y >= right.Min.Y;
 
+    /// <summary>
+    /// Determines whether a point lies within the supplied bounds.
+    /// </summary>
+    /// <param name="point">The point to test.</param>
+    /// <param name="bounds">The bounding box.</param>
+    /// <returns><see langword="true"/> if the point lies within the bounds.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool PointInBounds(in Vertex point, in Box2 bounds)
         => point.X >= bounds.Min.X && point.X <= bounds.Max.X &&
            point.Y >= bounds.Min.Y && point.Y <= bounds.Max.Y;
 
+    /// <summary>
+    /// Determines whether two contours intersect or overlap.
+    /// </summary>
+    /// <param name="subject">The first contour.</param>
+    /// <param name="clipping">The second contour.</param>
+    /// <param name="subjectBounds">The bounds of the first contour.</param>
+    /// <param name="clippingBounds">The bounds of the second contour.</param>
+    /// <returns><see langword="true"/> if any segments intersect.</returns>
     private static bool ContoursHaveIntersection(Contour subject, Contour clipping, Box2 subjectBounds, Box2 clippingBounds)
     {
         if (!BoundsOverlap(subjectBounds, clippingBounds))
@@ -1122,7 +1142,11 @@ internal static class SelfIntersectionRemover
         return contours;
     }
 
-    // Merge boundary cycles that meet at a single vertex so the union is represented as one contour.
+    /// <summary>
+    /// Merges boundary cycles that meet at a shared vertex so the union is represented as one contour.
+    /// </summary>
+    /// <param name="contours">The contours to merge.</param>
+    /// <returns>The merged contour list.</returns>
     private static List<Contour> MergeTouchingContours(List<Contour> contours)
     {
         if (contours.Count < 2)
@@ -1155,6 +1179,15 @@ internal static class SelfIntersectionRemover
         return contours;
     }
 
+    /// <summary>
+    /// Finds a shared vertex between two contours.
+    /// </summary>
+    /// <param name="left">The first contour.</param>
+    /// <param name="right">The second contour.</param>
+    /// <param name="leftIndex">The index of the shared vertex in the first contour.</param>
+    /// <param name="rightIndex">The index of the shared vertex in the second contour.</param>
+    /// <param name="shared">The shared vertex value.</param>
+    /// <returns><see langword="true"/> when a shared vertex is found.</returns>
     private static bool TryFindSharedVertex(
         Contour left,
         Contour right,
@@ -1191,6 +1224,11 @@ internal static class SelfIntersectionRemover
         return false;
     }
 
+    /// <summary>
+    /// Returns the contour vertex count, excluding a duplicated closing vertex.
+    /// </summary>
+    /// <param name="contour">The contour to inspect.</param>
+    /// <returns>The number of unique contour vertices.</returns>
     private static int GetContourPointCount(Contour contour)
     {
         int count = contour.Count;
@@ -1204,20 +1242,15 @@ internal static class SelfIntersectionRemover
         return count;
     }
 
-    private static List<Vertex> BuildRotatedVertices(Contour contour, int startIndex)
-    {
-        int count = GetContourPointCount(contour);
-        List<Vertex> rotated = new(count);
-
-        // Rotate so the shared vertex is at index 0, preserving the original winding order.
-        for (int i = 0; i < count; i++)
-        {
-            rotated.Add(contour[(startIndex + i) % count]);
-        }
-
-        return rotated;
-    }
-
+    /// <summary>
+    /// Merges two contours that share a vertex into a single closed contour.
+    /// </summary>
+    /// <param name="left">The first contour.</param>
+    /// <param name="leftIndex">The shared vertex index in the first contour.</param>
+    /// <param name="right">The second contour.</param>
+    /// <param name="rightIndex">The shared vertex index in the second contour.</param>
+    /// <param name="shared">The shared vertex value.</param>
+    /// <returns>The merged contour.</returns>
     private static Contour MergeContoursAtSharedVertex(
         Contour left,
         int leftIndex,
@@ -1225,23 +1258,23 @@ internal static class SelfIntersectionRemover
         int rightIndex,
         Vertex shared)
     {
-        List<Vertex> leftVerts = BuildRotatedVertices(left, leftIndex);
-        List<Vertex> rightVerts = BuildRotatedVertices(right, rightIndex);
+        int leftCount = GetContourPointCount(left);
+        int rightCount = GetContourPointCount(right);
 
         // Stitch the two boundary cycles at the shared vertex, keeping explicit closure.
-        Contour merged = new(leftVerts.Count + rightVerts.Count + 1)
+        Contour merged = new(leftCount + rightCount + 1)
         {
             shared
         };
-        for (int i = 1; i < leftVerts.Count; i++)
+        for (int i = 1; i < leftCount; i++)
         {
-            merged.Add(leftVerts[i]);
+            merged.Add(left[(leftIndex + i) % leftCount]);
         }
 
         merged.Add(shared);
-        for (int i = 1; i < rightVerts.Count; i++)
+        for (int i = 1; i < rightCount; i++)
         {
-            merged.Add(rightVerts[i]);
+            merged.Add(right[(rightIndex + i) % rightCount]);
         }
 
         merged.Add(shared);
@@ -2147,3 +2180,5 @@ internal static class SelfIntersectionRemover
         public ContourNode Next { get; set; } = null!;
     }
 }
+
+
