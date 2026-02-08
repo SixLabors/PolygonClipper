@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <AssemblyName>SixLabors.PolygonClipper.Benchmarks</AssemblyName>
+    <AssemblyName>PolygonClipper.Benchmarks</AssemblyName>
     <OutputType>Exe</OutputType>
     <RootNamespace>SixLabors.PolygonClipper.Benchmarks</RootNamespace>
     <GenerateProgramFile>false</GenerateProgramFile>
@@ -37,7 +37,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="BenchmarkDotNet" Version="0.14.0" />
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageReference Include="Clipper2" Version="2.0.0" />
   </ItemGroup>
 
   <ItemGroup>
