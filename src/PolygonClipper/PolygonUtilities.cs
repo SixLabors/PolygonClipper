@@ -314,16 +314,14 @@ internal static class PolygonUtilities
         }
 
         // Compute the nesting depth for each contour (0 = exterior, 1 = hole, etc.).
-        for (int i = 0; i < count; i++)
-        {
-            depths[i] = GetDepth(i, parentIndices);
-        }
-
         // Exteriors are the even-depth contours.
-        List<int> externals = [];
+        List<int> externals = new(count);
         for (int i = 0; i < count; i++)
         {
-            if (depths[i] % 2 == 0)
+            int depth = GetDepth(i, parentIndices);
+            depths[i] = depth;
+
+            if ((depth & 1) == 0)
             {
                 externals.Add(i);
             }
@@ -332,7 +330,7 @@ internal static class PolygonUtilities
         // Sort exteriors by their minimum vertex so their order is deterministic.
         externals.Sort((left, right) => LexicographicVertexComparison(contourInfos[left].MinVertex, contourInfos[right].MinVertex));
 
-        Polygon result = [];
+        Polygon result = new(count);
         bool[] added = new bool[count];
         int[] newIndices = new int[count];
         Array.Fill(newIndices, -1);
@@ -346,7 +344,7 @@ internal static class PolygonUtilities
             List<int> holes = [];
             for (int i = 0; i < count; i++)
             {
-                if (!added[i] && parentIndices[i] == externalIndex && depths[i] % 2 == 1)
+                if (!added[i] && parentIndices[i] == externalIndex && (depths[i] & 1) == 1)
                 {
                     holes.Add(i);
                 }
