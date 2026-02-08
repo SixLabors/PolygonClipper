@@ -102,12 +102,7 @@ internal static class SelfIntersectionRemover
             return -1;
         }
 
-        if (leftPoint.Y < rightPoint.Y)
-        {
-            return 1;
-        }
-
-        return leftPoint.X.CompareTo(rightPoint.X);
+        return leftPoint.Y < rightPoint.Y ? 1 : leftPoint.X.CompareTo(rightPoint.X);
     }
 
     /// <summary>
@@ -467,7 +462,7 @@ internal static class SelfIntersectionRemover
             area += Vertex.Cross(current, next);
         }
 
-        return area;
+        return area * 0.5D;
     }
 
     /// <summary>
@@ -537,7 +532,6 @@ internal static class SelfIntersectionRemover
         }
 
         StablePriorityQueue<SweepEvent, SweepEventComparer> eventQueue = new(comparer, unorderedEvents);
-        List<SweepEvent> sortedEvents = new(unorderedEvents.Count);
         StatusLine statusLine = new(polygon.VertexCount >> 1);
 
         // Guard against pathological input that could otherwise leave the sweep stuck in an infinite loop.
@@ -553,7 +547,6 @@ internal static class SelfIntersectionRemover
             }
 
             SweepEvent sweepEvent = eventQueue.Dequeue();
-            sortedEvents.Add(sweepEvent);
 
             if (sweepEvent.Left)
             {
