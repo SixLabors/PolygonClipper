@@ -3,8 +3,14 @@
 
 namespace SixLabors.PolygonClipper;
 
-internal readonly struct LocalMinima
+/// <summary>
+/// Describes the lowest vertex of an edge bound for the sweep line.
+/// </summary>
+internal readonly struct LocalMinima : IEquatable<LocalMinima>
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LocalMinima"/> struct.
+    /// </summary>
     internal LocalMinima(ClipVertex vertex, ClipperPathType pathType, bool isOpen = false)
     {
         this.Vertex = vertex;
@@ -12,22 +18,37 @@ internal readonly struct LocalMinima
         this.IsOpen = isOpen;
     }
 
+    /// <summary>
+    /// Gets the vertex associated with this local minima.
+    /// </summary>
     internal ClipVertex Vertex { get; }
 
+    /// <summary>
+    /// Gets the path classification for this minima.
+    /// </summary>
     internal ClipperPathType PathType { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether this minima belongs to an open path.
+    /// </summary>
     internal bool IsOpen { get; }
 
-    public static bool operator ==(LocalMinima lm1, LocalMinima lm2) => ReferenceEquals(lm1.Vertex, lm2.Vertex);
+    public static bool operator ==(LocalMinima lm1, LocalMinima lm2) => lm1.Equals(lm2);
 
     public static bool operator !=(LocalMinima lm1, LocalMinima lm2) => !(lm1 == lm2);
 
-    public override bool Equals(object? obj) => obj is LocalMinima minima && this == minima;
+    public override bool Equals(object? obj) => obj is LocalMinima minima && this.Equals(minima);
 
     public override int GetHashCode() => this.Vertex.GetHashCode();
+
+    public bool Equals(LocalMinima other) => ReferenceEquals(this.Vertex, other.Vertex);
 }
 
+/// <summary>
+/// Orders local minima so higher Y-values are processed first during the sweep.
+/// </summary>
 internal struct LocalMinimaComparer : IComparer<LocalMinima>
 {
-    public readonly int Compare(LocalMinima locMin1, LocalMinima locMin2) => locMin2.Vertex.Point.Y.CompareTo(locMin1.Vertex.Point.Y);
+    public readonly int Compare(LocalMinima locMin1, LocalMinima locMin2)
+        => locMin2.Vertex.Point.Y.CompareTo(locMin1.Vertex.Point.Y);
 }

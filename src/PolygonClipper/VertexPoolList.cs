@@ -7,8 +7,14 @@ using System.Runtime.CompilerServices;
 
 namespace SixLabors.PolygonClipper;
 
+/// <summary>
+/// Pool-backed list of clip vertices reused across clipping operations.
+/// </summary>
 internal sealed class VertexPoolList : PooledList<ClipVertex>
 {
+    /// <summary>
+    /// Adds or reuses a clip vertex initialized with the given data.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ClipVertex Add(Vertex point, VertexFlags flags, ClipVertex? prev)
     {
@@ -21,6 +27,7 @@ internal sealed class VertexPoolList : PooledList<ClipVertex>
         }
         else
         {
+            // Reset pooled state so linked lists are rebuilt safely.
             poolVertex.Point = point;
             poolVertex.Flags = flags;
             poolVertex.Prev = prev;
@@ -32,8 +39,14 @@ internal sealed class VertexPoolList : PooledList<ClipVertex>
     }
 }
 
+/// <summary>
+/// Pool-backed list of output points allocated during clipping.
+/// </summary>
 internal sealed class OutputPointPoolList : PooledList<OutputPoint>
 {
+    /// <summary>
+    /// Adds or reuses an output point and increments the owning record count.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public OutputPoint Add(Vertex pt, OutputRecord outputRecord)
     {
@@ -59,10 +72,16 @@ internal sealed class OutputPointPoolList : PooledList<OutputPoint>
     }
 }
 
+/// <summary>
+/// Pool-backed list of output records that preserves per-record state between runs.
+/// </summary>
 internal sealed class OutputRecordPoolList : PooledList<OutputRecord>
 {
     private static readonly Contour Tombstone = [];
 
+    /// <summary>
+    /// Adds or reuses an output record with cleared state.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public OutputRecord Add()
     {
@@ -103,6 +122,7 @@ internal sealed class OutputRecordPoolList : PooledList<OutputRecord>
                 break;
             }
 
+            // Mark paths so pooled records are not accidentally reused without reset.
             active.Path = Tombstone;
             active.Owner = null;
             active.FrontEdge = null;
@@ -113,8 +133,14 @@ internal sealed class OutputRecordPoolList : PooledList<OutputRecord>
     }
 }
 
+/// <summary>
+/// Pool-backed list of horizontal joins used during sweep processing.
+/// </summary>
 internal sealed class HorizontalJoinPoolList : PooledList<HorizontalJoin>
 {
+    /// <summary>
+    /// Adds or reuses a horizontal join entry.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public HorizontalJoin Add(OutputPoint ltor, OutputPoint rtol)
     {
@@ -136,6 +162,9 @@ internal sealed class HorizontalJoinPoolList : PooledList<HorizontalJoin>
     }
 }
 
+/// <summary>
+/// Base class for pool-backed lists with stable indexing and reuse.
+/// </summary>
 internal abstract class PooledList<T> : IReadOnlyList<T>
     where T : class
 {

@@ -5,6 +5,13 @@ using System.Runtime.CompilerServices;
 
 namespace SixLabors.PolygonClipper;
 
+/// <summary>
+/// Sweep-line union clipper specialized for self-intersection removal.
+/// </summary>
+/// <remarks>
+/// This clipper consumes subject-only paths and applies the selected fill rule
+/// to compute the union. It reuses pooled data structures to keep allocations low.
+/// </remarks>
 internal sealed class SelfIntersectionUnionClipper
 {
     private ClipperFillRule fillRule;
@@ -46,9 +53,6 @@ internal sealed class SelfIntersectionUnionClipper
     internal bool PreserveCollinear { get; set; }
 
     internal bool ReverseSolution { get; set; }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsOdd(int val) => (val & 1) != 0;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void SwapActives(ref Active ae1, ref Active ae2) => (ae2, ae1) = (ae1, ae2);
@@ -407,6 +411,9 @@ internal sealed class SelfIntersectionUnionClipper
         this.AddPathsToVertexList(paths, polytype, isOpen);
     }
 
+    /// <summary>
+    /// Registers a local minima vertex once for the sweep.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void AddLocalMinima(ClipVertex vertex, ClipperPathType polytype, bool isOpen, List<LocalMinima> minimaList)
     {
@@ -420,6 +427,9 @@ internal sealed class SelfIntersectionUnionClipper
         minimaList.Add(new LocalMinima(vertex, polytype, isOpen));
     }
 
+    /// <summary>
+    /// Builds circular vertex lists and captures local minima/maxima for the sweep.
+    /// </summary>
     private void AddPathsToVertexList(List<Contour> paths, ClipperPathType polytype, bool isOpen)
     {
         int totalVertCnt = 0;
@@ -428,6 +438,7 @@ internal sealed class SelfIntersectionUnionClipper
             totalVertCnt += path.Count;
         }
 
+        // Pre-size the pool so vertex allocation is deterministic and cheap.
         this.vertexList.EnsureCapacity(this.vertexList.Count + totalVertCnt);
 
         foreach (Contour path in paths)
@@ -737,8 +748,8 @@ internal sealed class SelfIntersectionUnionClipper
                 ae2 = ae2!.NextInAel;
             }
 
-            ae.WindCount = IsOdd(cnt1) ? 1 : 0;
-            ae.WindCount2 = IsOdd(cnt2) ? 1 : 0;
+            ae.WindCount = int.IsOddInteger(cnt1) ? 1 : 0;
+            ae.WindCount2 = int.IsOddInteger(cnt2) ? 1 : 0;
         }
         else
         {
@@ -1731,6 +1742,8 @@ internal sealed class SelfIntersectionUnionClipper
             return;
         }
 
+        // Process each scanbeam: insert local minima, handle horizontals, resolve intersections,
+        // then advance to the next scanline.
         while (this.succeeded)
         {
             this.InsertLocalMinimaIntoAEL(y);

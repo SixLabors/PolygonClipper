@@ -5,26 +5,53 @@ using System.Runtime.CompilerServices;
 
 namespace SixLabors.PolygonClipper;
 
-///////////////////////////////////////////////////////////////////
-// Important: UP and DOWN here are premised on Y-axis positive down
-// displays, which is the orientation used in Clipper's development.
-///////////////////////////////////////////////////////////////////
+/// <summary>
+/// Represents an active edge in the sweep-line processing.
+/// </summary>
+/// <remarks>
+/// UP and DOWN are premised on a Y-axis-positive-down coordinate system,
+/// matching the original Clipper orientation assumptions.
+/// </remarks>
 internal sealed class Active
 {
+    /// <summary>
+    /// Gets or sets the lower endpoint of the edge.
+    /// </summary>
     internal Vertex Bot { get; set; }
 
+    /// <summary>
+    /// Gets or sets the upper endpoint of the edge.
+    /// </summary>
     internal Vertex Top { get; set; }
 
+    /// <summary>
+    /// Gets or sets the current X intersection with the scanline.
+    /// </summary>
     internal double CurrentX { get; set; } // current (updated at every new scanline)
 
+    /// <summary>
+    /// Gets or sets the delta-X per delta-Y for the edge.
+    /// </summary>
     internal double Dx { get; set; }
 
+    /// <summary>
+    /// Gets or sets the winding delta contributed by this edge.
+    /// </summary>
     internal int WindDelta { get; set; } // 1 or -1 depending on winding direction
 
+    /// <summary>
+    /// Gets or sets the winding count for this path type.
+    /// </summary>
     internal int WindCount { get; set; }
 
+    /// <summary>
+    /// Gets or sets the winding count for the opposite path type.
+    /// </summary>
     internal int WindCount2 { get; set; } // winding count of the opposite polytype
 
+    /// <summary>
+    /// Gets or sets the output record this edge contributes to.
+    /// </summary>
     internal OutputRecord? OutputRecord { get; set; }
 
     // AEL: 'active edge list' (Vatti's AET - active edge table)
