@@ -3249,13 +3249,13 @@ internal sealed class SelfIntersectionUnionClipper
         OutputPoint op2;
         if (reverse)
         {
-            lastPt = new Vertex(op.Point.X, -op.Point.Y);
+            lastPt = new Vertex(op.Point.X, op.Point.Y);
             op2 = op.Prev;
         }
         else
         {
             op = op.Next!;
-            lastPt = new Vertex(op.Point.X, -op.Point.Y);
+            lastPt = new Vertex(op.Point.X, op.Point.Y);
             op2 = op.Next!;
         }
 
@@ -3263,7 +3263,7 @@ internal sealed class SelfIntersectionUnionClipper
 
         while (op2 != op)
         {
-            Vertex current = new Vertex(op2.Point.X, -op2.Point.Y);
+            Vertex current = new Vertex(op2.Point.X, op2.Point.Y);
             if (current != lastPt)
             {
                 lastPt = current;

@@ -136,18 +136,13 @@ internal static class SelfIntersectionRemover
 
     private static void CopyContourVertices(Contour source, bool isClosed, Contour destination)
     {
-        if (source.Count == 0)
-        {
-            return;
-        }
-
         for (int i = 0; i < source.Count; i++)
         {
             Vertex vertex = source[i];
-            destination.Add(new Vertex(vertex.X, -vertex.Y));
+            destination.Add(vertex);
         }
 
-        if (!isClosed && destination.Count > 0 && destination[^1] != destination[0])
+        if (!isClosed && destination.Count > 1 && destination[^1] != destination[0])
         {
             destination.Add(destination[0]);
         }
