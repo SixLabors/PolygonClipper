@@ -39,7 +39,7 @@ internal static class SelfIntersectionRemover
 {
     // Per-thread clipper instance to reuse pools without cross-thread contention.
     [ThreadStatic]
-    private static UnionClipper? cachedClipper;
+    private static SelfIntersectionUnionClipper? cachedClipper;
 
     // Cached subject list to avoid per-call list allocations.
     [ThreadStatic]
@@ -233,7 +233,7 @@ internal static class SelfIntersectionRemover
         bool pathsReversed = lowestPathIdx >= 0 && isNegArea;
         ClipperFillRule fillRule = pathsReversed ? ClipperFillRule.Negative : ClipperFillRule.Positive;
 
-        UnionClipper clipper = cachedClipper ??= new UnionClipper();
+        SelfIntersectionUnionClipper clipper = cachedClipper ??= new SelfIntersectionUnionClipper();
         clipper.Clear();
         clipper.PreserveCollinear = false;
         clipper.ReverseSolution = pathsReversed;

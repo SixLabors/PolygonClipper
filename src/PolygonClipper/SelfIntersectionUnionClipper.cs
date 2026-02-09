@@ -5,7 +5,7 @@ using System.Runtime.CompilerServices;
 
 namespace SixLabors.PolygonClipper;
 
-internal sealed class UnionClipper
+internal sealed class SelfIntersectionUnionClipper
 {
     private ClipperFillRule fillRule;
     private Active? activeEdges;
@@ -28,7 +28,7 @@ internal sealed class UnionClipper
     private bool succeeded;
     private int pathPoolIndex;
 
-    internal UnionClipper()
+    internal SelfIntersectionUnionClipper()
     {
         this.minimaList = [];
         this.intersectList = [];
@@ -404,7 +404,153 @@ internal sealed class UnionClipper
         }
 
         this.isSortedMinimaList = false;
-        ClipperInputBuilder.AddPathsToVertexList(paths, polytype, isOpen, this.minimaList, this.vertexList);
+        this.AddPathsToVertexList(paths, polytype, isOpen);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void AddLocalMinima(ClipVertex vertex, ClipperPathType polytype, bool isOpen, List<LocalMinima> minimaList)
+    {
+        // Make sure the ClipVertex is added only once.
+        if ((vertex.Flags & VertexFlags.LocalMin) != VertexFlags.None)
+        {
+            return;
+        }
+
+        vertex.Flags |= VertexFlags.LocalMin;
+        minimaList.Add(new LocalMinima(vertex, polytype, isOpen));
+    }
+
+    private void AddPathsToVertexList(List<Contour> paths, ClipperPathType polytype, bool isOpen)
+    {
+        int totalVertCnt = 0;
+        foreach (Contour path in paths)
+        {
+            totalVertCnt += path.Count;
+        }
+
+        this.vertexList.EnsureCapacity(this.vertexList.Count + totalVertCnt);
+
+        foreach (Contour path in paths)
+        {
+            ClipVertex? v0 = null;
+            ClipVertex? prevVertex = null;
+            ClipVertex? currVertex;
+            foreach (Vertex pt in path)
+            {
+                if (v0 == null)
+                {
+                    v0 = this.vertexList.Add(pt, VertexFlags.None, null);
+                    prevVertex = v0;
+                    continue;
+                }
+
+                if (!PolygonUtilities.PointEquals(prevVertex!.Point, pt))
+                {
+                    currVertex = this.vertexList.Add(pt, VertexFlags.None, prevVertex);
+                    prevVertex.Next = currVertex;
+                    prevVertex = currVertex;
+                }
+            }
+
+            if (v0 == null || prevVertex?.Prev == null)
+            {
+                continue;
+            }
+
+            if (!isOpen && PolygonUtilities.PointEquals(prevVertex.Point, v0.Point))
+            {
+                prevVertex = prevVertex.Prev;
+            }
+
+            prevVertex.Next = v0;
+            v0.Prev = prevVertex;
+            if (!isOpen && prevVertex.Next == prevVertex)
+            {
+                continue;
+            }
+
+            // OK, we have a valid path
+            bool goingUp;
+            if (isOpen)
+            {
+                currVertex = v0.Next;
+                while (currVertex != v0 && PolygonUtilities.IsAlmostZero(currVertex!.Point.Y - v0.Point.Y))
+                {
+                    currVertex = currVertex.Next;
+                }
+
+                goingUp = currVertex!.Point.Y <= v0.Point.Y;
+                if (goingUp)
+                {
+                    v0.Flags = VertexFlags.OpenStart;
+                    AddLocalMinima(v0, polytype, true, this.minimaList);
+                }
+                else
+                {
+                    v0.Flags = VertexFlags.OpenStart | VertexFlags.LocalMax;
+                }
+            }
+            else
+            {
+                prevVertex = v0.Prev;
+                while (prevVertex != v0 && PolygonUtilities.IsAlmostZero(prevVertex!.Point.Y - v0.Point.Y))
+                {
+                    prevVertex = prevVertex.Prev;
+                }
+
+                if (prevVertex == v0)
+                {
+                    // Only open paths can be completely flat.
+                    continue;
+                }
+
+                goingUp = prevVertex.Point.Y > v0.Point.Y;
+            }
+
+            bool goingUp0 = goingUp;
+            prevVertex = v0;
+            currVertex = v0.Next;
+            while (currVertex != v0)
+            {
+                if (currVertex!.Point.Y > prevVertex.Point.Y && goingUp)
+                {
+                    prevVertex.Flags |= VertexFlags.LocalMax;
+                    goingUp = false;
+                }
+                else if (currVertex.Point.Y < prevVertex.Point.Y && !goingUp)
+                {
+                    goingUp = true;
+                    AddLocalMinima(prevVertex, polytype, isOpen, this.minimaList);
+                }
+
+                prevVertex = currVertex;
+                currVertex = currVertex.Next;
+            }
+
+            if (isOpen)
+            {
+                prevVertex.Flags |= VertexFlags.OpenEnd;
+                if (goingUp)
+                {
+                    prevVertex.Flags |= VertexFlags.LocalMax;
+                }
+                else
+                {
+                    AddLocalMinima(prevVertex, polytype, isOpen, this.minimaList);
+                }
+            }
+            else if (goingUp != goingUp0)
+            {
+                if (goingUp0)
+                {
+                    AddLocalMinima(prevVertex, polytype, false, this.minimaList);
+                }
+                else
+                {
+                    prevVertex.Flags |= VertexFlags.LocalMax;
+                }
+            }
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
