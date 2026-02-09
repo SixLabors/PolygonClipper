@@ -449,20 +449,10 @@ internal sealed class SelfIntersectionUnionClipper
     {
         if (this.fillRule == FillRule.Positive)
         {
-            if (ae.WindCount != 1)
-            {
-                return false;
-            }
-
-            return ae.WindCount2 <= 0;
+            return ae.WindCount == 1;
         }
 
-        if (ae.WindCount != -1)
-        {
-            return false;
-        }
-
-        return ae.WindCount2 >= 0;
+        return ae.WindCount == -1;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -521,8 +511,6 @@ internal sealed class SelfIntersectionUnionClipper
                 }
             }
         }
-
-        ae.WindCount2 = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -700,7 +688,6 @@ internal sealed class SelfIntersectionUnionClipper
             contributing = this.IsContributingClosed(leftBound);
 
             rightBound.WindCount = leftBound.WindCount;
-            rightBound.WindCount2 = leftBound.WindCount2;
             InsertRightEdge(leftBound, rightBound);
 
             if (contributing)
@@ -1074,25 +1061,8 @@ internal sealed class SelfIntersectionUnionClipper
         // neither edge is 'hot'
         else
         {
-            double e1Wc2, e2Wc2;
-            if (this.fillRule == FillRule.Positive)
-            {
-                e1Wc2 = ae1.WindCount2;
-                e2Wc2 = ae2.WindCount2;
-            }
-            else
-            {
-                e1Wc2 = -ae1.WindCount2;
-                e2Wc2 = -ae2.WindCount2;
-            }
-
             if (oldE1WindCount == 1 && oldE2WindCount == 1)
             {
-                if (e1Wc2 > 0 && e2Wc2 > 0)
-                {
-                    return;
-                }
-
                 this.AddLocalMinPoly(ae1, ae2, pt);
             }
         }
@@ -1135,7 +1105,6 @@ internal sealed class SelfIntersectionUnionClipper
         ae.Top = default;
         ae.Dx = 0.0;
         ae.WindCount = 0;
-        ae.WindCount2 = 0;
         ae.OutputRecord = null;
         ae.PrevInAel = null;
         ae.NextInAel = null;

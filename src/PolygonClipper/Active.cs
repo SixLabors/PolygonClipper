@@ -45,11 +45,6 @@ internal sealed class Active
     internal int WindCount { get; set; }
 
     /// <summary>
-    /// Gets or sets the winding count for the opposite path type.
-    /// </summary>
-    internal int WindCount2 { get; set; } // secondary winding count for non-subject paths
-
-    /// <summary>
     /// Gets or sets the output record this edge contributes to.
     /// </summary>
     internal OutputRecord? OutputRecord { get; set; }
