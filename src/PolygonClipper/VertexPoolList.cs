@@ -102,7 +102,6 @@ internal sealed class OutputRecordPoolList : PooledList<OutputRecord>
             outputRecord.Points = null;
             outputRecord.Bounds = default;
             outputRecord.Path.Clear();
-            outputRecord.IsOpen = false;
             outputRecord.Splits?.Clear();
             outputRecord.RecursiveSplit = null;
         }

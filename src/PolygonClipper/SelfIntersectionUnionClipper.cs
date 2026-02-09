@@ -78,38 +78,6 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ClipVertex? GetCurrentYMaximaVertexOpen(Active ae)
-    {
-        ClipVertex? result = ae.VertexTop;
-        if (ae.WindDelta > 0)
-        {
-            while (PolygonUtilities.IsAlmostZero(result!.Next!.Point.Y - result.Point.Y) &&
-                ((result.Flags & (VertexFlags.OpenEnd |
-                VertexFlags.LocalMax)) == VertexFlags.None))
-            {
-                result = result.Next;
-            }
-        }
-        else
-        {
-            while (PolygonUtilities.IsAlmostZero(result!.Prev!.Point.Y - result.Point.Y) &&
-                ((result.Flags & (VertexFlags.OpenEnd |
-                VertexFlags.LocalMax)) == VertexFlags.None))
-            {
-                result = result.Prev;
-            }
-        }
-
-        if (!result.IsMaxima)
-        {
-            // Not a maxima.
-            result = null;
-        }
-
-        return result;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static ClipVertex? GetCurrentYMaximaVertex(Active ae)
     {
         ClipVertex? result = ae.VertexTop;
@@ -266,17 +234,6 @@ internal sealed class SelfIntersectionUnionClipper
     private static bool OutputRecordIsAscending(Active hotEdge) => hotEdge == hotEdge.OutputRecord!.FrontEdge;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void SwapFrontBackSides(OutputRecord outputRecord)
-    {
-        // while this proc. is needed for open paths
-        // it's almost never needed for closed paths
-        Active ae2 = outputRecord.FrontEdge!;
-        outputRecord.FrontEdge = outputRecord.BackEdge;
-        outputRecord.BackEdge = ae2;
-        outputRecord.Points = outputRecord.Points!.Next;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool EdgesAdjacentInAEL(IntersectNode inode) => (inode.Edge1.NextInAel == inode.Edge2) || (inode.Edge1.PrevInAel == inode.Edge2);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -361,7 +318,9 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private bool HasLocMinAtY(double y) => this.currentMinimaIndex < this.minimaList.Count && this.minimaList[this.currentMinimaIndex].Vertex.Point.Y == y;
+    private bool HasLocMinAtY(double y)
+        => this.currentMinimaIndex < this.minimaList.Count &&
+           this.minimaList[this.currentMinimaIndex].Vertex.Point.Y == y;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private LocalMinima PopLocalMinima() => this.minimaList[this.currentMinimaIndex++];
@@ -528,40 +487,16 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private bool IsContributingOpen(Active ae)
-    {
-        bool isInClip, isInSubj;
-        switch (this.fillRule)
-        {
-            case ClipperFillRule.Positive:
-                isInSubj = ae.WindCount > 0;
-                isInClip = ae.WindCount2 > 0;
-                break;
-            case ClipperFillRule.Negative:
-                isInSubj = ae.WindCount < 0;
-                isInClip = ae.WindCount2 < 0;
-                break;
-            default:
-                isInSubj = ae.WindCount != 0;
-                isInClip = ae.WindCount2 != 0;
-                break;
-        }
-
-        return !isInSubj && !isInClip;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void SetWindCountForClosedPathEdge(Active ae)
     {
         // Wind counts refer to polygon regions not edges, so here an edge's WindCnt
         // indicates the higher of the wind counts for the two regions touching the
-        // edge. (nb: Adjacent regions can only ever have their wind counts differ by
-        // one. Also, open paths have no meaningful wind directions or counts.)
+        // edge. (nb: Adjacent regions can only ever have their wind counts differ by one.)
         Active? ae2 = ae.PrevInAel;
 
         // find the nearest closed path edge of the same PolyType in AEL (heading left)
         ClipperPathType pt = GetPolyType(ae);
-        while (ae2 != null && (GetPolyType(ae2) != pt || ae2.IsOpen))
+        while (ae2 != null && GetPolyType(ae2) != pt)
         {
             ae2 = ae2.PrevInAel;
         }
@@ -603,7 +538,7 @@ internal sealed class SelfIntersectionUnionClipper
                 else
                 {
                     // now outside all polys of same polytype so set own WC ...
-                    ae.WindCount = ae.IsOpen ? 1 : ae.WindDelta;
+                    ae.WindCount = ae.WindDelta;
                 }
             }
             else
@@ -632,7 +567,7 @@ internal sealed class SelfIntersectionUnionClipper
         {
             while (ae2 != ae)
             {
-                if (GetPolyType(ae2!) != pt && !ae2!.IsOpen)
+                if (GetPolyType(ae2!) != pt)
                 {
                     ae.WindCount2 = ae.WindCount2 == 0 ? 1 : 0;
                 }
@@ -644,51 +579,9 @@ internal sealed class SelfIntersectionUnionClipper
         {
             while (ae2 != ae)
             {
-                if (GetPolyType(ae2!) != pt && !ae2!.IsOpen)
+                if (GetPolyType(ae2!) != pt)
                 {
                     ae.WindCount2 += ae2!.WindDelta;
-                }
-
-                ae2 = ae2!.NextInAel;
-            }
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void SetWindCountForOpenPathEdge(Active ae)
-    {
-        Active? ae2 = this.activeEdges;
-        if (this.fillRule == ClipperFillRule.EvenOdd)
-        {
-            int cnt1 = 0, cnt2 = 0;
-            while (ae2 != ae)
-            {
-                if (GetPolyType(ae2!) == ClipperPathType.Clip)
-                {
-                    cnt2++;
-                }
-                else if (!ae2!.IsOpen)
-                {
-                    cnt1++;
-                }
-
-                ae2 = ae2!.NextInAel;
-            }
-
-            ae.WindCount = int.IsOddInteger(cnt1) ? 1 : 0;
-            ae.WindCount2 = int.IsOddInteger(cnt2) ? 1 : 0;
-        }
-        else
-        {
-            while (ae2 != ae)
-            {
-                if (GetPolyType(ae2!) == ClipperPathType.Clip)
-                {
-                    ae.WindCount2 += ae2!.WindDelta;
-                }
-                else if (!ae2!.IsOpen)
-                {
-                    ae.WindCount += ae2!.WindDelta;
                 }
 
                 ae2 = ae2!.NextInAel;
@@ -713,8 +606,7 @@ internal sealed class SelfIntersectionUnionClipper
 
         // edges must be collinear to get here
 
-        // for starting open paths, place them according to
-        // the direction they're about to turn
+        // for collinear bounds, place them according to the next turn
         if (!resident.IsMaxima && (resident.Top.Y > newcomer.Top.Y))
         {
             return PolygonUtilities.CrossSign(
@@ -821,126 +713,84 @@ internal sealed class SelfIntersectionUnionClipper
         while (this.HasLocMinAtY(botY))
         {
             LocalMinima localMinima = this.PopLocalMinima();
-            Active? leftBound;
-            if ((localMinima.Vertex.Flags & VertexFlags.OpenStart) != VertexFlags.None)
-            {
-                leftBound = null;
-            }
-            else
-            {
-                leftBound = this.NewActive();
-                leftBound.Bot = localMinima.Vertex.Point;
-                leftBound.CurrentX = localMinima.Vertex.Point.X;
-                leftBound.WindDelta = -1;
-                leftBound.VertexTop = localMinima.Vertex.Prev;
-                leftBound.Top = localMinima.Vertex.Prev!.Point;
-                leftBound.OutputRecord = null;
-                leftBound.LocalMin = localMinima;
-                leftBound.UpdateDx();
-            }
+            Active leftBound = this.NewActive();
+            leftBound.Bot = localMinima.Vertex.Point;
+            leftBound.CurrentX = localMinima.Vertex.Point.X;
+            leftBound.WindDelta = -1;
+            leftBound.VertexTop = localMinima.Vertex.Prev;
+            leftBound.Top = localMinima.Vertex.Prev!.Point;
+            leftBound.OutputRecord = null;
+            leftBound.LocalMin = localMinima;
+            leftBound.UpdateDx();
 
-            Active? rightBound;
-            if ((localMinima.Vertex.Flags & VertexFlags.OpenEnd) != VertexFlags.None)
-            {
-                rightBound = null;
-            }
-            else
-            {
-                rightBound = this.NewActive();
-                rightBound.Bot = localMinima.Vertex.Point;
-                rightBound.CurrentX = localMinima.Vertex.Point.X;
-                rightBound.WindDelta = 1;
+            Active rightBound = this.NewActive();
+            rightBound.Bot = localMinima.Vertex.Point;
+            rightBound.CurrentX = localMinima.Vertex.Point.X;
+            rightBound.WindDelta = 1;
 
-                // Ascending.
-                rightBound.VertexTop = localMinima.Vertex.Next;
-                rightBound.Top = localMinima.Vertex.Next!.Point;
-                rightBound.OutputRecord = null;
-                rightBound.LocalMin = localMinima;
-                rightBound.UpdateDx();
-            }
+            // Ascending.
+            rightBound.VertexTop = localMinima.Vertex.Next;
+            rightBound.Top = localMinima.Vertex.Next!.Point;
+            rightBound.OutputRecord = null;
+            rightBound.LocalMin = localMinima;
+            rightBound.UpdateDx();
 
             // Currently LeftB is just the descending bound and RightB is the ascending.
             // Now if the LeftB isn't on the left of RightB then we need swap them.
-            if (leftBound != null && rightBound != null)
+            if (leftBound.IsHorizontal)
             {
-                if (leftBound.IsHorizontal)
-                {
-                    if (leftBound.IsHeadingRightHorizontal)
-                    {
-                        SwapActives(ref leftBound, ref rightBound);
-                    }
-                }
-                else if (rightBound.IsHorizontal)
-                {
-                    if (rightBound.IsHeadingLeftHorizontal)
-                    {
-                        SwapActives(ref leftBound, ref rightBound);
-                    }
-                }
-                else if (leftBound.Dx < rightBound.Dx)
+                if (leftBound.IsHeadingRightHorizontal)
                 {
                     SwapActives(ref leftBound, ref rightBound);
                 }
-
-                // so when leftBound has windDx == 1, the polygon will be oriented
-                // counter-clockwise in Cartesian coords (clockwise with inverted Y).
             }
-            else if (leftBound == null)
+            else if (rightBound.IsHorizontal)
             {
-                leftBound = rightBound;
-                rightBound = null;
+                if (rightBound.IsHeadingLeftHorizontal)
+                {
+                    SwapActives(ref leftBound, ref rightBound);
+                }
+            }
+            else if (leftBound.Dx < rightBound.Dx)
+            {
+                SwapActives(ref leftBound, ref rightBound);
             }
 
             bool contributing;
-            leftBound!.IsLeftBound = true;
+            leftBound.IsLeftBound = true;
             this.InsertLeftEdge(leftBound);
 
-            if (leftBound.IsOpen)
+            this.SetWindCountForClosedPathEdge(leftBound);
+            contributing = this.IsContributingClosed(leftBound);
+
+            rightBound.WindCount = leftBound.WindCount;
+            rightBound.WindCount2 = leftBound.WindCount2;
+            InsertRightEdge(leftBound, rightBound);
+
+            if (contributing)
             {
-                this.SetWindCountForOpenPathEdge(leftBound);
-                contributing = this.IsContributingOpen(leftBound);
+                this.AddLocalMinPoly(leftBound, rightBound, leftBound.Bot, true);
+                if (!leftBound.IsHorizontal)
+                {
+                    this.CheckJoinLeft(leftBound, leftBound.Bot);
+                }
+            }
+
+            while (rightBound.NextInAel != null &&
+                          IsValidAelOrder(rightBound.NextInAel, rightBound))
+            {
+                this.IntersectEdges(rightBound, rightBound.NextInAel, rightBound.Bot);
+                this.SwapPositionsInAEL(rightBound, rightBound.NextInAel);
+            }
+
+            if (rightBound.IsHorizontal)
+            {
+                this.PushHorizontal(rightBound);
             }
             else
             {
-                this.SetWindCountForClosedPathEdge(leftBound);
-                contributing = this.IsContributingClosed(leftBound);
-            }
-
-            if (rightBound != null)
-            {
-                rightBound.WindCount = leftBound.WindCount;
-                rightBound.WindCount2 = leftBound.WindCount2;
-                InsertRightEdge(leftBound, rightBound);
-
-                if (contributing)
-                {
-                    this.AddLocalMinPoly(leftBound, rightBound, leftBound.Bot, true);
-                    if (!leftBound.IsHorizontal)
-                    {
-                        this.CheckJoinLeft(leftBound, leftBound.Bot);
-                    }
-                }
-
-                while (rightBound.NextInAel != null &&
-                              IsValidAelOrder(rightBound.NextInAel, rightBound))
-                {
-                    this.IntersectEdges(rightBound, rightBound.NextInAel, rightBound.Bot);
-                    this.SwapPositionsInAEL(rightBound, rightBound.NextInAel);
-                }
-
-                if (rightBound.IsHorizontal)
-                {
-                    this.PushHorizontal(rightBound);
-                }
-                else
-                {
-                    this.CheckJoinRight(rightBound, rightBound.Bot);
-                    this.InsertScanline(rightBound.Top.Y);
-                }
-            }
-            else if (contributing)
-            {
-                this.StartOpenPath(leftBound, leftBound.Bot);
+                this.CheckJoinRight(rightBound, rightBound.Bot);
+                this.InsertScanline(rightBound.Top.Y);
             }
 
             if (leftBound.IsHorizontal)
@@ -981,56 +831,39 @@ internal sealed class SelfIntersectionUnionClipper
         ae1.OutputRecord = outputRecord;
         ae2.OutputRecord = outputRecord;
 
-        if (ae1.IsOpen)
+        Active? prevHotEdge = ae1.GetPrevHotEdge();
+
+        // e.WindDelta is the winding direction of the **input** paths
+        // and unrelated to the winding direction of output polygons.
+        // Output orientation is determined by the edge's OutputRecord.FrontEdge which is
+        // the ascending edge (see AddLocalMinPoly).
+        if (prevHotEdge != null)
+        {
+            if (this.buildHierarchy)
+            {
+                SetOwner(outputRecord, prevHotEdge.OutputRecord!);
+            }
+
+            outputRecord.Owner = prevHotEdge.OutputRecord;
+            if (OutputRecordIsAscending(prevHotEdge) == isNew)
+            {
+                SetSides(outputRecord, ae2, ae1);
+            }
+            else
+            {
+                SetSides(outputRecord, ae1, ae2);
+            }
+        }
+        else
         {
             outputRecord.Owner = null;
-            outputRecord.IsOpen = true;
-            if (ae1.WindDelta > 0)
+            if (isNew)
             {
                 SetSides(outputRecord, ae1, ae2);
             }
             else
             {
                 SetSides(outputRecord, ae2, ae1);
-            }
-        }
-        else
-        {
-            outputRecord.IsOpen = false;
-            Active? prevHotEdge = ae1.GetPrevHotEdge();
-
-            // e.WindDelta is the winding direction of the **input** paths
-            // and unrelated to the winding direction of output polygons.
-            // Output orientation is determined by the edge's OutputRecord.FrontEdge which is
-            // the ascending edge (see AddLocalMinPoly).
-            if (prevHotEdge != null)
-            {
-                if (this.buildHierarchy)
-                {
-                    SetOwner(outputRecord, prevHotEdge.OutputRecord!);
-                }
-
-                outputRecord.Owner = prevHotEdge.OutputRecord;
-                if (OutputRecordIsAscending(prevHotEdge) == isNew)
-                {
-                    SetSides(outputRecord, ae2, ae1);
-                }
-                else
-                {
-                    SetSides(outputRecord, ae1, ae2);
-                }
-            }
-            else
-            {
-                outputRecord.Owner = null;
-                if (isNew)
-                {
-                    SetSides(outputRecord, ae1, ae2);
-                }
-                else
-                {
-                    SetSides(outputRecord, ae2, ae1);
-                }
             }
         }
 
@@ -1054,19 +887,8 @@ internal sealed class SelfIntersectionUnionClipper
 
         if (ae1.IsFront == ae2.IsFront)
         {
-            if (ae1.IsOpenEnd)
-            {
-                SwapFrontBackSides(ae1.OutputRecord!);
-            }
-            else if (ae2.IsOpenEnd)
-            {
-                SwapFrontBackSides(ae2.OutputRecord!);
-            }
-            else
-            {
-                this.succeeded = false;
-                return null;
-            }
+            this.succeeded = false;
+            return null;
         }
 
         OutputPoint result = this.AddOutputPoint(ae1, pt);
@@ -1095,17 +917,6 @@ internal sealed class SelfIntersectionUnionClipper
         }
 
         // and to preserve the winding orientation of OutputRecord ...
-        else if (ae1.IsOpen)
-        {
-            if (ae1.WindDelta < 0)
-            {
-                JoinOutputRecordPaths(ae1, ae2);
-            }
-            else
-            {
-                JoinOutputRecordPaths(ae2, ae1);
-            }
-        }
         else if (ae1.OutputRecord!.Index < ae2.OutputRecord!.Index)
         {
             JoinOutputRecordPaths(ae1, ae2);
@@ -1135,7 +946,6 @@ internal sealed class SelfIntersectionUnionClipper
             p1End.Prev = p2Start;
             ae1.OutputRecord!.Points = p2Start;
 
-            // nb: if e1.IsOpen then e1 & e2 must be a 'maximaPair'
             ae1.OutputRecord!.FrontEdge = ae2.OutputRecord!.FrontEdge;
             if (ae1.OutputRecord!.FrontEdge != null)
             {
@@ -1162,12 +972,6 @@ internal sealed class SelfIntersectionUnionClipper
         ae2.OutputRecord!.Points = null;
         ae1.OutputRecord!.OutputPointCount += ae2.OutputRecord!.OutputPointCount;
         SetOwner(ae2.OutputRecord, ae1.OutputRecord);
-
-        if (ae1.IsOpenEnd)
-        {
-            ae2.OutputRecord!.Points = ae1.OutputRecord!.Points;
-            ae1.OutputRecord!.Points = null;
-        }
 
         // and ae1 and ae2 are maxima and are about to be dropped from the Actives list.
         ae1.OutputRecord = null;
@@ -1215,28 +1019,6 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private OutputPoint StartOpenPath(Active ae, Vertex pt)
-    {
-        OutputRecord outputRecord = this.NewOutputRecord();
-        outputRecord.IsOpen = true;
-        if (ae.WindDelta > 0)
-        {
-            outputRecord.FrontEdge = ae;
-            outputRecord.BackEdge = null;
-        }
-        else
-        {
-            outputRecord.FrontEdge = null;
-            outputRecord.BackEdge = ae;
-        }
-
-        ae.OutputRecord = outputRecord;
-        OutputPoint op = this.outputPointPool.Add(pt, outputRecord);
-        outputRecord.Points = op;
-        return op;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void UpdateEdgeIntoAEL(Active ae)
     {
         ae.Bot = ae.Top;
@@ -1252,10 +1034,7 @@ internal sealed class SelfIntersectionUnionClipper
 
         if (ae.IsHorizontal)
         {
-            if (!ae.IsOpen)
-            {
-                TrimHorizontal(ae, this.PreserveCollinear);
-            }
+            TrimHorizontal(ae, this.PreserveCollinear);
 
             return;
         }
@@ -1268,149 +1047,8 @@ internal sealed class SelfIntersectionUnionClipper
         this.CheckJoinRight(ae, ae.Bot, true);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static Active? FindEdgeWithMatchingLocMin(Active e)
-    {
-        Active? result = e.NextInAel;
-        while (result != null)
-        {
-            if (result.LocalMin == e.LocalMin)
-            {
-                return result;
-            }
-
-            if (!result.IsHorizontal && e.Bot != result.Bot)
-            {
-                result = null;
-            }
-            else
-            {
-                result = result.NextInAel;
-            }
-        }
-
-        result = e.PrevInAel;
-        while (result != null)
-        {
-            if (result.LocalMin == e.LocalMin)
-            {
-                return result;
-            }
-
-            if (!result.IsHorizontal && e.Bot != result.Bot)
-            {
-                return null;
-            }
-
-            result = result.PrevInAel;
-        }
-
-        return result;
-    }
-
     private void IntersectEdges(Active ae1, Active ae2, Vertex pt)
     {
-        OutputPoint? resultOp = null;
-
-        // MANAGE OPEN PATH INTERSECTIONS SEPARATELY ...
-        if (ae1.IsOpen || ae2.IsOpen)
-        {
-            if (ae1.IsOpen && ae2.IsOpen)
-            {
-                return;
-            }
-
-            // the following line avoids duplicating quite a bit of code
-            if (ae2.IsOpen)
-            {
-                SwapActives(ref ae1, ref ae2);
-            }
-
-            if (IsJoined(ae2))
-            {
-                // Needed for safety.
-                this.Split(ae2, pt);
-            }
-
-            if (!ae2.IsHot)
-            {
-                return;
-            }
-
-            switch (this.fillRule)
-            {
-                case ClipperFillRule.Positive:
-                    if (ae2.WindCount != 1)
-                    {
-                        return;
-                    }
-
-                    break;
-                case ClipperFillRule.Negative:
-                    if (ae2.WindCount != -1)
-                    {
-                        return;
-                    }
-
-                    break;
-                default:
-                    if (Math.Abs(ae2.WindCount) != 1)
-                    {
-                        return;
-                    }
-
-                    break;
-            }
-
-            // toggle contribution ...
-            if (ae1.IsHot)
-            {
-                resultOp = this.AddOutputPoint(ae1, pt);
-                if (ae1.IsFront)
-                {
-                    ae1.OutputRecord!.FrontEdge = null;
-                }
-                else
-                {
-                    ae1.OutputRecord!.BackEdge = null;
-                }
-
-                ae1.OutputRecord = null;
-            }
-
-            // horizontal edges can pass under open paths at a LocMins
-            else if (pt == ae1.LocalMin.Vertex.Point &&
-                !ae1.LocalMin.Vertex.IsOpenEnd)
-            {
-                // find the other side of the LocMin and
-                // if it's 'hot' join up with it ...
-                Active? ae3 = FindEdgeWithMatchingLocMin(ae1);
-                if (ae3 != null && ae3.IsHot)
-                {
-                    ae1.OutputRecord = ae3.OutputRecord;
-                    if (ae1.WindDelta > 0)
-                    {
-                        SetSides(ae3.OutputRecord!, ae1, ae3);
-                    }
-                    else
-                    {
-                        SetSides(ae3.OutputRecord!, ae3, ae1);
-                    }
-
-                    return;
-                }
-
-                resultOp = this.StartOpenPath(ae1, pt);
-            }
-            else
-            {
-                resultOp = this.StartOpenPath(ae1, pt);
-            }
-
-            return;
-        }
-
-        // MANAGING CLOSED PATHS FROM HERE ON
         if (IsJoined(ae1))
         {
             this.Split(ae1, pt);
@@ -1506,19 +1144,19 @@ internal sealed class SelfIntersectionUnionClipper
             if ((oldE1WindCount != 0 && oldE1WindCount != 1) || (oldE2WindCount != 0 && oldE2WindCount != 1) ||
                     (ae1.LocalMin.PathType != ae2.LocalMin.PathType))
             {
-                resultOp = this.AddLocalMaxPoly(ae1, ae2, pt);
+                this.AddLocalMaxPoly(ae1, ae2, pt);
             }
             else if (ae1.IsFront || (ae1.OutputRecord == ae2.OutputRecord))
             {
                 // this 'else if' condition isn't strictly needed but
                 // it's sensible to split polygons that only touch at
                 // a common ClipVertex (not at common edges).
-                resultOp = this.AddLocalMaxPoly(ae1, ae2, pt);
+                this.AddLocalMaxPoly(ae1, ae2, pt);
             }
             else
             {
                 // can't treat as maxima & minima
-                resultOp = this.AddOutputPoint(ae1, pt);
+                this.AddOutputPoint(ae1, pt);
                 SwapOutputRecords(ae1, ae2);
             }
         }
@@ -1526,12 +1164,12 @@ internal sealed class SelfIntersectionUnionClipper
         // if one or other edge is 'hot' ...
         else if (ae1.IsHot)
         {
-            resultOp = this.AddOutputPoint(ae1, pt);
+            this.AddOutputPoint(ae1, pt);
             SwapOutputRecords(ae1, ae2);
         }
         else if (ae2.IsHot)
         {
-            resultOp = this.AddOutputPoint(ae2, pt);
+            this.AddOutputPoint(ae2, pt);
             SwapOutputRecords(ae1, ae2);
         }
 
@@ -1557,17 +1195,16 @@ internal sealed class SelfIntersectionUnionClipper
 
             if (!IsSamePolyType(ae1, ae2))
             {
-                resultOp = this.AddLocalMinPoly(ae1, ae2, pt);
+                this.AddLocalMinPoly(ae1, ae2, pt);
             }
             else if (oldE1WindCount == 1 && oldE2WindCount == 1)
             {
-                resultOp = null;
                 if (e1Wc2 > 0 && e2Wc2 > 0)
                 {
                     return;
                 }
 
-                resultOp = this.AddLocalMinPoly(ae1, ae2, pt);
+                this.AddLocalMinPoly(ae1, ae2, pt);
             }
         }
     }
@@ -2018,11 +1655,6 @@ internal sealed class SelfIntersectionUnionClipper
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void AddToHorizontalSegmentList(OutputPoint op)
     {
-        if (op.OutputRecord.IsOpen)
-        {
-            return;
-        }
-
         this.horizontalSegments.Add(new HorizontalSegment(op));
     }
 
@@ -2050,12 +1682,9 @@ internal sealed class SelfIntersectionUnionClipper
       *         /              |        /       |       /                            *
       *******************************************************************************/
     {
-        bool horizontalIsOpen = horizontalEdge.IsOpen;
         double y = horizontalEdge.Bot.Y;
 
-        ClipVertex? vertex_max = horizontalIsOpen ?
-            GetCurrentYMaximaVertexOpen(horizontalEdge) :
-            GetCurrentYMaximaVertex(horizontalEdge);
+        ClipVertex? vertex_max = GetCurrentYMaximaVertex(horizontalEdge);
 
         bool isLeftToRight =
             ResetHorizontalDirection(horizontalEdge, vertex_max, out double leftX, out double rightX);
@@ -2068,7 +1697,7 @@ internal sealed class SelfIntersectionUnionClipper
 
         while (true)
         {
-            // loops through consec. horizontal edges (if open)
+            // loops through consecutive horizontal edges
             Active? ae = isLeftToRight ? horizontalEdge.NextInAel : horizontalEdge.PrevInAel;
 
             while (ae != null)
@@ -2107,7 +1736,7 @@ internal sealed class SelfIntersectionUnionClipper
                 // if the horizontal edge is a maxima, keep going until we reach
                 // its maxima pair, otherwise check for break conditions
                 Vertex pt;
-                if (vertex_max != horizontalEdge.VertexTop || horizontalEdge.IsOpenEnd)
+                if (vertex_max != horizontalEdge.VertexTop)
                 {
                     // otherwise stop when 'ae' is beyond the end of the horizontal line
                     if ((isLeftToRight && ae.CurrentX > rightX) ||
@@ -2120,21 +1749,10 @@ internal sealed class SelfIntersectionUnionClipper
                     {
                         pt = horizontalEdge.NextVertex.Point;
 
-                        // to maximize the possibility of putting open edges into
-                        // solutions, we'll only break if it's past the horizontal edge's end
-                        if (ae.IsOpen && !IsSamePolyType(ae, horizontalEdge) && !ae.IsHot)
-                        {
-                            if ((isLeftToRight && (ae.TopX(pt.Y) > pt.X)) ||
-                                (!isLeftToRight && (ae.TopX(pt.Y) < pt.X)))
-                            {
-                                break;
-                            }
-                        }
-
-                        // otherwise for edges at the horizontal edge's end, only stop when the horizontal
+                        // For edges at the horizontal edge's end, only stop when the horizontal
                         // edge's outslope is greater than e's slope when heading right or when the horizontal
                         // edge's outslope is less than e's slope when heading left.
-                        else if ((isLeftToRight && (ae.TopX(pt.Y) >= pt.X)) ||
+                        if ((isLeftToRight && (ae.TopX(pt.Y) >= pt.X)) ||
                                 (!isLeftToRight && (ae.TopX(pt.Y) <= pt.X)))
                         {
                             break;
@@ -2169,29 +1787,6 @@ internal sealed class SelfIntersectionUnionClipper
 
             // check if we've finished looping
             // through consecutive horizontals
-            // We've reached the end of this horizontal.
-            // Open at top.
-            if (horizontalIsOpen && horizontalEdge.IsOpenEnd)
-            {
-                if (horizontalEdge.IsHot)
-                {
-                    this.AddOutputPoint(horizontalEdge, horizontalEdge.Top);
-                    if (horizontalEdge.IsFront)
-                    {
-                        horizontalEdge.OutputRecord!.FrontEdge = null;
-                    }
-                    else
-                    {
-                        horizontalEdge.OutputRecord!.BackEdge = null;
-                    }
-
-                    horizontalEdge.OutputRecord = null;
-                }
-
-                this.DeleteFromAEL(horizontalEdge);
-                return;
-            }
-
             if (horizontalEdge.NextVertex.Point.Y != horizontalEdge.Top.Y)
             {
                 break;
@@ -2273,36 +1868,6 @@ internal sealed class SelfIntersectionUnionClipper
         Active? prevE = ae.PrevInAel;
         Active? nextE = ae.NextInAel;
 
-        if (ae.IsOpenEnd)
-        {
-            if (ae.IsHot)
-            {
-                this.AddOutputPoint(ae, ae.Top);
-            }
-
-            if (ae.IsHorizontal)
-            {
-                return nextE;
-            }
-
-            if (ae.IsHot)
-            {
-                if (ae.IsFront)
-                {
-                    ae.OutputRecord!.FrontEdge = null;
-                }
-                else
-                {
-                    ae.OutputRecord!.BackEdge = null;
-                }
-
-                ae.OutputRecord = null;
-            }
-
-            this.DeleteFromAEL(ae);
-            return nextE;
-        }
-
         Active? maxPair = GetMaximaPair(ae);
         if (maxPair == null)
         {
@@ -2327,18 +1892,6 @@ internal sealed class SelfIntersectionUnionClipper
             this.IntersectEdges(ae, nextE!, ae.Top);
             this.SwapPositionsInAEL(ae, nextE!);
             nextE = ae.NextInAel;
-        }
-
-        if (ae.IsOpen)
-        {
-            if (ae.IsHot)
-            {
-                this.AddLocalMaxPoly(ae, maxPair, ae.Top);
-            }
-
-            this.DeleteFromAEL(maxPair);
-            this.DeleteFromAEL(ae);
-            return prevE != null ? prevE.NextInAel : this.activeEdges;
         }
 
         // here ae.nextInAel == ENext == EMaxPair ...
@@ -2380,8 +1933,7 @@ internal sealed class SelfIntersectionUnionClipper
         Active? prev = e.PrevInAel;
         if (prev == null ||
             !e.IsHot || !prev.IsHot ||
-            e.IsHorizontal || prev.IsHorizontal ||
-            e.IsOpen || prev.IsOpen)
+            e.IsHorizontal || prev.IsHorizontal)
         {
             return;
         }
@@ -2437,8 +1989,7 @@ internal sealed class SelfIntersectionUnionClipper
         Active? next = e.NextInAel;
         if (next == null ||
             !e.IsHot || !next.IsHot ||
-            e.IsHorizontal || next.IsHorizontal ||
-            e.IsOpen || next.IsOpen)
+            e.IsHorizontal || next.IsHorizontal)
         {
             return;
         }
@@ -3007,7 +2558,7 @@ internal sealed class SelfIntersectionUnionClipper
     {
         outputRecord = GetRealOutputRecord(outputRecord);
 
-        if (outputRecord == null || outputRecord.IsOpen)
+        if (outputRecord == null)
         {
             return;
         }
@@ -3197,9 +2748,9 @@ internal sealed class SelfIntersectionUnionClipper
         }
     }
 
-    private static bool BuildPath(OutputPoint? op, bool reverse, bool isOpen, Contour path)
+    private static bool BuildPath(OutputPoint? op, bool reverse, Contour path)
     {
-        if (op == null || op.Next == op || (!isOpen && op.Next == op.Prev))
+        if (op == null || op.Next == op || op.Next == op.Prev)
         {
             return false;
         }
@@ -3233,12 +2784,12 @@ internal sealed class SelfIntersectionUnionClipper
             op2 = reverse ? op2.Prev : op2.Next!;
         }
 
-        return path.Count != 3 || isOpen || !IsVerySmallTriangle(op2);
+        return path.Count != 3 || !IsVerySmallTriangle(op2);
     }
 
-    private static bool BuildContour(OutputPoint? op, bool reverse, bool isOpen, Contour contour)
+    private static bool BuildContour(OutputPoint? op, bool reverse, Contour contour)
     {
-        if (op == null || op.Next == op || (!isOpen && op.Next == op.Prev))
+        if (op == null || op.Next == op || op.Next == op.Prev)
         {
             return false;
         }
@@ -3273,13 +2824,13 @@ internal sealed class SelfIntersectionUnionClipper
             op2 = reverse ? op2.Prev : op2.Next!;
         }
 
-        if (contour.Count == 3 && !isOpen && IsVerySmallTriangle(op2))
+        if (contour.Count == 3 && IsVerySmallTriangle(op2))
         {
             contour.Clear();
             return false;
         }
 
-        if (!isOpen && contour.Count > 0)
+        if (contour.Count > 0)
         {
             contour.Add(contour[0]);
         }
@@ -3302,20 +2853,10 @@ internal sealed class SelfIntersectionUnionClipper
             }
 
             Contour contour = new(outputRecord.OutputPointCount + 1);
-            if (outputRecord.IsOpen)
+            this.CleanCollinear(outputRecord);
+            if (BuildContour(outputRecord.Points, this.ReverseSolution, contour))
             {
-                if (BuildContour(outputRecord.Points, this.ReverseSolution, true, contour))
-                {
-                    solution.Add(contour);
-                }
-            }
-            else
-            {
-                this.CleanCollinear(outputRecord);
-                if (BuildContour(outputRecord.Points, this.ReverseSolution, false, contour))
-                {
-                    solution.Add(contour);
-                }
+                solution.Add(contour);
             }
         }
     }
@@ -3335,7 +2876,7 @@ internal sealed class SelfIntersectionUnionClipper
 
         this.CleanCollinear(outputRecord);
         if (outputRecord.Points == null ||
-            !BuildPath(outputRecord.Points, this.ReverseSolution, false, outputRecord.Path))
+            !BuildPath(outputRecord.Points, this.ReverseSolution, outputRecord.Path))
         {
             return false;
         }
@@ -3435,11 +2976,6 @@ internal sealed class SelfIntersectionUnionClipper
                 continue;
             }
 
-            if (outputRecord.IsOpen)
-            {
-                continue;
-            }
-
             if (this.CheckBounds(outputRecord))
             {
                 this.ResolveOwner(outputRecord);
@@ -3457,7 +2993,7 @@ internal sealed class SelfIntersectionUnionClipper
         {
             OutputRecord outputRecord = closedOutputRecords[index];
             Contour contour = new(outputRecord.OutputPointCount + 1);
-            if (!BuildContour(outputRecord.Points, this.ReverseSolution, false, contour))
+            if (!BuildContour(outputRecord.Points, this.ReverseSolution, contour))
             {
                 continue;
             }

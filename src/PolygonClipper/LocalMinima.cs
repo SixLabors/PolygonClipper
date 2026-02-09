@@ -11,11 +11,10 @@ internal readonly struct LocalMinima : IEquatable<LocalMinima>
     /// <summary>
     /// Initializes a new instance of the <see cref="LocalMinima"/> struct.
     /// </summary>
-    internal LocalMinima(ClipVertex vertex, ClipperPathType pathType, bool isOpen = false)
+    internal LocalMinima(ClipVertex vertex, ClipperPathType pathType)
     {
         this.Vertex = vertex;
         this.PathType = pathType;
-        this.IsOpen = isOpen;
     }
 
     /// <summary>
@@ -27,11 +26,6 @@ internal readonly struct LocalMinima : IEquatable<LocalMinima>
     /// Gets the path classification for this minima.
     /// </summary>
     internal ClipperPathType PathType { get; }
-
-    /// <summary>
-    /// Gets a value indicating whether this minima belongs to an open path.
-    /// </summary>
-    internal bool IsOpen { get; }
 
     public static bool operator ==(LocalMinima lm1, LocalMinima lm2) => lm1.Equals(lm2);
 

@@ -79,11 +79,7 @@ internal sealed class Active
 
     internal JoinWith JoinWith { get; set; }
 
-    internal bool IsOpen => this.LocalMin.IsOpen;
-
     internal bool IsHot => this.OutputRecord != null;
-
-    internal bool IsOpenEnd => this.IsOpen && this.VertexTop != null && this.VertexTop.IsOpenEnd;
 
     internal bool IsHorizontal => PolygonUtilities.IsAlmostZero(this.Top.Y - this.Bot.Y);
 
@@ -103,7 +99,7 @@ internal sealed class Active
     internal Active? GetPrevHotEdge()
     {
         Active? prev = this.PrevInAel;
-        while (prev != null && (prev.IsOpen || !prev.IsHot))
+        while (prev != null && !prev.IsHot)
         {
             prev = prev.PrevInAel;
         }

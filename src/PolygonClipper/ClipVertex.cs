@@ -22,6 +22,4 @@ internal sealed class ClipVertex
     internal VertexFlags Flags { get; set; }
 
     internal bool IsMaxima => (this.Flags & VertexFlags.LocalMax) != 0;
-
-    internal bool IsOpenEnd => (this.Flags & (VertexFlags.OpenStart | VertexFlags.OpenEnd)) != VertexFlags.None;
 }

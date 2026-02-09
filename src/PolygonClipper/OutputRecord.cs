@@ -49,11 +49,6 @@ internal sealed class OutputRecord
     internal Contour Path { get; set; } = [];
 
     /// <summary>
-    /// Gets or sets a value indicating whether this output represents an open path.
-    /// </summary>
-    internal bool IsOpen { get; set; }
-
-    /// <summary>
     /// Gets or sets split indices used to resolve complex self-intersections.
     /// </summary>
     internal List<int>? Splits { get; set; }
