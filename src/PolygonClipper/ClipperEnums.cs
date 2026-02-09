@@ -3,15 +3,6 @@
 
 namespace SixLabors.PolygonClipper;
 
-internal enum ClipperOperation
-{
-    NoClip,
-    Intersection,
-    Union,
-    Difference,
-    Xor
-}
-
 internal enum ClipperFillRule
 {
     EvenOdd,

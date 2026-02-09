@@ -7,7 +7,6 @@ namespace SixLabors.PolygonClipper;
 
 internal sealed class UnionClipper
 {
-    private ClipperOperation clipType;
     private ClipperFillRule fillRule;
     private Active? activeEdges;
     private Active? sortedEdges;
@@ -228,11 +227,6 @@ internal sealed class UnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static double AreaTriangle(Vertex pt1, Vertex pt2, Vertex pt3) => ((double)(pt3.Y + pt1.Y) * (pt3.X - pt1.X)) +
-            ((double)(pt1.Y + pt2.Y) * (pt1.X - pt2.X)) +
-            ((double)(pt2.Y + pt3.Y) * (pt2.X - pt3.X));
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static OutputRecord? GetRealOutputRecord(OutputRecord? outputRecord)
     {
         while (outputRecord != null && outputRecord.Points == null)
@@ -442,40 +436,12 @@ internal sealed class UnionClipper
                 break;
         }
 
-        switch (this.clipType)
+        return this.fillRule switch
         {
-            case ClipperOperation.Intersection:
-                return this.fillRule switch
-                {
-                    ClipperFillRule.Positive => ae.WindCount2 > 0,
-                    ClipperFillRule.Negative => ae.WindCount2 < 0,
-                    _ => ae.WindCount2 != 0
-                };
-
-            case ClipperOperation.Union:
-                return this.fillRule switch
-                {
-                    ClipperFillRule.Positive => ae.WindCount2 <= 0,
-                    ClipperFillRule.Negative => ae.WindCount2 >= 0,
-                    _ => ae.WindCount2 == 0
-                };
-
-            case ClipperOperation.Difference:
-                bool result = this.fillRule switch
-                {
-                    ClipperFillRule.Positive => ae.WindCount2 <= 0,
-                    ClipperFillRule.Negative => ae.WindCount2 >= 0,
-                    _ => ae.WindCount2 == 0
-                };
-                return (GetPolyType(ae) == ClipperPathType.Subject) ? result : !result;
-
-            case ClipperOperation.Xor:
-                // XOr is always contributing unless open.
-                return true;
-
-            default:
-                return false;
-        }
+            ClipperFillRule.Positive => ae.WindCount2 <= 0,
+            ClipperFillRule.Negative => ae.WindCount2 >= 0,
+            _ => ae.WindCount2 == 0
+        };
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -498,13 +464,7 @@ internal sealed class UnionClipper
                 break;
         }
 
-        bool result = this.clipType switch
-        {
-            ClipperOperation.Intersection => isInClip,
-            ClipperOperation.Union => !isInSubj && !isInClip,
-            _ => !isInClip
-        };
-        return result;
+        return !isInSubj && !isInClip;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1289,14 +1249,7 @@ internal sealed class UnionClipper
                 this.Split(ae2, pt);
             }
 
-            if (this.clipType == ClipperOperation.Union)
-            {
-                if (!ae2.IsHot)
-                {
-                    return;
-                }
-            }
-            else if (ae2.LocalMin.PathType == ClipperPathType.Subject)
+            if (!ae2.IsHot)
             {
                 return;
             }
@@ -1468,7 +1421,7 @@ internal sealed class UnionClipper
         if (ae1.IsHot && ae2.IsHot)
         {
             if ((oldE1WindCount != 0 && oldE1WindCount != 1) || (oldE2WindCount != 0 && oldE2WindCount != 1) ||
-                    (ae1.LocalMin.PathType != ae2.LocalMin.PathType && this.clipType != ClipperOperation.Xor))
+                    (ae1.LocalMin.PathType != ae2.LocalMin.PathType))
             {
                 resultOp = this.AddLocalMaxPoly(ae1, ae2, pt);
             }
@@ -1526,40 +1479,12 @@ internal sealed class UnionClipper
             else if (oldE1WindCount == 1 && oldE2WindCount == 1)
             {
                 resultOp = null;
-                switch (this.clipType)
+                if (e1Wc2 > 0 && e2Wc2 > 0)
                 {
-                    case ClipperOperation.Union:
-                        if (e1Wc2 > 0 && e2Wc2 > 0)
-                        {
-                            return;
-                        }
-
-                        resultOp = this.AddLocalMinPoly(ae1, ae2, pt);
-                        break;
-
-                    case ClipperOperation.Difference:
-                        if (((GetPolyType(ae1) == ClipperPathType.Clip) && (e1Wc2 > 0) && (e2Wc2 > 0)) ||
-                                ((GetPolyType(ae1) == ClipperPathType.Subject) && (e1Wc2 <= 0) && (e2Wc2 <= 0)))
-                        {
-                            resultOp = this.AddLocalMinPoly(ae1, ae2, pt);
-                        }
-
-                        break;
-
-                    case ClipperOperation.Xor:
-                        resultOp = this.AddLocalMinPoly(ae1, ae2, pt);
-                        break;
-
-                    // ClipperOperation.Intersection:
-                    default:
-                        if (e1Wc2 <= 0 || e2Wc2 <= 0)
-                        {
-                            return;
-                        }
-
-                        resultOp = this.AddLocalMinPoly(ae1, ae2, pt);
-                        break;
+                    return;
                 }
+
+                resultOp = this.AddLocalMinPoly(ae1, ae2, pt);
             }
         }
     }
@@ -1652,15 +1577,9 @@ internal sealed class UnionClipper
         }
     }
 
-    private void ExecuteInternal(ClipperOperation ct, ClipperFillRule clipperFillRule)
+    private void ExecuteInternal(ClipperFillRule clipperFillRule)
     {
-        if (ct == ClipperOperation.NoClip)
-        {
-            return;
-        }
-
         this.fillRule = clipperFillRule;
-        this.clipType = ct;
         this.Reset();
         if (!this.PopScanline(out double y))
         {
@@ -3070,7 +2989,7 @@ internal sealed class UnionClipper
             return;
         }
 
-        double area2 = AreaTriangle(ip, splitOp.Point, splitOp.Next.Point);
+        double area2 = PolygonUtilities.SignedArea(ip, splitOp.Point, splitOp.Next.Point);
         double absArea2 = Math.Abs(area2);
 
         // de-link splitOp and splitOp.Next from the path
@@ -3643,7 +3562,6 @@ internal sealed class UnionClipper
     }
 
     internal bool Execute(
-        ClipperOperation clipperOperation,
         ClipperFillRule clipperFillRule,
         List<Contour> solutionClosed,
         List<Contour> solutionOpen)
@@ -3653,7 +3571,7 @@ internal sealed class UnionClipper
         this.buildHierarchy = false;
         try
         {
-            this.ExecuteInternal(clipperOperation, clipperFillRule);
+            this.ExecuteInternal(clipperFillRule);
             this.BuildPaths(solutionClosed, solutionOpen);
         }
         catch
@@ -3666,7 +3584,6 @@ internal sealed class UnionClipper
     }
 
     internal bool Execute(
-        ClipperOperation clipperOperation,
         ClipperFillRule clipperFillRule,
         Polygon polygon)
     {
@@ -3674,7 +3591,7 @@ internal sealed class UnionClipper
         this.buildHierarchy = true;
         try
         {
-            this.ExecuteInternal(clipperOperation, clipperFillRule);
+            this.ExecuteInternal(clipperFillRule);
             this.BuildPolygon(polygon);
         }
         catch
@@ -3687,7 +3604,6 @@ internal sealed class UnionClipper
     }
 
     internal bool Execute(
-        ClipperOperation clipperOperation,
         ClipperFillRule clipperFillRule,
         List<Contour> solution)
     {
@@ -3695,7 +3611,7 @@ internal sealed class UnionClipper
         this.buildHierarchy = false;
         try
         {
-            this.ExecuteInternal(clipperOperation, clipperFillRule);
+            this.ExecuteInternal(clipperFillRule);
             this.BuildContours(solution);
         }
         catch
