@@ -15,17 +15,17 @@ internal sealed class UnionClipper
     private readonly List<LocalMinima> minimaList;
     private readonly List<IntersectNode> intersectList;
     private readonly VertexPoolList vertexList;
-    private readonly OutRecPoolList outrecPool;
+    private readonly OutputRecordPoolList outputRecordPool;
     private readonly List<double> scanlineList;
-    private readonly List<HorzSegment> horizontalSegments;
-    private readonly HorzJoinPoolList horizontalJoins;
-    private readonly OutPtPoolList outPointPool;
+    private readonly List<HorizontalSegment> horizontalSegments;
+    private readonly HorizontalJoinPoolList horizontalJoins;
+    private readonly OutputPointPoolList outputPointPool;
     private readonly List<Contour> pathPool;
     private int currentMinimaIndex;
     private double currentBottomY;
     private bool isSortedMinimaList;
     private bool hasOpenPaths;
-    private bool usingPolyTree;
+    private bool buildHierarchy;
     private bool succeeded;
     private int pathPoolIndex;
 
@@ -34,11 +34,11 @@ internal sealed class UnionClipper
         this.minimaList = [];
         this.intersectList = [];
         this.vertexList = [];
-        this.outrecPool = new OutRecPoolList();
+        this.outputRecordPool = new OutputRecordPoolList();
         this.scanlineList = [];
         this.horizontalSegments = [];
         this.horizontalJoins = [];
-        this.outPointPool = [];
+        this.outputPointPool = [];
         this.pathPool = [];
         this.freeActives = new Stack<Active>();
         this.PreserveCollinear = true;
@@ -79,7 +79,7 @@ internal sealed class UnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ClipVertex? GetCurrYMaximaVertex_Open(Active ae)
+    private static ClipVertex? GetCurrentYMaximaVertexOpen(Active ae)
     {
         ClipVertex? result = ae.VertexTop;
         if (ae.WindDelta > 0)
@@ -111,7 +111,7 @@ internal sealed class UnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ClipVertex? GetCurrYMaximaVertex(Active ae)
+    private static ClipVertex? GetCurrentYMaximaVertex(Active ae)
     {
         ClipVertex? result = ae.VertexTop;
         if (ae.WindDelta > 0)
@@ -139,18 +139,18 @@ internal sealed class UnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void SetSides(OutRec outrec, Active startEdge, Active endEdge)
+    private static void SetSides(OutputRecord outputRecord, Active startEdge, Active endEdge)
     {
-        outrec.FrontEdge = startEdge;
-        outrec.BackEdge = endEdge;
+        outputRecord.FrontEdge = startEdge;
+        outputRecord.BackEdge = endEdge;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void SwapOutrecs(Active ae1, Active ae2)
+    private static void SwapOutputRecords(Active ae1, Active ae2)
     {
-        // At least one edge has an assigned outrec.
-        OutRec? or1 = ae1.OutRec;
-        OutRec? or2 = ae2.OutRec;
+        // At least one edge has an assigned outputRecord.
+        OutputRecord? or1 = ae1.OutputRecord;
+        OutputRecord? or2 = ae2.OutputRecord;
         if (or1 == or2)
         {
             Active? ae = or1!.FrontEdge;
@@ -183,12 +183,12 @@ internal sealed class UnionClipper
             }
         }
 
-        ae1.OutRec = or2;
-        ae2.OutRec = or1;
+        ae1.OutputRecord = or2;
+        ae2.OutputRecord = or1;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void SetOwner(OutRec outrec, OutRec newOwner)
+    private static void SetOwner(OutputRecord outputRecord, OutputRecord newOwner)
     {
         // precondition1: new_owner is never null
         while (newOwner.Owner != null && newOwner.Owner.Points == null)
@@ -196,27 +196,27 @@ internal sealed class UnionClipper
             newOwner.Owner = newOwner.Owner.Owner;
         }
 
-        // make sure that outrec isn't an owner of newOwner
-        OutRec? tmp = newOwner;
-        while (tmp != null && tmp != outrec)
+        // make sure that outputRecord isn't an owner of newOwner
+        OutputRecord? tmp = newOwner;
+        while (tmp != null && tmp != outputRecord)
         {
             tmp = tmp.Owner;
         }
 
         if (tmp != null)
         {
-            newOwner.Owner = outrec.Owner;
+            newOwner.Owner = outputRecord.Owner;
         }
 
-        outrec.Owner = newOwner;
+        outputRecord.Owner = newOwner;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static double Area(OutPt op)
+    private static double Area(OutputPoint op)
     {
         // https://en.wikipedia.org/wiki/Shoelace_formula
         double area = 0.0;
-        OutPt op2 = op;
+        OutputPoint op2 = op;
         do
         {
             area += (double)(op2.Prev.Point.Y + op2.Point.Y) *
@@ -233,20 +233,20 @@ internal sealed class UnionClipper
             ((double)(pt2.Y + pt3.Y) * (pt2.X - pt3.X));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static OutRec? GetRealOutRec(OutRec? outRec)
+    private static OutputRecord? GetRealOutputRecord(OutputRecord? outputRecord)
     {
-        while ((outRec != null) && (outRec.Points == null))
+        while (outputRecord != null && outputRecord.Points == null)
         {
-            outRec = outRec.Owner;
+            outputRecord = outputRecord.Owner;
         }
 
-        return outRec;
+        return outputRecord;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsValidOwner(OutRec? outRec, OutRec? testOwner)
+    private static bool IsValidOwner(OutputRecord? outputRecord, OutputRecord? testOwner)
     {
-        while ((testOwner != null) && (testOwner != outRec))
+        while (testOwner != null && testOwner != outputRecord)
         {
             testOwner = testOwner.Owner;
         }
@@ -255,32 +255,32 @@ internal sealed class UnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void UncoupleOutRec(Active ae)
+    private static void UncoupleOutputRecord(Active ae)
     {
-        OutRec? outrec = ae.OutRec;
-        if (outrec == null)
+        OutputRecord? outputRecord = ae.OutputRecord;
+        if (outputRecord == null)
         {
             return;
         }
 
-        outrec.FrontEdge!.OutRec = null;
-        outrec.BackEdge!.OutRec = null;
-        outrec.FrontEdge = null;
-        outrec.BackEdge = null;
+        outputRecord.FrontEdge!.OutputRecord = null;
+        outputRecord.BackEdge!.OutputRecord = null;
+        outputRecord.FrontEdge = null;
+        outputRecord.BackEdge = null;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool OutrecIsAscending(Active hotEdge) => hotEdge == hotEdge.OutRec!.FrontEdge;
+    private static bool OutputRecordIsAscending(Active hotEdge) => hotEdge == hotEdge.OutputRecord!.FrontEdge;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void SwapFrontBackSides(OutRec outrec)
+    private static void SwapFrontBackSides(OutputRecord outputRecord)
     {
         // while this proc. is needed for open paths
         // it's almost never needed for closed paths
-        Active ae2 = outrec.FrontEdge!;
-        outrec.FrontEdge = outrec.BackEdge;
-        outrec.BackEdge = ae2;
-        outrec.Points = outrec.Points!.Next;
+        Active ae2 = outputRecord.FrontEdge!;
+        outputRecord.FrontEdge = outputRecord.BackEdge;
+        outputRecord.BackEdge = ae2;
+        outputRecord.Points = outputRecord.Points!.Next;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -296,10 +296,10 @@ internal sealed class UnionClipper
 
         this.scanlineList.Clear();
         this.DisposeIntersectNodes();
-        this.outrecPool.Clear();
+        this.outputRecordPool.Clear();
         this.horizontalSegments.Clear();
         this.horizontalJoins.Clear();
-        this.outPointPool.Clear();
+        this.outputPointPool.Clear();
 
         // Keep pooled actives between runs to reduce allocations when the clipper is reused.
         this.pathPoolIndex = 0;
@@ -791,7 +791,7 @@ internal sealed class UnionClipper
                 leftBound.WindDelta = -1;
                 leftBound.VertexTop = localMinima.Vertex.Prev;
                 leftBound.Top = localMinima.Vertex.Prev!.Point;
-                leftBound.OutRec = null;
+                leftBound.OutputRecord = null;
                 leftBound.LocalMin = localMinima;
                 leftBound.UpdateDx();
             }
@@ -811,7 +811,7 @@ internal sealed class UnionClipper
                 // Ascending.
                 rightBound.VertexTop = localMinima.Vertex.Next;
                 rightBound.Top = localMinima.Vertex.Next!.Point;
-                rightBound.OutRec = null;
+                rightBound.OutputRecord = null;
                 rightBound.LocalMin = localMinima;
                 rightBound.UpdateDx();
             }
@@ -822,14 +822,14 @@ internal sealed class UnionClipper
             {
                 if (leftBound.IsHorizontal)
                 {
-                    if (leftBound.IsHeadingRightHorz)
+                    if (leftBound.IsHeadingRightHorizontal)
                     {
                         SwapActives(ref leftBound, ref rightBound);
                     }
                 }
                 else if (rightBound.IsHorizontal)
                 {
-                    if (rightBound.IsHeadingLeftHorz)
+                    if (rightBound.IsHeadingLeftHorizontal)
                     {
                         SwapActives(ref leftBound, ref rightBound);
                     }
@@ -887,7 +887,7 @@ internal sealed class UnionClipper
 
                 if (rightBound.IsHorizontal)
                 {
-                    this.PushHorz(rightBound);
+                    this.PushHorizontal(rightBound);
                 }
                 else
                 {
@@ -902,7 +902,7 @@ internal sealed class UnionClipper
 
             if (leftBound.IsHorizontal)
             {
-                this.PushHorz(leftBound);
+                this.PushHorizontal(leftBound);
             }
             else
             {
@@ -912,14 +912,14 @@ internal sealed class UnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void PushHorz(Active ae)
+    private void PushHorizontal(Active ae)
     {
         ae.NextInSel = this.sortedEdges;
         this.sortedEdges = ae;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private bool PopHorz(out Active? ae)
+    private bool PopHorizontal(out Active? ae)
     {
         ae = this.sortedEdges;
         if (this.sortedEdges == null)
@@ -932,72 +932,72 @@ internal sealed class UnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private OutPt AddLocalMinPoly(Active ae1, Active ae2, Vertex pt, bool isNew = false)
+    private OutputPoint AddLocalMinPoly(Active ae1, Active ae2, Vertex pt, bool isNew = false)
     {
-        OutRec outrec = this.NewOutRec();
-        ae1.OutRec = outrec;
-        ae2.OutRec = outrec;
+        OutputRecord outputRecord = this.NewOutputRecord();
+        ae1.OutputRecord = outputRecord;
+        ae2.OutputRecord = outputRecord;
 
         if (ae1.IsOpen)
         {
-            outrec.Owner = null;
-            outrec.IsOpen = true;
+            outputRecord.Owner = null;
+            outputRecord.IsOpen = true;
             if (ae1.WindDelta > 0)
             {
-                SetSides(outrec, ae1, ae2);
+                SetSides(outputRecord, ae1, ae2);
             }
             else
             {
-                SetSides(outrec, ae2, ae1);
+                SetSides(outputRecord, ae2, ae1);
             }
         }
         else
         {
-            outrec.IsOpen = false;
+            outputRecord.IsOpen = false;
             Active? prevHotEdge = ae1.GetPrevHotEdge();
 
             // e.WindDelta is the winding direction of the **input** paths
             // and unrelated to the winding direction of output polygons.
-            // Output orientation is determined by e.OutRec.frontE which is
+            // Output orientation is determined by the edge's OutputRecord.FrontEdge which is
             // the ascending edge (see AddLocalMinPoly).
             if (prevHotEdge != null)
             {
-                if (this.usingPolyTree)
+                if (this.buildHierarchy)
                 {
-                    SetOwner(outrec, prevHotEdge.OutRec!);
+                    SetOwner(outputRecord, prevHotEdge.OutputRecord!);
                 }
 
-                outrec.Owner = prevHotEdge.OutRec;
-                if (OutrecIsAscending(prevHotEdge) == isNew)
+                outputRecord.Owner = prevHotEdge.OutputRecord;
+                if (OutputRecordIsAscending(prevHotEdge) == isNew)
                 {
-                    SetSides(outrec, ae2, ae1);
+                    SetSides(outputRecord, ae2, ae1);
                 }
                 else
                 {
-                    SetSides(outrec, ae1, ae2);
+                    SetSides(outputRecord, ae1, ae2);
                 }
             }
             else
             {
-                outrec.Owner = null;
+                outputRecord.Owner = null;
                 if (isNew)
                 {
-                    SetSides(outrec, ae1, ae2);
+                    SetSides(outputRecord, ae1, ae2);
                 }
                 else
                 {
-                    SetSides(outrec, ae2, ae1);
+                    SetSides(outputRecord, ae2, ae1);
                 }
             }
         }
 
-        OutPt op = this.outPointPool.Add(pt, outrec);
-        outrec.Points = op;
+        OutputPoint op = this.outputPointPool.Add(pt, outputRecord);
+        outputRecord.Points = op;
         return op;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private OutPt? AddLocalMaxPoly(Active ae1, Active ae2, Vertex pt)
+    private OutputPoint? AddLocalMaxPoly(Active ae1, Active ae2, Vertex pt)
     {
         if (IsJoined(ae1))
         {
@@ -1013,11 +1013,11 @@ internal sealed class UnionClipper
         {
             if (ae1.IsOpenEnd)
             {
-                SwapFrontBackSides(ae1.OutRec!);
+                SwapFrontBackSides(ae1.OutputRecord!);
             }
             else if (ae2.IsOpenEnd)
             {
-                SwapFrontBackSides(ae2.OutRec!);
+                SwapFrontBackSides(ae2.OutputRecord!);
             }
             else
             {
@@ -1026,77 +1026,77 @@ internal sealed class UnionClipper
             }
         }
 
-        OutPt result = this.AddOutPt(ae1, pt);
-        if (ae1.OutRec == ae2.OutRec)
+        OutputPoint result = this.AddOutputPoint(ae1, pt);
+        if (ae1.OutputRecord == ae2.OutputRecord)
         {
-            OutRec outrec = ae1.OutRec!;
-            outrec.Points = result;
+            OutputRecord outputRecord = ae1.OutputRecord!;
+            outputRecord.Points = result;
 
-            if (this.usingPolyTree)
+            if (this.buildHierarchy)
             {
                 Active? e = ae1.GetPrevHotEdge();
                 if (e == null)
                 {
-                    outrec.Owner = null;
+                    outputRecord.Owner = null;
                 }
                 else
                 {
-                    SetOwner(outrec, e.OutRec!);
+                    SetOwner(outputRecord, e.OutputRecord!);
                 }
 
-                // nb: outRec.Owner here is likely NOT the real
+                // nb: outputRecord.Owner here is likely NOT the real
                 // owner but this will be fixed in DeepCheckOwner()
             }
 
-            UncoupleOutRec(ae1);
+            UncoupleOutputRecord(ae1);
         }
 
-        // and to preserve the winding orientation of outrec ...
+        // and to preserve the winding orientation of OutputRecord ...
         else if (ae1.IsOpen)
         {
             if (ae1.WindDelta < 0)
             {
-                JoinOutrecPaths(ae1, ae2);
+                JoinOutputRecordPaths(ae1, ae2);
             }
             else
             {
-                JoinOutrecPaths(ae2, ae1);
+                JoinOutputRecordPaths(ae2, ae1);
             }
         }
-        else if (ae1.OutRec!.Index < ae2.OutRec!.Index)
+        else if (ae1.OutputRecord!.Index < ae2.OutputRecord!.Index)
         {
-            JoinOutrecPaths(ae1, ae2);
+            JoinOutputRecordPaths(ae1, ae2);
         }
         else
         {
-            JoinOutrecPaths(ae2, ae1);
+            JoinOutputRecordPaths(ae2, ae1);
         }
 
         return result;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void JoinOutrecPaths(Active ae1, Active ae2)
+    private static void JoinOutputRecordPaths(Active ae1, Active ae2)
     {
-        // join ae2 outrec path onto ae1 outrec path and then delete ae2 outrec path
+        // join ae2 OutputRecord path onto ae1 OutputRecord path and then delete ae2 OutputRecord path
         // pointers. (NB Only very rarely do the joining ends share the same coords.)
-        OutPt p1Start = ae1.OutRec!.Points!;
-        OutPt p2Start = ae2.OutRec!.Points!;
-        OutPt p1End = p1Start.Next!;
-        OutPt p2End = p2Start.Next!;
+        OutputPoint p1Start = ae1.OutputRecord!.Points!;
+        OutputPoint p2Start = ae2.OutputRecord!.Points!;
+        OutputPoint p1End = p1Start.Next!;
+        OutputPoint p2End = p2Start.Next!;
         if (ae1.IsFront)
         {
             p2End.Prev = p1Start;
             p1Start.Next = p2End;
             p2Start.Next = p1End;
             p1End.Prev = p2Start;
-            ae1.OutRec.Points = p2Start;
+            ae1.OutputRecord!.Points = p2Start;
 
             // nb: if e1.IsOpen then e1 & e2 must be a 'maximaPair'
-            ae1.OutRec.FrontEdge = ae2.OutRec.FrontEdge;
-            if (ae1.OutRec.FrontEdge != null)
+            ae1.OutputRecord!.FrontEdge = ae2.OutputRecord!.FrontEdge;
+            if (ae1.OutputRecord!.FrontEdge != null)
             {
-                ae1.OutRec.FrontEdge!.OutRec = ae1.OutRec;
+                ae1.OutputRecord!.FrontEdge!.OutputRecord = ae1.OutputRecord;
             }
         }
         else
@@ -1106,40 +1106,40 @@ internal sealed class UnionClipper
             p1Start.Next = p2End;
             p2End.Prev = p1Start;
 
-            ae1.OutRec.BackEdge = ae2.OutRec.BackEdge;
-            if (ae1.OutRec.BackEdge != null)
+            ae1.OutputRecord!.BackEdge = ae2.OutputRecord!.BackEdge;
+            if (ae1.OutputRecord!.BackEdge != null)
             {
-                ae1.OutRec.BackEdge!.OutRec = ae1.OutRec;
+                ae1.OutputRecord!.BackEdge!.OutputRecord = ae1.OutputRecord;
             }
         }
 
-        // after joining, the ae2.OutRec must contains no vertices ...
-        ae2.OutRec.FrontEdge = null;
-        ae2.OutRec.BackEdge = null;
-        ae2.OutRec.Points = null;
-        ae1.OutRec.OutPointCount += ae2.OutRec.OutPointCount;
-        SetOwner(ae2.OutRec, ae1.OutRec);
+        // after joining, the ae2.OutputRecord must contains no vertices ...
+        ae2.OutputRecord!.FrontEdge = null;
+        ae2.OutputRecord!.BackEdge = null;
+        ae2.OutputRecord!.Points = null;
+        ae1.OutputRecord!.OutputPointCount += ae2.OutputRecord!.OutputPointCount;
+        SetOwner(ae2.OutputRecord, ae1.OutputRecord);
 
         if (ae1.IsOpenEnd)
         {
-            ae2.OutRec.Points = ae1.OutRec.Points;
-            ae1.OutRec.Points = null;
+            ae2.OutputRecord!.Points = ae1.OutputRecord!.Points;
+            ae1.OutputRecord!.Points = null;
         }
 
         // and ae1 and ae2 are maxima and are about to be dropped from the Actives list.
-        ae1.OutRec = null;
-        ae2.OutRec = null;
+        ae1.OutputRecord = null;
+        ae2.OutputRecord = null;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private OutPt AddOutPt(Active ae, Vertex pt)
+    private OutputPoint AddOutputPoint(Active ae, Vertex pt)
     {
-        // Outrec.OutPts: a circular doubly-linked-list of POutPt where ...
+        // outputRecord.Points: a circular doubly-linked list of OutputPoint where ...
         // opFront[.Prev]* ~~~> opBack & opBack == opFront.Next
-        OutRec outrec = ae.OutRec!;
+        OutputRecord outputRecord = ae.OutputRecord!;
         bool toFront = ae.IsFront;
-        OutPt opFront = outrec.Points!;
-        OutPt opBack = opFront.Next!;
+        OutputPoint opFront = outputRecord.Points!;
+        OutputPoint opBack = opFront.Next!;
 
         switch (toFront)
         {
@@ -1149,47 +1149,47 @@ internal sealed class UnionClipper
                 return opBack;
         }
 
-        OutPt newOp = this.outPointPool.Add(pt, outrec);
+        OutputPoint newOp = this.outputPointPool.Add(pt, outputRecord);
         opBack.Prev = newOp;
         newOp.Prev = opFront;
         newOp.Next = opBack;
         opFront.Next = newOp;
         if (toFront)
         {
-            outrec.Points = newOp;
+            outputRecord.Points = newOp;
         }
 
         return newOp;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private OutRec NewOutRec()
+    private OutputRecord NewOutputRecord()
     {
-        int idx = this.outrecPool.Count;
-        OutRec result = this.outrecPool.Add();
+        int idx = this.outputRecordPool.Count;
+        OutputRecord result = this.outputRecordPool.Add();
         result.Index = idx;
         return result;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private OutPt StartOpenPath(Active ae, Vertex pt)
+    private OutputPoint StartOpenPath(Active ae, Vertex pt)
     {
-        OutRec outrec = this.NewOutRec();
-        outrec.IsOpen = true;
+        OutputRecord outputRecord = this.NewOutputRecord();
+        outputRecord.IsOpen = true;
         if (ae.WindDelta > 0)
         {
-            outrec.FrontEdge = ae;
-            outrec.BackEdge = null;
+            outputRecord.FrontEdge = ae;
+            outputRecord.BackEdge = null;
         }
         else
         {
-            outrec.FrontEdge = null;
-            outrec.BackEdge = ae;
+            outputRecord.FrontEdge = null;
+            outputRecord.BackEdge = ae;
         }
 
-        ae.OutRec = outrec;
-        OutPt op = this.outPointPool.Add(pt, outrec);
-        outrec.Points = op;
+        ae.OutputRecord = outputRecord;
+        OutputPoint op = this.outputPointPool.Add(pt, outputRecord);
+        outputRecord.Points = op;
         return op;
     }
 
@@ -1211,7 +1211,7 @@ internal sealed class UnionClipper
         {
             if (!ae.IsOpen)
             {
-                TrimHorz(ae, this.PreserveCollinear);
+                TrimHorizontal(ae, this.PreserveCollinear);
             }
 
             return;
@@ -1267,7 +1267,7 @@ internal sealed class UnionClipper
 
     private void IntersectEdges(Active ae1, Active ae2, Vertex pt)
     {
-        OutPt? resultOp = null;
+        OutputPoint? resultOp = null;
 
         // MANAGE OPEN PATH INTERSECTIONS SEPARATELY ...
         if (this.hasOpenPaths && (ae1.IsOpen || ae2.IsOpen))
@@ -1329,17 +1329,17 @@ internal sealed class UnionClipper
             // toggle contribution ...
             if (ae1.IsHot)
             {
-                resultOp = this.AddOutPt(ae1, pt);
+                resultOp = this.AddOutputPoint(ae1, pt);
                 if (ae1.IsFront)
                 {
-                    ae1.OutRec!.FrontEdge = null;
+                    ae1.OutputRecord!.FrontEdge = null;
                 }
                 else
                 {
-                    ae1.OutRec!.BackEdge = null;
+                    ae1.OutputRecord!.BackEdge = null;
                 }
 
-                ae1.OutRec = null;
+                ae1.OutputRecord = null;
             }
 
             // horizontal edges can pass under open paths at a LocMins
@@ -1351,14 +1351,14 @@ internal sealed class UnionClipper
                 Active? ae3 = FindEdgeWithMatchingLocMin(ae1);
                 if (ae3 != null && ae3.IsHot)
                 {
-                    ae1.OutRec = ae3.OutRec;
+                    ae1.OutputRecord = ae3.OutputRecord;
                     if (ae1.WindDelta > 0)
                     {
-                        SetSides(ae3.OutRec!, ae1, ae3);
+                        SetSides(ae3.OutputRecord!, ae1, ae3);
                     }
                     else
                     {
-                        SetSides(ae3.OutRec!, ae3, ae1);
+                        SetSides(ae3.OutputRecord!, ae3, ae1);
                     }
 
                     return;
@@ -1472,7 +1472,7 @@ internal sealed class UnionClipper
             {
                 resultOp = this.AddLocalMaxPoly(ae1, ae2, pt);
             }
-            else if (ae1.IsFront || (ae1.OutRec == ae2.OutRec))
+            else if (ae1.IsFront || (ae1.OutputRecord == ae2.OutputRecord))
             {
                 // this 'else if' condition isn't strictly needed but
                 // it's sensible to split polygons that only touch at
@@ -1482,21 +1482,21 @@ internal sealed class UnionClipper
             else
             {
                 // can't treat as maxima & minima
-                resultOp = this.AddOutPt(ae1, pt);
-                SwapOutrecs(ae1, ae2);
+                resultOp = this.AddOutputPoint(ae1, pt);
+                SwapOutputRecords(ae1, ae2);
             }
         }
 
         // if one or other edge is 'hot' ...
         else if (ae1.IsHot)
         {
-            resultOp = this.AddOutPt(ae1, pt);
-            SwapOutrecs(ae1, ae2);
+            resultOp = this.AddOutputPoint(ae1, pt);
+            SwapOutputRecords(ae1, ae2);
         }
         else if (ae2.IsHot)
         {
-            resultOp = this.AddOutPt(ae2, pt);
-            SwapOutrecs(ae1, ae2);
+            resultOp = this.AddOutputPoint(ae2, pt);
+            SwapOutputRecords(ae1, ae2);
         }
 
         // neither edge is 'hot'
@@ -1602,7 +1602,7 @@ internal sealed class UnionClipper
         ae.Dx = 0.0;
         ae.WindCount = 0;
         ae.WindCount2 = 0;
-        ae.OutRec = null;
+        ae.OutputRecord = null;
         ae.PrevInAel = null;
         ae.NextInAel = null;
         ae.PrevInSel = null;
@@ -1671,14 +1671,14 @@ internal sealed class UnionClipper
         {
             this.InsertLocalMinimaIntoAEL(y);
             Active? ae;
-            while (this.PopHorz(out ae))
+            while (this.PopHorizontal(out ae))
             {
                 this.DoHorizontal(ae!);
             }
 
             if (this.horizontalSegments.Count > 0)
             {
-                this.ConvertHorzSegsToJoins();
+                this.ConvertHorizontalSegmentsToJoins();
                 this.horizontalSegments.Clear();
             }
 
@@ -1692,7 +1692,7 @@ internal sealed class UnionClipper
 
             this.DoIntersections(y);
             this.DoTopOfScanbeam(y);
-            while (this.PopHorz(out ae))
+            while (this.PopHorizontal(out ae))
             {
                 this.DoHorizontal(ae!);
             }
@@ -1700,7 +1700,7 @@ internal sealed class UnionClipper
 
         if (this.succeeded)
         {
-            this.ProcessHorzJoins();
+            this.ProcessHorizontalJoins();
         }
     }
 
@@ -1944,18 +1944,18 @@ internal sealed class UnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool ResetHorzDirection(
-        Active horz,
+    private static bool ResetHorizontalDirection(
+        Active horizontalEdge,
         ClipVertex? vertexMax,
         out double leftX,
         out double rightX)
     {
-        if (horz.Bot.X == horz.Top.X)
+        if (horizontalEdge.Bot.X == horizontalEdge.Top.X)
         {
             // the horizontal edge is going nowhere ...
-            leftX = horz.CurrentX;
-            rightX = horz.CurrentX;
-            Active? ae = horz.NextInAel;
+            leftX = horizontalEdge.CurrentX;
+            rightX = horizontalEdge.CurrentX;
+            Active? ae = horizontalEdge.NextInAel;
             while (ae != null && ae.VertexTop != vertexMax)
             {
                 ae = ae.NextInAel;
@@ -1964,73 +1964,73 @@ internal sealed class UnionClipper
             return ae != null;
         }
 
-        if (horz.CurrentX < horz.Top.X)
+        if (horizontalEdge.CurrentX < horizontalEdge.Top.X)
         {
-            leftX = horz.CurrentX;
-            rightX = horz.Top.X;
+            leftX = horizontalEdge.CurrentX;
+            rightX = horizontalEdge.Top.X;
             return true;
         }
 
         // Right to left.
-        leftX = horz.Top.X;
-        rightX = horz.CurrentX;
+        leftX = horizontalEdge.Top.X;
+        rightX = horizontalEdge.CurrentX;
         return false;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void TrimHorz(Active horzEdge, bool preserveCollinear)
+    private static void TrimHorizontal(Active horizontalEdge, bool preserveCollinear)
     {
         bool wasTrimmed = false;
-        Vertex pt = horzEdge.NextVertex.Point;
+        Vertex pt = horizontalEdge.NextVertex.Point;
 
-        while (pt.Y == horzEdge.Top.Y)
+        while (pt.Y == horizontalEdge.Top.Y)
         {
             // always trim 180 deg. spikes (in closed paths)
             // but otherwise break if preserveCollinear = true
             if (preserveCollinear &&
-                (pt.X < horzEdge.Top.X) != (horzEdge.Bot.X < horzEdge.Top.X))
+                (pt.X < horizontalEdge.Top.X) != (horizontalEdge.Bot.X < horizontalEdge.Top.X))
             {
                 break;
             }
 
-            horzEdge.VertexTop = horzEdge.NextVertex;
-            horzEdge.Top = pt;
+            horizontalEdge.VertexTop = horizontalEdge.NextVertex;
+            horizontalEdge.Top = pt;
             wasTrimmed = true;
-            if (horzEdge.IsMaxima)
+            if (horizontalEdge.IsMaxima)
             {
                 break;
             }
 
-            pt = horzEdge.NextVertex.Point;
+            pt = horizontalEdge.NextVertex.Point;
         }
 
         if (wasTrimmed)
         {
             // +/-infinity
-            horzEdge.UpdateDx();
+            horizontalEdge.UpdateDx();
         }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void AddToHorzSegList(OutPt op)
+    private void AddToHorizontalSegmentList(OutputPoint op)
     {
-        if (op.OutRec.IsOpen)
+        if (op.OutputRecord.IsOpen)
         {
             return;
         }
 
-        this.horizontalSegments.Add(new HorzSegment(op));
+        this.horizontalSegments.Add(new HorizontalSegment(op));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static OutPt GetLastOp(Active hotEdge)
+    private static OutputPoint GetLastOp(Active hotEdge)
     {
-        OutRec outrec = hotEdge.OutRec!;
-        return (hotEdge == outrec.FrontEdge) ?
-            outrec.Points! : outrec.Points!.Next!;
+        OutputRecord outputRecord = hotEdge.OutputRecord!;
+        return (hotEdge == outputRecord.FrontEdge) ?
+            outputRecord.Points! : outputRecord.Points!.Next!;
     }
 
-    private void DoHorizontal(Active horz)
+    private void DoHorizontal(Active horizontalEdge)
     /*******************************************************************************
       * Notes: Horizontal edges (HEs) at scanline intersections (i.e. at the top or    *
       * bottom of a scanbeam) are processed as if layered.The order in which HEs     *
@@ -2046,64 +2046,64 @@ internal sealed class UnionClipper
       *         /              |        /       |       /                            *
       *******************************************************************************/
     {
-        bool horzIsOpen = horz.IsOpen;
-        double y = horz.Bot.Y;
+        bool horizontalIsOpen = horizontalEdge.IsOpen;
+        double y = horizontalEdge.Bot.Y;
 
-        ClipVertex? vertex_max = horzIsOpen ?
-            GetCurrYMaximaVertex_Open(horz) :
-            GetCurrYMaximaVertex(horz);
+        ClipVertex? vertex_max = horizontalIsOpen ?
+            GetCurrentYMaximaVertexOpen(horizontalEdge) :
+            GetCurrentYMaximaVertex(horizontalEdge);
 
         bool isLeftToRight =
-            ResetHorzDirection(horz, vertex_max, out double leftX, out double rightX);
+            ResetHorizontalDirection(horizontalEdge, vertex_max, out double leftX, out double rightX);
 
-        if (horz.IsHot)
+        if (horizontalEdge.IsHot)
         {
-            OutPt op = this.AddOutPt(horz, new Vertex(horz.CurrentX, y));
-            this.AddToHorzSegList(op);
+            OutputPoint op = this.AddOutputPoint(horizontalEdge, new Vertex(horizontalEdge.CurrentX, y));
+            this.AddToHorizontalSegmentList(op);
         }
 
         for (; ;)
         {
             // loops through consec. horizontal edges (if open)
-            Active? ae = isLeftToRight ? horz.NextInAel : horz.PrevInAel;
+            Active? ae = isLeftToRight ? horizontalEdge.NextInAel : horizontalEdge.PrevInAel;
 
             while (ae != null)
             {
                 if (ae.VertexTop == vertex_max)
                 {
                     // do this first!!
-                    if (horz.IsHot && IsJoined(ae))
+                    if (horizontalEdge.IsHot && IsJoined(ae))
                     {
                         this.Split(ae, ae.Top);
                     }
 
-                    if (horz.IsHot)
+                    if (horizontalEdge.IsHot)
                     {
-                        while (horz.VertexTop != vertex_max)
+                        while (horizontalEdge.VertexTop != vertex_max)
                         {
-                            this.AddOutPt(horz, horz.Top);
-                            this.UpdateEdgeIntoAEL(horz);
+                            this.AddOutputPoint(horizontalEdge, horizontalEdge.Top);
+                            this.UpdateEdgeIntoAEL(horizontalEdge);
                         }
 
                         if (isLeftToRight)
                         {
-                            this.AddLocalMaxPoly(horz, ae, horz.Top);
+                            this.AddLocalMaxPoly(horizontalEdge, ae, horizontalEdge.Top);
                         }
                         else
                         {
-                            this.AddLocalMaxPoly(ae, horz, horz.Top);
+                            this.AddLocalMaxPoly(ae, horizontalEdge, horizontalEdge.Top);
                         }
                     }
 
                     this.DeleteFromAEL(ae);
-                    this.DeleteFromAEL(horz);
+                    this.DeleteFromAEL(horizontalEdge);
                     return;
                 }
 
-                // if horzEdge is a maxima, keep going until we reach
+                // if the horizontal edge is a maxima, keep going until we reach
                 // its maxima pair, otherwise check for break conditions
                 Vertex pt;
-                if (vertex_max != horz.VertexTop || horz.IsOpenEnd)
+                if (vertex_max != horizontalEdge.VertexTop || horizontalEdge.IsOpenEnd)
                 {
                     // otherwise stop when 'ae' is beyond the end of the horizontal line
                     if ((isLeftToRight && ae.CurrentX > rightX) ||
@@ -2112,13 +2112,13 @@ internal sealed class UnionClipper
                         break;
                     }
 
-                    if (ae.CurrentX == horz.Top.X && !ae.IsHorizontal)
+                    if (ae.CurrentX == horizontalEdge.Top.X && !ae.IsHorizontal)
                     {
-                        pt = horz.NextVertex.Point;
+                        pt = horizontalEdge.NextVertex.Point;
 
                         // to maximize the possibility of putting open edges into
-                        // solutions, we'll only break if it's past HorzEdge's end
-                        if (ae.IsOpen && !IsSamePolyType(ae, horz) && !ae.IsHot)
+                        // solutions, we'll only break if it's past the horizontal edge's end
+                        if (ae.IsOpen && !IsSamePolyType(ae, horizontalEdge) && !ae.IsHot)
                         {
                             if ((isLeftToRight && (ae.TopX(pt.Y) > pt.X)) ||
                                 (!isLeftToRight && (ae.TopX(pt.Y) < pt.X)))
@@ -2127,9 +2127,9 @@ internal sealed class UnionClipper
                             }
                         }
 
-                        // otherwise for edges at horzEdge's end, only stop when horzEdge's
-                        // outslope is greater than e's slope when heading right or when
-                        // horzEdge's outslope is less than e's slope when heading left.
+                        // otherwise for edges at the horizontal edge's end, only stop when the horizontal
+                        // edge's outslope is greater than e's slope when heading right or when the horizontal
+                        // edge's outslope is less than e's slope when heading left.
                         else if ((isLeftToRight && (ae.TopX(pt.Y) >= pt.X)) ||
                                 (!isLeftToRight && (ae.TopX(pt.Y) <= pt.X)))
                         {
@@ -2142,24 +2142,24 @@ internal sealed class UnionClipper
 
                 if (isLeftToRight)
                 {
-                    this.IntersectEdges(horz, ae, pt);
-                    this.SwapPositionsInAEL(horz, ae);
+                    this.IntersectEdges(horizontalEdge, ae, pt);
+                    this.SwapPositionsInAEL(horizontalEdge, ae);
                     this.CheckJoinLeft(ae, pt);
-                    horz.CurrentX = ae.CurrentX;
-                    ae = horz.NextInAel;
+                    horizontalEdge.CurrentX = ae.CurrentX;
+                    ae = horizontalEdge.NextInAel;
                 }
                 else
                 {
-                    this.IntersectEdges(ae, horz, pt);
-                    this.SwapPositionsInAEL(ae, horz);
+                    this.IntersectEdges(ae, horizontalEdge, pt);
+                    this.SwapPositionsInAEL(ae, horizontalEdge);
                     this.CheckJoinRight(ae, pt);
-                    horz.CurrentX = ae.CurrentX;
-                    ae = horz.PrevInAel;
+                    horizontalEdge.CurrentX = ae.CurrentX;
+                    ae = horizontalEdge.PrevInAel;
                 }
 
-                if (horz.IsHot)
+                if (horizontalEdge.IsHot)
                 {
-                    this.AddToHorzSegList(GetLastOp(horz));
+                    this.AddToHorizontalSegmentList(GetLastOp(horizontalEdge));
                 }
             }
 
@@ -2167,62 +2167,62 @@ internal sealed class UnionClipper
             // through consecutive horizontals
             // We've reached the end of this horizontal.
             // Open at top.
-            if (horzIsOpen && horz.IsOpenEnd)
+            if (horizontalIsOpen && horizontalEdge.IsOpenEnd)
             {
-                if (horz.IsHot)
+                if (horizontalEdge.IsHot)
                 {
-                    this.AddOutPt(horz, horz.Top);
-                    if (horz.IsFront)
+                    this.AddOutputPoint(horizontalEdge, horizontalEdge.Top);
+                    if (horizontalEdge.IsFront)
                     {
-                        horz.OutRec!.FrontEdge = null;
+                        horizontalEdge.OutputRecord!.FrontEdge = null;
                     }
                     else
                     {
-                        horz.OutRec!.BackEdge = null;
+                        horizontalEdge.OutputRecord!.BackEdge = null;
                     }
 
-                    horz.OutRec = null;
+                    horizontalEdge.OutputRecord = null;
                 }
 
-                this.DeleteFromAEL(horz);
+                this.DeleteFromAEL(horizontalEdge);
                 return;
             }
 
-            if (horz.NextVertex.Point.Y != horz.Top.Y)
+            if (horizontalEdge.NextVertex.Point.Y != horizontalEdge.Top.Y)
             {
                 break;
             }
 
             // still more horizontals in bound to process ...
-            if (horz.IsHot)
+            if (horizontalEdge.IsHot)
             {
-                this.AddOutPt(horz, horz.Top);
+                this.AddOutputPoint(horizontalEdge, horizontalEdge.Top);
             }
 
-            this.UpdateEdgeIntoAEL(horz);
+            this.UpdateEdgeIntoAEL(horizontalEdge);
 
-            isLeftToRight = ResetHorzDirection(
-                horz,
+            isLeftToRight = ResetHorizontalDirection(
+                horizontalEdge,
                 vertex_max,
                 out leftX,
                 out rightX);
         }
 
         // End of (possible consecutive) horizontals.
-        if (horz.IsHot)
+        if (horizontalEdge.IsHot)
         {
-            OutPt op = this.AddOutPt(horz, horz.Top);
-            this.AddToHorzSegList(op);
+            OutputPoint op = this.AddOutputPoint(horizontalEdge, horizontalEdge.Top);
+            this.AddToHorizontalSegmentList(op);
         }
 
         // This is the end of an intermediate horizontal.
-        this.UpdateEdgeIntoAEL(horz);
+        this.UpdateEdgeIntoAEL(horizontalEdge);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void DoTopOfScanbeam(double y)
     {
-        // Sorted edges are reused to flag horizontals (see PushHorz below).
+        // Sorted edges are reused to flag horizontals (see PushHorizontal below).
         this.sortedEdges = null;
         Active? ae = this.activeEdges;
         while (ae != null)
@@ -2241,7 +2241,7 @@ internal sealed class UnionClipper
                 // INTERMEDIATE ClipVertex ...
                 if (ae.IsHot)
                 {
-                    this.AddOutPt(ae, ae.Top);
+                    this.AddOutputPoint(ae, ae.Top);
                 }
 
                 this.UpdateEdgeIntoAEL(ae);
@@ -2249,7 +2249,7 @@ internal sealed class UnionClipper
                 // Horizontals are processed later.
                 if (ae.IsHorizontal)
                 {
-                    this.PushHorz(ae);
+                    this.PushHorizontal(ae);
                 }
             }
 
@@ -2273,7 +2273,7 @@ internal sealed class UnionClipper
         {
             if (ae.IsHot)
             {
-                this.AddOutPt(ae, ae.Top);
+                this.AddOutputPoint(ae, ae.Top);
             }
 
             if (ae.IsHorizontal)
@@ -2285,14 +2285,14 @@ internal sealed class UnionClipper
             {
                 if (ae.IsFront)
                 {
-                    ae.OutRec!.FrontEdge = null;
+                    ae.OutputRecord!.FrontEdge = null;
                 }
                 else
                 {
-                    ae.OutRec!.BackEdge = null;
+                    ae.OutputRecord!.BackEdge = null;
                 }
 
-                ae.OutRec = null;
+                ae.OutputRecord = null;
             }
 
             this.DeleteFromAEL(ae);
@@ -2407,17 +2407,17 @@ internal sealed class UnionClipper
             return;
         }
 
-        if (e.OutRec!.Index == prev.OutRec!.Index)
+        if (e.OutputRecord!.Index == prev.OutputRecord!.Index)
         {
             this.AddLocalMaxPoly(prev, e, pt);
         }
-        else if (e.OutRec.Index < prev.OutRec.Index)
+        else if (e.OutputRecord!.Index < prev.OutputRecord!.Index)
         {
-            JoinOutrecPaths(e, prev);
+            JoinOutputRecordPaths(e, prev);
         }
         else
         {
-            JoinOutrecPaths(prev, e);
+            JoinOutputRecordPaths(prev, e);
         }
 
         prev.JoinWith = JoinWith.Right;
@@ -2464,17 +2464,17 @@ internal sealed class UnionClipper
             return;
         }
 
-        if (e.OutRec!.Index == next.OutRec!.Index)
+        if (e.OutputRecord!.Index == next.OutputRecord!.Index)
         {
             this.AddLocalMaxPoly(e, next, pt);
         }
-        else if (e.OutRec.Index < next.OutRec.Index)
+        else if (e.OutputRecord!.Index < next.OutputRecord!.Index)
         {
-            JoinOutrecPaths(e, next);
+            JoinOutputRecordPaths(e, next);
         }
         else
         {
-            JoinOutrecPaths(next, e);
+            JoinOutputRecordPaths(next, e);
         }
 
         e.JoinWith = JoinWith.Right;
@@ -2482,96 +2482,96 @@ internal sealed class UnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void FixOutRecPts(OutRec outrec)
+    private static void FixOutputRecordPoints(OutputRecord outputRecord)
     {
-        OutPt op = outrec.Points!;
+        OutputPoint op = outputRecord.Points!;
         do
         {
-            op.OutRec = outrec;
+            op.OutputRecord = outputRecord;
             op = op.Next!;
         }
-        while (op != outrec.Points);
+        while (op != outputRecord.Points);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool SetHorzSegHeadingForward(HorzSegment hs, OutPt opP, OutPt opN)
+    private static bool SetHorizontalSegmentHeadingForward(HorizontalSegment hs, OutputPoint prevPoint, OutputPoint nextPoint)
     {
-        if (PolygonUtilities.IsAlmostZero(opP.Point.X - opN.Point.X))
+        if (PolygonUtilities.IsAlmostZero(prevPoint.Point.X - nextPoint.Point.X))
         {
             return false;
         }
 
-        if (opP.Point.X < opN.Point.X)
+        if (prevPoint.Point.X < nextPoint.Point.X)
         {
-            hs.LeftOp = opP;
-            hs.RightOp = opN;
+            hs.LeftPoint = prevPoint;
+            hs.RightPoint = nextPoint;
             hs.LeftToRight = true;
         }
         else
         {
-            hs.LeftOp = opN;
-            hs.RightOp = opP;
+            hs.LeftPoint = nextPoint;
+            hs.RightPoint = prevPoint;
             hs.LeftToRight = false;
         }
 
         return true;
     }
 
-    private static bool UpdateHorzSegment(HorzSegment hs)
+    private static bool UpdateHorizontalSegment(HorizontalSegment hs)
     {
-        OutPt op = hs.LeftOp!;
-        OutRec outrec = GetRealOutRec(op.OutRec)!;
-        bool outrecHasEdges = outrec.FrontEdge != null;
-        double curr_y = op.Point.Y;
-        OutPt opP = op, opN = op;
-        if (outrecHasEdges)
+        OutputPoint op = hs.LeftPoint!;
+        OutputRecord outputRecord = GetRealOutputRecord(op.OutputRecord)!;
+        bool outputRecordHasEdges = outputRecord.FrontEdge != null;
+        double currentY = op.Point.Y;
+        OutputPoint prevPoint = op, nextPoint = op;
+        if (outputRecordHasEdges)
         {
-            OutPt opA = outrec.Points!, opZ = opA.Next!;
-            while (opP != opZ && opP.Prev.Point.Y == curr_y)
+            OutputPoint opA = outputRecord.Points!, opZ = opA.Next!;
+            while (prevPoint != opZ && prevPoint.Prev.Point.Y == currentY)
             {
-                opP = opP.Prev;
+                prevPoint = prevPoint.Prev;
             }
 
-            while (opN != opA && opN.Next!.Point.Y == curr_y)
+            while (nextPoint != opA && nextPoint.Next!.Point.Y == currentY)
             {
-                opN = opN.Next;
+                nextPoint = nextPoint.Next;
             }
         }
         else
         {
-            while (opP.Prev != opN && opP.Prev.Point.Y == curr_y)
+            while (prevPoint.Prev != nextPoint && prevPoint.Prev.Point.Y == currentY)
             {
-                opP = opP.Prev;
+                prevPoint = prevPoint.Prev;
             }
 
-            while (opN.Next != opP && opN.Next!.Point.Y == curr_y)
+            while (nextPoint.Next != prevPoint && nextPoint.Next!.Point.Y == currentY)
             {
-                opN = opN.Next;
+                nextPoint = nextPoint.Next;
             }
         }
 
         bool result =
-            SetHorzSegHeadingForward(hs, opP, opN) &&
-            hs.LeftOp!.Horz == null;
+            SetHorizontalSegmentHeadingForward(hs, prevPoint, nextPoint) &&
+            hs.LeftPoint!.HorizontalSegment == null;
 
         if (result)
         {
-            hs.LeftOp!.Horz = hs;
+            hs.LeftPoint!.HorizontalSegment = hs;
         }
         else
         {
             // (for sorting)
-            hs.RightOp = null;
+            hs.RightPoint = null;
         }
 
         return result;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private OutPt DuplicateOp(OutPt op, bool insert_after)
+    private OutputPoint DuplicateOp(OutputPoint op, bool insertAfter)
     {
-        OutPt result = this.outPointPool.Add(op.Point, op.OutRec);
-        if (insert_after)
+        OutputPoint result = this.outputPointPool.Add(op.Point, op.OutputRecord);
+        if (insertAfter)
         {
             result.Next = op.Next;
             result.Next!.Prev = result;
@@ -2589,32 +2589,32 @@ internal sealed class UnionClipper
         return result;
     }
 
-    private static int HorzSegSort(HorzSegment? hs1, HorzSegment? hs2)
+    private static int HorizontalSegmentSort(HorizontalSegment? hs1, HorizontalSegment? hs2)
     {
         if (hs1 == null || hs2 == null)
         {
             return 0;
         }
 
-        if (hs1.RightOp == null)
+        if (hs1.RightPoint == null)
         {
-            return hs2.RightOp == null ? 0 : 1;
+            return hs2.RightPoint == null ? 0 : 1;
         }
 
-        if (hs2.RightOp == null)
+        if (hs2.RightPoint == null)
         {
             return -1;
         }
 
-        return hs1.LeftOp!.Point.X.CompareTo(hs2.LeftOp!.Point.X);
+        return hs1.LeftPoint!.Point.X.CompareTo(hs2.LeftPoint!.Point.X);
     }
 
-    private void ConvertHorzSegsToJoins()
+    private void ConvertHorizontalSegmentsToJoins()
     {
         int k = 0;
-        foreach (HorzSegment hs in this.horizontalSegments)
+        foreach (HorizontalSegment hs in this.horizontalSegments)
         {
-            if (UpdateHorzSegment(hs))
+            if (UpdateHorizontalSegment(hs))
             {
                 k++;
             }
@@ -2625,69 +2625,69 @@ internal sealed class UnionClipper
             return;
         }
 
-        this.horizontalSegments.Sort(HorzSegSort);
+        this.horizontalSegments.Sort(HorizontalSegmentSort);
 
         for (int i = 0; i < k - 1; i++)
         {
-            HorzSegment hs1 = this.horizontalSegments[i];
+            HorizontalSegment hs1 = this.horizontalSegments[i];
 
-            // for each HorzSegment, find others that overlap
+            // for each HorizontalSegment, find others that overlap
             for (int j = i + 1; j < k; j++)
             {
-                HorzSegment hs2 = this.horizontalSegments[j];
-                if ((hs2.LeftOp!.Point.X >= hs1.RightOp!.Point.X) ||
+                HorizontalSegment hs2 = this.horizontalSegments[j];
+                if ((hs2.LeftPoint!.Point.X >= hs1.RightPoint!.Point.X) ||
                     (hs2.LeftToRight == hs1.LeftToRight) ||
-                    (hs2.RightOp!.Point.X <= hs1.LeftOp!.Point.X))
+                    (hs2.RightPoint!.Point.X <= hs1.LeftPoint!.Point.X))
                 {
                     continue;
                 }
 
-                double curr_y = hs1.LeftOp.Point.Y;
+                double curr_y = hs1.LeftPoint.Point.Y;
                 if (hs1.LeftToRight)
                 {
-                    while (hs1.LeftOp.Next!.Point.Y == curr_y &&
-                        hs1.LeftOp.Next.Point.X <= hs2.LeftOp.Point.X)
+                    while (hs1.LeftPoint.Next!.Point.Y == curr_y &&
+                        hs1.LeftPoint.Next.Point.X <= hs2.LeftPoint.Point.X)
                     {
-                        hs1.LeftOp = hs1.LeftOp.Next;
+                        hs1.LeftPoint = hs1.LeftPoint.Next;
                     }
 
-                    while (hs2.LeftOp.Prev.Point.Y == curr_y &&
-                        hs2.LeftOp.Prev.Point.X <= hs1.LeftOp.Point.X)
+                    while (hs2.LeftPoint.Prev.Point.Y == curr_y &&
+                        hs2.LeftPoint.Prev.Point.X <= hs1.LeftPoint.Point.X)
                     {
-                        hs2.LeftOp = hs2.LeftOp.Prev;
+                        hs2.LeftPoint = hs2.LeftPoint.Prev;
                     }
 
-                    HorzJoin join = this.horizontalJoins.Add(
-                        this.DuplicateOp(hs1.LeftOp, true),
-                        this.DuplicateOp(hs2.LeftOp, false));
+                    HorizontalJoin join = this.horizontalJoins.Add(
+                        this.DuplicateOp(hs1.LeftPoint, true),
+                        this.DuplicateOp(hs2.LeftPoint, false));
                 }
                 else
                 {
-                    while (hs1.LeftOp.Prev.Point.Y == curr_y &&
-                        hs1.LeftOp.Prev.Point.X <= hs2.LeftOp.Point.X)
+                    while (hs1.LeftPoint.Prev.Point.Y == curr_y &&
+                        hs1.LeftPoint.Prev.Point.X <= hs2.LeftPoint.Point.X)
                     {
-                        hs1.LeftOp = hs1.LeftOp.Prev;
+                        hs1.LeftPoint = hs1.LeftPoint.Prev;
                     }
 
-                    while (hs2.LeftOp.Next!.Point.Y == curr_y &&
-                        hs2.LeftOp.Next.Point.X <= hs1.LeftOp.Point.X)
+                    while (hs2.LeftPoint.Next!.Point.Y == curr_y &&
+                        hs2.LeftPoint.Next.Point.X <= hs1.LeftPoint.Point.X)
                     {
-                        hs2.LeftOp = hs2.LeftOp.Next;
+                        hs2.LeftPoint = hs2.LeftPoint.Next;
                     }
 
-                    HorzJoin join = this.horizontalJoins.Add(
-                        this.DuplicateOp(hs2.LeftOp, true),
-                        this.DuplicateOp(hs1.LeftOp, false));
+                    HorizontalJoin join = this.horizontalJoins.Add(
+                        this.DuplicateOp(hs2.LeftPoint, true),
+                        this.DuplicateOp(hs1.LeftPoint, false));
                 }
             }
         }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static Contour GetCleanPath(OutPt op)
+    private static Contour GetCleanPath(OutputPoint op)
     {
         Contour result = [];
-        OutPt op2 = op;
+        OutputPoint op2 = op;
         while (op2.Next != op &&
             ((PolygonUtilities.IsAlmostZero(op2.Point.X - op2.Next!.Point.X) &&
               PolygonUtilities.IsAlmostZero(op2.Point.X - op2.Prev.Point.X)) ||
@@ -2698,7 +2698,7 @@ internal sealed class UnionClipper
         }
 
         result.Add(op2.Point);
-        OutPt prevOp = op2;
+        OutputPoint prevOp = op2;
         op2 = op2.Next;
         while (op2 != op)
         {
@@ -2717,14 +2717,14 @@ internal sealed class UnionClipper
         return result;
     }
 
-    private static ClipperPointInPolygonResult PointInOpPolygon(Vertex pt, OutPt op)
+    private static ClipperPointInPolygonResult PointInOpPolygon(Vertex pt, OutputPoint op)
     {
         if (op == op.Next || op.Prev == op.Next)
         {
             return ClipperPointInPolygonResult.IsOutside;
         }
 
-        OutPt op2 = op;
+        OutputPoint op2 = op;
         do
         {
             if (op.Point.Y != pt.Y)
@@ -2836,12 +2836,12 @@ internal sealed class UnionClipper
         return val == 0 ? ClipperPointInPolygonResult.IsOutside : ClipperPointInPolygonResult.IsInside;
     }
 
-    private static bool Path1InsidePath2(OutPt op1, OutPt op2)
+    private static bool Path1InsidePath2(OutputPoint op1, OutputPoint op2)
     {
         // we need to make some accommodation for rounding errors
         // so we won't jump if the first ClipVertex is found outside
         ClipperPointInPolygonResult pip = ClipperPointInPolygonResult.IsOn;
-        OutPt op = op1;
+        OutputPoint op = op1;
         do
         {
             switch (PointInOpPolygon(op.Point, op2))
@@ -2875,7 +2875,7 @@ internal sealed class UnionClipper
         return PolygonUtilities.Path2ContainsPath1(GetCleanPath(op1), GetCleanPath(op2));
     }
 
-    private static void MoveSplits(OutRec fromOr, OutRec toOr)
+    private static void MoveSplits(OutputRecord fromOr, OutputRecord toOr)
     {
         if (fromOr.Splits == null)
         {
@@ -2894,43 +2894,43 @@ internal sealed class UnionClipper
         fromOr.Splits = null;
     }
 
-    private void ProcessHorzJoins()
+    private void ProcessHorizontalJoins()
     {
-        foreach (HorzJoin j in this.horizontalJoins)
+        foreach (HorizontalJoin j in this.horizontalJoins)
         {
-            OutRec or1 = GetRealOutRec(j.Op1!.OutRec)!;
-            OutRec or2 = GetRealOutRec(j.Op2!.OutRec)!;
+            OutputRecord or1 = GetRealOutputRecord(j.LeftToRight!.OutputRecord)!;
+            OutputRecord or2 = GetRealOutputRecord(j.RightToLeft!.OutputRecord)!;
 
-            OutPt op1b = j.Op1.Next!;
-            OutPt op2b = j.Op2.Prev;
-            j.Op1.Next = j.Op2;
-            j.Op2.Prev = j.Op1;
+            OutputPoint op1b = j.LeftToRight.Next!;
+            OutputPoint op2b = j.RightToLeft.Prev;
+            j.LeftToRight.Next = j.RightToLeft;
+            j.RightToLeft.Prev = j.LeftToRight;
             op1b.Prev = op2b;
             op2b.Next = op1b;
 
             // 'join' is really a split
             if (or1 == or2)
             {
-                or2 = this.NewOutRec();
+                or2 = this.NewOutputRecord();
                 or2.Points = op1b;
-                FixOutRecPts(or2);
+                FixOutputRecordPoints(or2);
 
-                // if or1->pts has moved to or2 then update or1->pts!!
-                if (or1.Points!.OutRec == or2)
+                // if or1.Points has moved to or2 then update or1.Points.
+                if (or1.Points!.OutputRecord == or2)
                 {
-                    or1.Points = j.Op1;
-                    or1.Points.OutRec = or1;
+                    or1.Points = j.LeftToRight;
+                    or1.Points.OutputRecord = or1;
                 }
 
                 // #498, #520, #584, D#576, #618
-                if (this.usingPolyTree)
+                if (this.buildHierarchy)
                 {
                     if (Path1InsidePath2(or1.Points, or2.Points))
                     {
-                        // swap or1's & or2's pts
+                        // swap or1's and or2's points
                         (or2.Points, or1.Points) = (or1.Points, or2.Points);
-                        FixOutRecPts(or1);
-                        FixOutRecPts(or2);
+                        FixOutputRecordPoints(or1);
+                        FixOutputRecordPoints(or2);
 
                         // or2 is now inside or1
                         or2.Owner = or1;
@@ -2955,7 +2955,7 @@ internal sealed class UnionClipper
             else
             {
                 or2.Points = null;
-                if (this.usingPolyTree)
+                if (this.buildHierarchy)
                 {
                     SetOwner(or2, or1);
 
@@ -2971,26 +2971,26 @@ internal sealed class UnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool PtsReallyClose(Vertex pt1, Vertex pt2)
+    private static bool PointsReallyClose(in Vertex pt1, in Vertex pt2)
     {
         double tolerance = PolygonUtilities.ClosePointTolerance;
         return Math.Abs(pt1.X - pt2.X) < tolerance && Math.Abs(pt1.Y - pt2.Y) < tolerance;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsVerySmallTriangle(OutPt op) => op.Next!.Next == op.Prev &&
-      (PtsReallyClose(op.Prev.Point, op.Next.Point) ||
-        PtsReallyClose(op.Point, op.Next.Point) ||
-        PtsReallyClose(op.Point, op.Prev.Point));
+    private static bool IsVerySmallTriangle(OutputPoint op) => op.Next!.Next == op.Prev &&
+      (PointsReallyClose(op.Prev.Point, op.Next.Point) ||
+        PointsReallyClose(op.Point, op.Next.Point) ||
+        PointsReallyClose(op.Point, op.Prev.Point));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsValidClosedPath(OutPt? op) => op != null && op.Next != op &&
+    private static bool IsValidClosedPath(OutputPoint? op) => op != null && op.Next != op &&
             (op.Next != op.Prev || !IsVerySmallTriangle(op));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static OutPt? DisposeOutPt(OutPt op)
+    private static OutputPoint? DisposeOutputPoint(OutputPoint op)
     {
-        OutPt? result = op.Next == op ? null : op.Next;
+        OutputPoint? result = op.Next == op ? null : op.Next;
         op.Prev.Next = op.Next;
         op.Next!.Prev = op.Prev;
 
@@ -2999,23 +2999,23 @@ internal sealed class UnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void CleanCollinear(OutRec? outrec)
+    private void CleanCollinear(OutputRecord? outputRecord)
     {
-        outrec = GetRealOutRec(outrec);
+        outputRecord = GetRealOutputRecord(outputRecord);
 
-        if (outrec == null || outrec.IsOpen)
+        if (outputRecord == null || outputRecord.IsOpen)
         {
             return;
         }
 
-        if (!IsValidClosedPath(outrec.Points))
+        if (!IsValidClosedPath(outputRecord.Points))
         {
-            outrec.Points = null;
+            outputRecord.Points = null;
             return;
         }
 
-        OutPt startOp = outrec.Points!;
-        OutPt? op2 = startOp;
+        OutputPoint startOp = outputRecord.Points!;
+        OutputPoint? op2 = startOp;
         for (; ;)
         {
             // NB if preserveCollinear == true, then only remove 180 deg. spikes
@@ -3023,15 +3023,15 @@ internal sealed class UnionClipper
                 (PolygonUtilities.PointEquals(op2.Point, op2.Prev.Point) || PolygonUtilities.PointEquals(op2.Point, op2.Next.Point) || !this.PreserveCollinear ||
                 (PolygonUtilities.DotProduct(op2.Prev.Point, op2.Point, op2.Next.Point) < 0)))
             {
-                if (op2 == outrec.Points)
+                if (op2 == outputRecord.Points)
                 {
-                    outrec.Points = op2.Prev;
+                    outputRecord.Points = op2.Prev;
                 }
 
-                op2 = DisposeOutPt(op2);
+                op2 = DisposeOutputPoint(op2);
                 if (!IsValidClosedPath(op2))
                 {
-                    outrec.Points = null;
+                    outputRecord.Points = null;
                     return;
                 }
 
@@ -3046,17 +3046,17 @@ internal sealed class UnionClipper
             }
         }
 
-        this.FixSelfIntersects(outrec);
+        this.FixSelfIntersects(outputRecord);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void DoSplitOp(OutRec outrec, OutPt splitOp)
+    private void DoSplitOp(OutputRecord outputRecord, OutputPoint splitOp)
     {
         // splitOp.Prev <=> splitOp &&
         // splitOp.Next <=> splitOp.Next.Next are intersecting
-        OutPt prevOp = splitOp.Prev;
-        OutPt nextNextOp = splitOp.Next!.Next!;
-        outrec.Points = prevOp;
+        OutputPoint prevOp = splitOp.Prev;
+        OutputPoint nextNextOp = splitOp.Next!.Next!;
+        outputRecord.Points = prevOp;
 
         PolygonUtilities.TryGetLineIntersection(
             prevOp.Point, splitOp.Point, splitOp.Next.Point, nextNextOp.Point, out Vertex ip);
@@ -3066,7 +3066,7 @@ internal sealed class UnionClipper
 
         if (absArea1 < PolygonUtilities.SmallAreaTolerance2)
         {
-            outrec.Points = null;
+            outputRecord.Points = null;
             return;
         }
 
@@ -3082,7 +3082,7 @@ internal sealed class UnionClipper
         }
         else
         {
-            OutPt newOp2 = this.outPointPool.Add(ip, outrec);
+            OutputPoint newOp2 = this.outputPointPool.Add(ip, outputRecord);
             newOp2.Prev = prevOp;
             newOp2.Next = nextNextOp;
             nextNextOp.Prev = newOp2;
@@ -3101,41 +3101,41 @@ internal sealed class UnionClipper
             return;
         }
 
-        OutRec newOutRec = this.NewOutRec();
-        newOutRec.Owner = outrec.Owner;
-        splitOp.OutRec = newOutRec;
-        splitOp.Next.OutRec = newOutRec;
+        OutputRecord newOutputRecord = this.NewOutputRecord();
+        newOutputRecord.Owner = outputRecord.Owner;
+        splitOp.OutputRecord = newOutputRecord;
+        splitOp.Next.OutputRecord = newOutputRecord;
 
-        OutPt newOp = this.outPointPool.Add(ip, newOutRec);
+        OutputPoint newOp = this.outputPointPool.Add(ip, newOutputRecord);
         newOp.Prev = splitOp.Next;
         newOp.Next = splitOp;
-        newOutRec.Points = newOp;
+        newOutputRecord.Points = newOp;
         splitOp.Prev = newOp;
         splitOp.Next.Next = newOp;
 
-        if (!this.usingPolyTree)
+        if (!this.buildHierarchy)
         {
             return;
         }
 
         if (Path1InsidePath2(prevOp, newOp))
         {
-            newOutRec.Splits ??= [];
-            newOutRec.Splits.Add(outrec.Index);
+            newOutputRecord.Splits ??= [];
+            newOutputRecord.Splits.Add(outputRecord.Index);
         }
         else
         {
-            outrec.Splits ??= [];
-            outrec.Splits.Add(newOutRec.Index);
+            outputRecord.Splits ??= [];
+            outputRecord.Splits.Add(newOutputRecord.Index);
         }
 
         // else { splitOp = null; splitOp.Next = null; }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void FixSelfIntersects(OutRec outrec)
+    private void FixSelfIntersects(OutputRecord outputRecord)
     {
-        OutPt op2 = outrec.Points!;
+        OutputPoint op2 = outputRecord.Points!;
         if (op2.Prev == op2.Next!.Next)
         {
             // Triangles can't self-intersect.
@@ -3163,18 +3163,18 @@ internal sealed class UnionClipper
                 }
                 else
                 {
-                    if (op2 == outrec.Points || op2.Next == outrec.Points)
+                    if (op2 == outputRecord.Points || op2.Next == outputRecord.Points)
                     {
-                        outrec.Points = outrec.Points.Prev;
+                        outputRecord.Points = outputRecord.Points.Prev;
                     }
 
-                    this.DoSplitOp(outrec, op2);
-                    if (outrec.Points == null)
+                    this.DoSplitOp(outputRecord, op2);
+                    if (outputRecord.Points == null)
                     {
                         return;
                     }
 
-                    op2 = outrec.Points;
+                    op2 = outputRecord.Points;
 
                     // triangles can't self-intersect
                     if (op2.Prev == op2.Next!.Next)
@@ -3187,14 +3187,14 @@ internal sealed class UnionClipper
             }
 
             op2 = op2.Next!;
-            if (op2 == outrec.Points)
+            if (op2 == outputRecord.Points)
             {
                 break;
             }
         }
     }
 
-    internal static bool BuildPath(OutPt? op, bool reverse, bool isOpen, Contour path)
+    internal static bool BuildPath(OutputPoint? op, bool reverse, bool isOpen, Contour path)
     {
         if (op == null || op.Next == op || (!isOpen && op.Next == op.Prev))
         {
@@ -3204,7 +3204,7 @@ internal sealed class UnionClipper
         path.Clear();
 
         Vertex lastPt;
-        OutPt op2;
+        OutputPoint op2;
         if (reverse)
         {
             lastPt = op.Point;
@@ -3240,10 +3240,7 @@ internal sealed class UnionClipper
         return path.Count != 3 || isOpen || !IsVerySmallTriangle(op2);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static Vertex ToVertex(Vertex point) => new(point.X, -point.Y);
-
-    internal static bool BuildContour(OutPt? op, bool reverse, bool isOpen, Contour contour)
+    internal static bool BuildContour(OutputPoint? op, bool reverse, bool isOpen, Contour contour)
     {
         if (op == null || op.Next == op || (!isOpen && op.Next == op.Prev))
         {
@@ -3253,16 +3250,16 @@ internal sealed class UnionClipper
         contour.Clear();
 
         Vertex lastPt;
-        OutPt op2;
+        OutputPoint op2;
         if (reverse)
         {
-            lastPt = ToVertex(op.Point);
+            lastPt = new Vertex(op.Point.X, -op.Point.Y);
             op2 = op.Prev;
         }
         else
         {
             op = op.Next!;
-            lastPt = ToVertex(op.Point);
+            lastPt = new Vertex(op.Point.X, -op.Point.Y);
             op2 = op.Next!;
         }
 
@@ -3270,7 +3267,7 @@ internal sealed class UnionClipper
 
         while (op2 != op)
         {
-            Vertex current = ToVertex(op2.Point);
+            Vertex current = new Vertex(op2.Point.X, -op2.Point.Y);
             if (current != lastPt)
             {
                 lastPt = current;
@@ -3298,37 +3295,37 @@ internal sealed class UnionClipper
     {
         solutionClosed.Clear();
         solutionOpen.Clear();
-        solutionClosed.EnsureCapacity(this.outrecPool.Count);
-        solutionOpen.EnsureCapacity(this.outrecPool.Count);
+        solutionClosed.EnsureCapacity(this.outputRecordPool.Count);
+        solutionOpen.EnsureCapacity(this.outputRecordPool.Count);
         this.pathPoolIndex = 0;
 
         int i = 0;
 
-        // this.outrecPool.Count is not static here because
-        // CleanCollinear can indirectly add additional OutRec
-        while (i < this.outrecPool.Count)
+        // this.outputRecordPool.Count is not static here because
+        // CleanCollinear can indirectly add additional OutputRecord
+        while (i < this.outputRecordPool.Count)
         {
-            OutRec outrec = this.outrecPool[i++];
-            if (outrec.Points == null)
+            OutputRecord outputRecord = this.outputRecordPool[i++];
+            if (outputRecord.Points == null)
             {
                 continue;
             }
 
-            Contour path = this.GetPooledPath(outrec.OutPointCount);
-            if (outrec.IsOpen)
+            Contour path = this.GetPooledPath(outputRecord.OutputPointCount);
+            if (outputRecord.IsOpen)
             {
-                if (BuildPath(outrec.Points, this.ReverseSolution, true, path))
+                if (BuildPath(outputRecord.Points, this.ReverseSolution, true, path))
                 {
                     solutionOpen.Add(path);
                 }
             }
             else
             {
-                this.CleanCollinear(outrec);
+                this.CleanCollinear(outputRecord);
 
                 // closed paths should always return a Positive orientation
                 // except when ReverseSolution == true
-                if (BuildPath(outrec.Points, this.ReverseSolution, false, path))
+                if (BuildPath(outputRecord.Points, this.ReverseSolution, false, path))
                 {
                     solutionClosed.Add(path);
                 }
@@ -3341,29 +3338,29 @@ internal sealed class UnionClipper
     private void BuildContours(List<Contour> solution)
     {
         solution.Clear();
-        solution.EnsureCapacity(this.outrecPool.Count);
+        solution.EnsureCapacity(this.outputRecordPool.Count);
 
         int i = 0;
-        while (i < this.outrecPool.Count)
+        while (i < this.outputRecordPool.Count)
         {
-            OutRec outrec = this.outrecPool[i++];
-            if (outrec.Points == null)
+            OutputRecord outputRecord = this.outputRecordPool[i++];
+            if (outputRecord.Points == null)
             {
                 continue;
             }
 
-            Contour contour = new(outrec.OutPointCount + 1);
-            if (outrec.IsOpen)
+            Contour contour = new(outputRecord.OutputPointCount + 1);
+            if (outputRecord.IsOpen)
             {
-                if (BuildContour(outrec.Points, this.ReverseSolution, true, contour))
+                if (BuildContour(outputRecord.Points, this.ReverseSolution, true, contour))
                 {
                     solution.Add(contour);
                 }
             }
             else
             {
-                this.CleanCollinear(outrec);
-                if (BuildContour(outrec.Points, this.ReverseSolution, false, contour))
+                this.CleanCollinear(outputRecord);
+                if (BuildContour(outputRecord.Points, this.ReverseSolution, false, contour))
                 {
                     solution.Add(contour);
                 }
@@ -3372,156 +3369,205 @@ internal sealed class UnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private bool CheckBounds(OutRec outrec)
+    private bool CheckBounds(OutputRecord outputRecord)
     {
-        if (outrec.Points == null)
+        if (outputRecord.Points == null)
         {
             return false;
         }
 
-        if (!outrec.Bounds.IsEmpty())
+        if (!outputRecord.Bounds.IsEmpty())
         {
             return true;
         }
 
-        this.CleanCollinear(outrec);
-        if (outrec.Points == null ||
-            !BuildPath(outrec.Points, this.ReverseSolution, false, outrec.Path))
+        this.CleanCollinear(outputRecord);
+        if (outputRecord.Points == null ||
+            !BuildPath(outputRecord.Points, this.ReverseSolution, false, outputRecord.Path))
         {
             return false;
         }
 
-        outrec.Bounds = PolygonUtilities.GetBounds(outrec.Path);
+        outputRecord.Bounds = PolygonUtilities.GetBounds(outputRecord.Path);
         return true;
     }
 
-    private bool CheckSplitOwner(OutRec outrec, List<int>? splits)
+    private bool CheckSplitOwner(OutputRecord outputRecord, List<int>? splits)
     {
         // nb: use indexing (not an iterator) in case 'splits' is modified inside this loop (#1029)
         for (int i = 0; i < splits!.Count; i++)
         {
-            OutRec? split = this.outrecPool[splits[i]];
+            OutputRecord? split = this.outputRecordPool[splits[i]];
             if (split.Points == null && split.Splits != null &&
-                this.CheckSplitOwner(outrec, split.Splits))
+                this.CheckSplitOwner(outputRecord, split.Splits))
             {
                 // #942
                 return true;
             }
 
-            split = GetRealOutRec(split);
-            if (split == null || split == outrec || split.RecursiveSplit == outrec)
+            split = GetRealOutputRecord(split);
+            if (split == null || split == outputRecord || split.RecursiveSplit == outputRecord)
             {
                 continue;
             }
 
             // #599
-            split.RecursiveSplit = outrec;
+            split.RecursiveSplit = outputRecord;
 
-            if (split.Splits != null && this.CheckSplitOwner(outrec, split.Splits))
+            if (split.Splits != null && this.CheckSplitOwner(outputRecord, split.Splits))
             {
                 return true;
             }
 
             if (!this.CheckBounds(split) ||
-                    !split.Bounds.Contains(outrec.Bounds) ||
-                    !Path1InsidePath2(outrec.Points!, split.Points!))
+                    !split.Bounds.Contains(outputRecord.Bounds) ||
+                    !Path1InsidePath2(outputRecord.Points!, split.Points!))
             {
                 continue;
             }
 
-            // split is owned by outrec (#957)
-            if (!IsValidOwner(outrec, split))
+            // split is owned by outputRecord (#957)
+            if (!IsValidOwner(outputRecord, split))
             {
-                split.Owner = outrec.Owner;
+                split.Owner = outputRecord.Owner;
             }
 
             // Found in split.
-            outrec.Owner = split;
+            outputRecord.Owner = split;
             return true;
         }
 
         return false;
     }
 
-    private void RecursiveCheckOwners(OutRec outrec, PolyPathBase polypath)
+    private void ResolveOwner(OutputRecord outputRecord)
     {
-        // pre-condition: outrec will have valid bounds
-        // post-condition: if a valid path, outrec will have a polypath
-        if (outrec.PolyPath != null || outrec.Bounds.IsEmpty())
+        if (outputRecord.Bounds.IsEmpty())
         {
             return;
         }
 
-        while (outrec.Owner != null)
+        while (outputRecord.Owner != null)
         {
-            if (outrec.Owner.Splits != null &&
-                this.CheckSplitOwner(outrec, outrec.Owner.Splits))
+            if (outputRecord.Owner.Splits != null &&
+                this.CheckSplitOwner(outputRecord, outputRecord.Owner.Splits))
             {
                 break;
             }
 
-            if (outrec.Owner.Points != null && this.CheckBounds(outrec.Owner) &&
-                Path1InsidePath2(outrec.Points!, outrec.Owner.Points!))
+            if (outputRecord.Owner.Points != null && this.CheckBounds(outputRecord.Owner) &&
+                Path1InsidePath2(outputRecord.Points!, outputRecord.Owner.Points!))
             {
                 break;
             }
 
-            outrec.Owner = outrec.Owner.Owner;
-        }
-
-        if (outrec.Owner != null)
-        {
-            if (outrec.Owner.PolyPath == null)
-            {
-                this.RecursiveCheckOwners(outrec.Owner, polypath);
-            }
-
-            outrec.PolyPath = outrec.Owner.PolyPath!.AddChild(outrec.Path);
-        }
-        else
-        {
-            outrec.PolyPath = polypath.AddChild(outrec.Path);
+            outputRecord.Owner = outputRecord.Owner.Owner;
         }
     }
 
-    private void BuildTree(PolyPathBase polytree, List<Contour> solutionOpen)
+    private void BuildPolygon(Polygon polygon)
     {
-        polytree.Clear();
-        solutionOpen.Clear();
-        if (this.hasOpenPaths)
-        {
-            solutionOpen.EnsureCapacity(this.outrecPool.Count);
-        }
-
-        this.pathPoolIndex = 0;
+        polygon.Clear();
+        List<OutputRecord> closedOutputRecords = new(this.outputRecordPool.Count);
 
         int i = 0;
 
-        // this.outrecPool.Count is not static here because
+        // this.outputRecordPool.Count is not static here because
         // CheckBounds below can indirectly add additional
-        // OutRec (via FixOutRecPts & CleanCollinear)
-        while (i < this.outrecPool.Count)
+        // OutputRecord (via FixOutputRecordPoints & CleanCollinear)
+        while (i < this.outputRecordPool.Count)
         {
-            OutRec outrec = this.outrecPool[i++];
-            if (outrec.Points == null)
+            OutputRecord outputRecord = this.outputRecordPool[i++];
+            if (outputRecord.Points == null)
             {
                 continue;
             }
 
-            if (outrec.IsOpen)
+            if (outputRecord.IsOpen)
             {
-                Contour open_path = this.GetPooledPath(outrec.OutPointCount);
-                if (BuildPath(outrec.Points, this.ReverseSolution, true, open_path))
-                {
-                    solutionOpen.Add(open_path);
-                }
-
                 continue;
             }
 
-            if (this.CheckBounds(outrec))
+            if (this.CheckBounds(outputRecord))
             {
-                this.RecursiveCheckOwners(outrec, polytree);
+                this.ResolveOwner(outputRecord);
+                closedOutputRecords.Add(outputRecord);
+            }
+        }
+
+        if (closedOutputRecords.Count == 0)
+        {
+            return;
+        }
+
+        Dictionary<OutputRecord, int> outputRecordIndices = new(closedOutputRecords.Count);
+        for (int index = 0; index < closedOutputRecords.Count; index++)
+        {
+            OutputRecord outputRecord = closedOutputRecords[index];
+            Contour contour = new(outputRecord.OutputPointCount + 1);
+            if (!BuildContour(outputRecord.Points, this.ReverseSolution, false, contour))
+            {
+                continue;
+            }
+
+            int contourIndex = polygon.Count;
+            polygon.Add(contour);
+            outputRecordIndices[outputRecord] = contourIndex;
+        }
+
+        if (polygon.Count == 0)
+        {
+            return;
+        }
+
+        for (int index = 0; index < polygon.Count; index++)
+        {
+            Contour contour = polygon[index];
+            contour.ParentIndex = null;
+            contour.Depth = 0;
+            contour.ClearHoles();
+        }
+
+        for (int index = 0; index < closedOutputRecords.Count; index++)
+        {
+            OutputRecord outputRecord = closedOutputRecords[index];
+            if (!outputRecordIndices.TryGetValue(outputRecord, out int contourIndex))
+            {
+                continue;
+            }
+
+            OutputRecord? owner = outputRecord.Owner;
+            if (owner != null && outputRecordIndices.TryGetValue(owner, out int parentIndex))
+            {
+                polygon[contourIndex].ParentIndex = parentIndex;
+            }
+        }
+
+        for (int index = 0; index < closedOutputRecords.Count; index++)
+        {
+            OutputRecord outputRecord = closedOutputRecords[index];
+            if (!outputRecordIndices.TryGetValue(outputRecord, out int contourIndex))
+            {
+                continue;
+            }
+
+            int depth = 0;
+            OutputRecord? owner = outputRecord.Owner;
+            while (owner != null && outputRecordIndices.ContainsKey(owner))
+            {
+                depth++;
+                owner = owner.Owner;
+            }
+
+            polygon[contourIndex].Depth = depth;
+        }
+
+        for (int index = 0; index < polygon.Count; index++)
+        {
+            Contour contour = polygon[index];
+            if (contour.ParentIndex != null)
+            {
+                polygon[contour.ParentIndex.Value].AddHoleIndex(index);
             }
         }
     }
@@ -3604,6 +3650,7 @@ internal sealed class UnionClipper
     {
         solutionClosed.Clear();
         solutionOpen.Clear();
+        this.buildHierarchy = false;
         try
         {
             this.ExecuteInternal(clipperOperation, clipperFillRule);
@@ -3621,16 +3668,14 @@ internal sealed class UnionClipper
     internal bool Execute(
         ClipperOperation clipperOperation,
         ClipperFillRule clipperFillRule,
-        PolyTree polytree,
-        List<Contour> openPaths)
+        Polygon polygon)
     {
-        polytree.Clear();
-        openPaths.Clear();
-        this.usingPolyTree = true;
+        polygon.Clear();
+        this.buildHierarchy = true;
         try
         {
             this.ExecuteInternal(clipperOperation, clipperFillRule);
-            this.BuildTree(polytree, openPaths);
+            this.BuildPolygon(polygon);
         }
         catch
         {
@@ -3641,19 +3686,13 @@ internal sealed class UnionClipper
         return this.succeeded;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal bool Execute(
-        ClipperOperation clipperOperation,
-        ClipperFillRule clipperFillRule,
-        PolyTree polytree)
-        => this.Execute(clipperOperation, clipperFillRule, polytree, []);
-
     internal bool Execute(
         ClipperOperation clipperOperation,
         ClipperFillRule clipperFillRule,
         List<Contour> solution)
     {
         solution.Clear();
+        this.buildHierarchy = false;
         try
         {
             this.ExecuteInternal(clipperOperation, clipperFillRule);

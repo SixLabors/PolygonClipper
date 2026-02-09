@@ -9,10 +9,3 @@ internal enum JoinWith
     Left,
     Right
 }
-
-internal enum HorzPosition
-{
-    Bottom,
-    Middle,
-    Top
-}

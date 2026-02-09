@@ -17,7 +17,7 @@ internal static class SelfIntersectionClipper
     [ThreadStatic]
     private static List<Contour>? cachedSubjectPaths;
 
-    public static List<Contour> Union(Polygon polygon)
+    public static Polygon Union(Polygon polygon)
     {
         List<Contour> subject = BuildSubjectPaths(polygon);
 
@@ -31,9 +31,9 @@ internal static class SelfIntersectionClipper
         clipper.ReverseSolution = pathsReversed;
         clipper.AddSubject(subject);
 
-        List<Contour> contours = new(polygon.Count);
-        clipper.Execute(ClipperOperation.Union, fillRule, contours);
-        return contours;
+        Polygon result = new(polygon.Count);
+        clipper.Execute(ClipperOperation.Union, fillRule, result);
+        return result;
     }
 
     /// <summary>

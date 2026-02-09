@@ -25,7 +25,7 @@ internal sealed class Active
 
     internal int WindCount2 { get; set; } // winding count of the opposite polytype
 
-    internal OutRec? OutRec { get; set; }
+    internal OutputRecord? OutputRecord { get; set; }
 
     // AEL: 'active edge list' (Vatti's AET - active edge table)
     //     a linked list of all edges (from left to right) that are present
@@ -54,19 +54,19 @@ internal sealed class Active
 
     internal bool IsOpen => this.LocalMin.IsOpen;
 
-    internal bool IsHot => this.OutRec != null;
+    internal bool IsHot => this.OutputRecord != null;
 
     internal bool IsOpenEnd => this.IsOpen && this.VertexTop != null && this.VertexTop.IsOpenEnd;
 
     internal bool IsHorizontal => PolygonUtilities.IsAlmostZero(this.Top.Y - this.Bot.Y);
 
-    internal bool IsHeadingRightHorz => double.IsNegativeInfinity(this.Dx);
+    internal bool IsHeadingRightHorizontal => double.IsNegativeInfinity(this.Dx);
 
-    internal bool IsHeadingLeftHorz => double.IsPositiveInfinity(this.Dx);
+    internal bool IsHeadingLeftHorizontal => double.IsPositiveInfinity(this.Dx);
 
     internal bool IsMaxima => this.VertexTop != null && this.VertexTop.IsMaxima;
 
-    internal bool IsFront => this.OutRec != null && this == this.OutRec.FrontEdge;
+    internal bool IsFront => this.OutputRecord != null && this == this.OutputRecord.FrontEdge;
 
     internal ClipVertex NextVertex => this.WindDelta > 0 ? this.VertexTop!.Next! : this.VertexTop!.Prev!;
 

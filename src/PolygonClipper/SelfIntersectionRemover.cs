@@ -52,154 +52,32 @@ internal static class SelfIntersectionRemover
             return [];
         }
 
-        Polygon oriented = OrientContoursForPositiveFill(polygon);
-        List<Contour> contours = SelfIntersectionClipper.Union(oriented);
-        if (contours.Count == 0)
+        Polygon prepared = PreparePositiveFillInput(polygon);
+        Polygon result = SelfIntersectionClipper.Union(prepared);
+        if (result.Count == 0)
         {
             return [];
         }
 
-        List<Contour> result = new(contours.Count);
-        foreach (Contour contour in contours)
-        {
-            if (contour.Count > 2)
-            {
-                RotateContourToLowestPoint(contour);
-                result.Add(contour);
-            }
-        }
-
-        // Match Clipper2 ordering: highest Y (then lowest X) first.
-        result.Sort(CompareContoursByLowestPoint);
-        Polygon resultPolygon = new(result.Count);
-        for (int i = 0; i < result.Count; i++)
-        {
-            resultPolygon.Add(result[i]);
-        }
-
-        AssignHierarchy(resultPolygon);
-        return resultPolygon;
+        return result;
     }
 
     /// <summary>
-    /// Compares two contours using the Y coordinate of their lowest vertex, breaking ties by X.
+    /// Ensures contour orientation matches the positive fill rule (externals counterclockwise, holes clockwise).
     /// </summary>
-    /// <param name="left">The first contour to compare.</param>
-    /// <param name="right">The second contour to compare.</param>
-    /// <returns>A value indicating the relative ordering for sorting.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int CompareContoursByLowestPoint(Contour left, Contour right)
+    /// <param name="polygon">The polygon to prepare.</param>
+    /// <returns>The original polygon when no changes are needed, otherwise a reoriented copy.</returns>
+    private static Polygon PreparePositiveFillInput(Polygon polygon)
     {
-        Vertex leftPoint = GetLowestPoint(left);
-        Vertex rightPoint = GetLowestPoint(right);
-
-        if (leftPoint.Y > rightPoint.Y)
-        {
-            return -1;
-        }
-
-        return leftPoint.Y < rightPoint.Y ? 1 : leftPoint.X.CompareTo(rightPoint.X);
-    }
-
-    /// <summary>
-    /// Finds the lowest vertex in a contour, ignoring the duplicated closing vertex if present.
-    /// </summary>
-    /// <param name="contour">The contour to scan.</param>
-    /// <returns>The lowest vertex, or <see cref="Vertex"/> default when the contour is empty.</returns>
-    private static Vertex GetLowestPoint(Contour contour)
-    {
-        int count = contour.Count;
-        if (count == 0)
-        {
-            return default;
-        }
-
-        int lastIndex = count - 1;
-        if (count > 1 && contour[0] == contour[^1])
-        {
-            lastIndex = count - 2;
-        }
-
-        Vertex lowest = contour[0];
-        for (int i = 1; i <= lastIndex; i++)
-        {
-            Vertex candidate = contour[i];
-            if (candidate.Y > lowest.Y || (candidate.Y == lowest.Y && candidate.X < lowest.X))
-            {
-                lowest = candidate;
-            }
-        }
-
-        return lowest;
-    }
-
-    /// <summary>
-    /// Rotates the contour so that its lowest vertex appears first, keeping relative ordering intact.
-    /// </summary>
-    /// <param name="contour">The contour to normalize.</param>
-    private static void RotateContourToLowestPoint(Contour contour)
-    {
-        int count = contour.Count;
-        if (count < 2)
-        {
-            return;
-        }
-
-        bool isClosed = contour[0] == contour[^1];
-        int limit = isClosed ? count - 1 : count;
-
-        int lowestIndex = 0;
-        Vertex lowest = contour[0];
-        for (int i = 1; i < limit; i++)
-        {
-            Vertex candidate = contour[i];
-            if (candidate.Y > lowest.Y || (candidate.Y == lowest.Y && candidate.X < lowest.X))
-            {
-                lowest = candidate;
-                lowestIndex = i;
-            }
-        }
-
-        if (lowestIndex == 0)
-        {
-            return;
-        }
-
-        List<Vertex> rotated = new(limit + (isClosed ? 1 : 0));
-        for (int i = 0; i < limit; i++)
-        {
-            rotated.Add(contour[(i + lowestIndex) % limit]);
-        }
-
-        if (isClosed)
-        {
-            rotated.Add(rotated[0]);
-        }
-
-        contour.Clear();
-        for (int i = 0; i < rotated.Count; i++)
-        {
-            contour.Add(rotated[i]);
-        }
-    }
-
-    /// <summary>
-    /// Ensures every contour is oriented with positive winding for outer rings and negative for holes.
-    /// </summary>
-    /// <param name="polygon">The polygon whose contours need reorientation.</param>
-    /// <returns>A polygon copy with consistent winding order.</returns>
-    private static Polygon OrientContoursForPositiveFill(Polygon polygon)
-    {
-        if (polygon.Count == 0)
+        int count = polygon.Count;
+        if (count <= 1)
         {
             return polygon;
         }
 
-        int count = polygon.Count;
         int[] parentIndices = new int[count];
         Array.Fill(parentIndices, -1);
 
-        // If the input already carries hierarchy info, keep it; otherwise infer containment.
         bool hasHierarchy = false;
         for (int i = 0; i < count; i++)
         {
@@ -221,21 +99,24 @@ internal static class SelfIntersectionRemover
         else
         {
             Box2[] bounds = new Box2[count];
+            double[] absAreas = new double[count];
             for (int i = 0; i < count; i++)
             {
-                bounds[i] = polygon[i].GetBoundingBox();
+                Contour contour = polygon[i];
+                bounds[i] = contour.GetBoundingBox();
+                absAreas[i] = Math.Abs(GetSignedArea(contour));
+
+                if (HasSelfIntersection(contour))
+                {
+                    return polygon;
+                }
             }
 
             for (int i = 0; i < count; i++)
             {
                 for (int j = i + 1; j < count; j++)
                 {
-                    if (!BoundsOverlap(bounds[i], bounds[j]))
-                    {
-                        continue;
-                    }
-
-                    if (ContoursHaveIntersection(polygon[i], polygon[j], bounds[i], bounds[j]))
+                    if (ContoursIntersect(polygon[i], polygon[j], bounds[i], bounds[j]))
                     {
                         return polygon;
                     }
@@ -244,39 +125,32 @@ internal static class SelfIntersectionRemover
 
             for (int i = 0; i < count; i++)
             {
-                Vertex testPoint = GetContourTestPoint(polygon[i]);
+                Contour contour = polygon[i];
+                if (contour.Count == 0)
+                {
+                    continue;
+                }
+
+                Vertex testPoint = GetContourTestPoint(contour);
                 double smallestArea = double.PositiveInfinity;
                 int parentIndex = -1;
 
                 for (int j = 0; j < count; j++)
                 {
-                    if (i == j)
+                    if (i == j || !bounds[j].Contains(testPoint))
                     {
                         continue;
                     }
 
-                    // Quick reject on bounds before doing full containment and intersection checks.
-                    if (!BoundsOverlap(bounds[i], bounds[j]) || !PointInBounds(testPoint, bounds[j]))
+                    if (PolygonUtilities.PointInPolygon(testPoint, polygon[j]) != ClipperPointInPolygonResult.IsInside)
                     {
                         continue;
                     }
 
-                    Contour candidate = polygon[j];
-                    if (PointInContour(testPoint, candidate))
+                    if (absAreas[j] < smallestArea)
                     {
-                        // If contours intersect or touch, do not treat the candidate as a parent.
-                        if (ContoursHaveIntersection(polygon[i], candidate, bounds[i], bounds[j]))
-                        {
-                            continue;
-                        }
-
-                        // Choose the tightest containing contour as the parent.
-                        double area = Math.Abs(GetSignedArea(candidate));
-                        if (area < smallestArea)
-                        {
-                            smallestArea = area;
-                            parentIndex = j;
-                        }
+                        smallestArea = absAreas[j];
+                        parentIndex = j;
                     }
                 }
 
@@ -285,23 +159,41 @@ internal static class SelfIntersectionRemover
         }
 
         int[] depths = new int[count];
+        bool needsCopy = false;
         for (int i = 0; i < count; i++)
         {
-            // Depth parity determines external vs hole orientation.
-            depths[i] = GetDepth(i, parentIndices);
+            int depth = GetDepth(i, parentIndices);
+            depths[i] = depth;
+
+            Contour contour = polygon[i];
+            if (contour.Count == 0)
+            {
+                continue;
+            }
+
+            bool shouldBeCounterClockwise = (depth & 1) == 0;
+            if (contour.IsCounterClockwise() != shouldBeCounterClockwise)
+            {
+                needsCopy = true;
+            }
+        }
+
+        if (!needsCopy)
+        {
+            return polygon;
         }
 
         Polygon oriented = new(count);
         for (int i = 0; i < count; i++)
         {
-            Contour copy = [];
-            Contour original = polygon[i];
-            for (int j = 0; j < original.Count; j++)
+            Contour source = polygon[i];
+            Contour copy = new(source.Count);
+            for (int j = 0; j < source.Count; j++)
             {
-                copy.Add(original[j]);
+                copy.Add(source[j]);
             }
 
-            if (depths[i] % 2 == 0)
+            if ((depths[i] & 1) == 0)
             {
                 copy.SetCounterClockwise();
             }
@@ -317,67 +209,24 @@ internal static class SelfIntersectionRemover
     }
 
     /// <summary>
-    /// Determines whether two bounding boxes overlap.
+    /// Tests whether a point lies on the closed segment between two vertices.
     /// </summary>
-    /// <param name="left">The first bounding box.</param>
-    /// <param name="right">The second bounding box.</param>
-    /// <returns><see langword="true"/> if the boxes overlap.</returns>
+    /// <param name="point">The point to check.</param>
+    /// <param name="a">Segment start.</param>
+    /// <param name="b">Segment end.</param>
+    /// <returns><see langword="true"/> when the point is collinear and within the segment bounds.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool BoundsOverlap(in Box2 left, in Box2 right)
-        => left.Min.X <= right.Max.X && left.Max.X >= right.Min.X &&
-           left.Min.Y <= right.Max.Y && left.Max.Y >= right.Min.Y;
-
-    /// <summary>
-    /// Determines whether a point lies within the supplied bounds.
-    /// </summary>
-    /// <param name="point">The point to test.</param>
-    /// <param name="bounds">The bounding box.</param>
-    /// <returns><see langword="true"/> if the point lies within the bounds.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool PointInBounds(in Vertex point, in Box2 bounds)
-        => point.X >= bounds.Min.X && point.X <= bounds.Max.X &&
-           point.Y >= bounds.Min.Y && point.Y <= bounds.Max.Y;
-
-    /// <summary>
-    /// Determines whether two contours intersect or overlap.
-    /// </summary>
-    /// <param name="subject">The first contour.</param>
-    /// <param name="clipping">The second contour.</param>
-    /// <param name="subjectBounds">The bounds of the first contour.</param>
-    /// <param name="clippingBounds">The bounds of the second contour.</param>
-    /// <returns><see langword="true"/> if any segments intersect.</returns>
-    private static bool ContoursHaveIntersection(Contour subject, Contour clipping, Box2 subjectBounds, Box2 clippingBounds)
+    private static bool IsPointOnSegment(in Vertex point, in Vertex a, in Vertex b)
     {
-        if (!BoundsOverlap(subjectBounds, clippingBounds))
+        if (PolygonUtilities.SignedArea(a, b, point) != 0D)
         {
             return false;
         }
 
-        // If any segment pair intersects, containment is ambiguous, so avoid nesting.
-        for (int i = 0; i < subject.Count; i++)
-        {
-            Segment subjectSegment = subject.GetSegment(i);
-            if (subjectSegment.IsDegenerate())
-            {
-                continue;
-            }
+        Vertex min = Vertex.Min(a, b);
+        Vertex max = Vertex.Max(a, b);
 
-            for (int j = 0; j < clipping.Count; j++)
-            {
-                Segment clippingSegment = clipping.GetSegment(j);
-                if (clippingSegment.IsDegenerate())
-                {
-                    continue;
-                }
-
-                if (PolygonUtilities.FindIntersection(subjectSegment, clippingSegment, out _, out _) != 0)
-                {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+        return point.X >= min.X && point.X <= max.X && point.Y >= min.Y && point.Y <= max.Y;
     }
 
     /// <summary>
@@ -422,75 +271,7 @@ internal static class SelfIntersectionRemover
     }
 
     /// <summary>
-    /// Determines whether a point lies inside a contour using ray casting. Points on the boundary count as inside.
-    /// </summary>
-    /// <param name="point">The query point.</param>
-    /// <param name="contour">The contour to test against.</param>
-    /// <returns><see langword="true"/> if the point lies inside or on the edge.</returns>
-    private static bool PointInContour(in Vertex point, Contour contour)
-    {
-        int count = contour.Count;
-        if (count < 3)
-        {
-            return false;
-        }
-
-        bool inside = false;
-        Vertex previous = contour[count - 1];
-
-        for (int i = 0; i < count; i++)
-        {
-            Vertex current = contour[i];
-            if (current == previous)
-            {
-                previous = current;
-                continue;
-            }
-
-            if (IsPointOnSegment(point, previous, current))
-            {
-                return true;
-            }
-
-            bool intersects = (current.Y > point.Y) != (previous.Y > point.Y);
-            if (intersects)
-            {
-                double xIntersection = ((previous.X - current.X) * (point.Y - current.Y) / (previous.Y - current.Y)) + current.X;
-                if (point.X < xIntersection)
-                {
-                    inside = !inside;
-                }
-            }
-
-            previous = current;
-        }
-
-        return inside;
-    }
-
-    /// <summary>
-    /// Tests whether a point lies on the closed segment between two vertices.
-    /// </summary>
-    /// <param name="point">The point to check.</param>
-    /// <param name="a">Segment start.</param>
-    /// <param name="b">Segment end.</param>
-    /// <returns><see langword="true"/> when the point is collinear and within the segment bounds.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsPointOnSegment(in Vertex point, in Vertex a, in Vertex b)
-    {
-        if (PolygonUtilities.SignedArea(a, b, point) != 0D)
-        {
-            return false;
-        }
-
-        Vertex min = Vertex.Min(a, b);
-        Vertex max = Vertex.Max(a, b);
-
-        return point.X >= min.X && point.X <= max.X && point.Y >= min.Y && point.Y <= max.Y;
-    }
-
-    /// <summary>
-    /// Calculates the signed area of a contour. Positive values indicate counter-clockwise orientation.
+    /// Calculates the signed area of a contour. Positive values indicate counterclockwise orientation.
     /// </summary>
     /// <param name="contour">The contour to measure.</param>
     /// <returns>The signed area in square units.</returns>
@@ -507,10 +288,92 @@ internal static class SelfIntersectionRemover
         return area * 0.5D;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int GetVertexCount(Contour contour)
+    {
+        int count = contour.Count;
+        return count > 1 && contour[0] == contour[^1] ? count - 1 : count;
+    }
+
+    private static bool HasSelfIntersection(Contour contour)
+    {
+        int vertexCount = GetVertexCount(contour);
+        if (vertexCount < 4)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < vertexCount; i++)
+        {
+            Segment segmentA = new(contour[i], contour[(i + 1) % vertexCount]);
+            if (segmentA.IsDegenerate())
+            {
+                continue;
+            }
+
+            for (int j = i + 1; j < vertexCount; j++)
+            {
+                if (j == i || j == i + 1 || (i == 0 && j == vertexCount - 1))
+                {
+                    continue;
+                }
+
+                Segment segmentB = new(contour[j], contour[(j + 1) % vertexCount]);
+                if (segmentB.IsDegenerate())
+                {
+                    continue;
+                }
+
+                if (PolygonUtilities.FindIntersection(segmentA, segmentB, out _, out _) != 0)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContoursIntersect(Contour left, Contour right, in Box2 leftBounds, in Box2 rightBounds)
+    {
+        if (!leftBounds.Intersects(rightBounds))
+        {
+            return false;
+        }
+
+        int leftCount = GetVertexCount(left);
+        int rightCount = GetVertexCount(right);
+
+        for (int i = 0; i < leftCount; i++)
+        {
+            Segment leftSegment = new(left[i], left[(i + 1) % leftCount]);
+            if (leftSegment.IsDegenerate())
+            {
+                continue;
+            }
+
+            for (int j = 0; j < rightCount; j++)
+            {
+                Segment rightSegment = new(right[j], right[(j + 1) % rightCount]);
+                if (rightSegment.IsDegenerate())
+                {
+                    continue;
+                }
+
+                if (PolygonUtilities.FindIntersection(leftSegment, rightSegment, out _, out _) != 0)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>
-    /// Converts oriented contours into directed segments, splitting where necessary using a sweep-line.
+    /// Converts contours into directed segments, splitting where necessary using a sweep-line.
     /// </summary>
-    /// <param name="polygon">The positively oriented polygon.</param>
+    /// <param name="polygon">The polygon to process.</param>
     /// <returns>A list of directed segments describing the arrangement.</returns>
     private static List<DirectedSegment> BuildArrangementSegments(Polygon polygon)
     {
@@ -1313,87 +1176,6 @@ internal static class SelfIntersectionRemover
     }
 
     /// <summary>
-    /// Computes parent/child relationships and hole lists for the resulting polygon.
-    /// </summary>
-    /// <param name="polygon">The polygon whose contours will be linked.</param>
-    private static void AssignHierarchy(Polygon polygon)
-    {
-        int count = polygon.Count;
-        if (count == 0)
-        {
-            return;
-        }
-
-        int[] parentIndices = new int[count];
-        Array.Fill(parentIndices, -1);
-
-        for (int i = 0; i < count; i++)
-        {
-            polygon[i].ParentIndex = null;
-            polygon[i].Depth = 0;
-            polygon[i].ClearHoles();
-        }
-
-        for (int i = 0; i < count; i++)
-        {
-            Vertex testPoint = GetContourTestPoint(polygon[i]);
-            double smallestBounds = double.PositiveInfinity;
-            int parentIndex = -1;
-
-            for (int j = 0; j < count; j++)
-            {
-                if (i == j)
-                {
-                    continue;
-                }
-
-                Contour candidate = polygon[j];
-                if (PointInContour(testPoint, candidate))
-                {
-                    // Prefer the tightest bounding box to reduce the amount of hierarchy re-parenting later.
-                    Box2 bounds = candidate.GetBoundingBox();
-                    double width = bounds.Max.X - bounds.Min.X;
-                    double height = bounds.Max.Y - bounds.Min.Y;
-                    double area = width * height;
-                    if (area < smallestBounds)
-                    {
-                        smallestBounds = area;
-                        parentIndex = j;
-                    }
-                }
-            }
-
-            parentIndices[i] = parentIndex;
-            if (parentIndex >= 0)
-            {
-                polygon[i].ParentIndex = parentIndex;
-            }
-        }
-
-        for (int i = 0; i < count; i++)
-        {
-            int depth = 0;
-            int current = parentIndices[i];
-            while (current >= 0)
-            {
-                depth++;
-                current = parentIndices[current];
-            }
-
-            polygon[i].Depth = depth;
-        }
-
-        for (int i = 0; i < count; i++)
-        {
-            int parentIndex = parentIndices[i];
-            if (parentIndex >= 0)
-            {
-                polygon[parentIndex].AddHoleIndex(i);
-            }
-        }
-    }
-
-    /// <summary>
     /// Determines whether a half-edge borders a filled region on the left and empty space on the right.
     /// </summary>
     /// <param name="edge">The edge to test.</param>
@@ -1838,9 +1620,9 @@ internal static class SelfIntersectionRemover
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsVerySmallTriangle(ContourNode node)
         => node.Next.Next == node.Prev &&
-            (PtsReallyClose(node.Prev.Point, node.Next.Point) ||
-             PtsReallyClose(node.Point, node.Next.Point) ||
-             PtsReallyClose(node.Point, node.Prev.Point));
+            (PointsReallyClose(node.Prev.Point, node.Next.Point) ||
+             PointsReallyClose(node.Point, node.Next.Point) ||
+             PointsReallyClose(node.Point, node.Prev.Point));
 
     /// <summary>
     /// Tests whether a vertex list represents a triangle with clustered points.
@@ -1848,15 +1630,15 @@ internal static class SelfIntersectionRemover
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsVerySmallTriangle(List<Vertex> vertices)
         => vertices.Count == 3 &&
-            (PtsReallyClose(vertices[0], vertices[1]) ||
-             PtsReallyClose(vertices[1], vertices[2]) ||
-             PtsReallyClose(vertices[2], vertices[0]));
+            (PointsReallyClose(vertices[0], vertices[1]) ||
+             PointsReallyClose(vertices[1], vertices[2]) ||
+             PointsReallyClose(vertices[2], vertices[0]));
 
     /// <summary>
     /// Determines whether two vertices are nearly coincident in screen space terms.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool PtsReallyClose(Vertex a, Vertex b)
+    private static bool PointsReallyClose(in Vertex a, in Vertex b)
         => Math.Abs(a.X - b.X) < 2e-6 && Math.Abs(a.Y - b.Y) < 2e-6;
 
     /// <summary>

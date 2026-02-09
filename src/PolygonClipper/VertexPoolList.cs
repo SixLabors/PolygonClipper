@@ -32,65 +32,64 @@ internal sealed class VertexPoolList : PooledList<ClipVertex>
     }
 }
 
-internal sealed class OutPtPoolList : PooledList<OutPt>
+internal sealed class OutputPointPoolList : PooledList<OutputPoint>
 {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public OutPt Add(Vertex pt, OutRec outrec)
+    public OutputPoint Add(Vertex pt, OutputRecord outputRecord)
     {
         this.TryGrow();
-        OutPt poolPt = this.Items[this.Size];
-        if (poolPt == null)
+        OutputPoint pooledPoint = this.Items[this.Size];
+        if (pooledPoint == null)
         {
-            poolPt = new OutPt(pt, outrec);
-            this.Items[this.Size] = poolPt;
+            pooledPoint = new OutputPoint(pt, outputRecord);
+            this.Items[this.Size] = pooledPoint;
         }
         else
         {
-            poolPt.Point = pt;
-            poolPt.OutRec = outrec;
-            poolPt.Next = poolPt;
-            poolPt.Prev = poolPt;
-            poolPt.Horz = null;
+            pooledPoint.Point = pt;
+            pooledPoint.OutputRecord = outputRecord;
+            pooledPoint.Next = pooledPoint;
+            pooledPoint.Prev = pooledPoint;
+            pooledPoint.HorizontalSegment = null;
         }
 
         this.Size++;
-        outrec.OutPointCount++;
-        return poolPt;
+        outputRecord.OutputPointCount++;
+        return pooledPoint;
     }
 }
 
-internal sealed class OutRecPoolList : PooledList<OutRec>
+internal sealed class OutputRecordPoolList : PooledList<OutputRecord>
 {
     private static readonly Contour Tombstone = [];
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public OutRec Add()
+    public OutputRecord Add()
     {
         this.TryGrow();
-        OutRec outRec = this.Items[this.Size];
-        if (outRec == null)
+        OutputRecord outputRecord = this.Items[this.Size];
+        if (outputRecord == null)
         {
-            outRec = new OutRec();
-            this.Items[this.Size] = outRec;
+            outputRecord = new OutputRecord();
+            this.Items[this.Size] = outputRecord;
         }
         else
         {
-            outRec.Index = 0;
-            outRec.OutPointCount = 0;
-            outRec.Owner = null;
-            outRec.FrontEdge = null;
-            outRec.BackEdge = null;
-            outRec.Points = null;
-            outRec.Bounds = default;
-            outRec.Path.Clear();
-            outRec.PolyPath = null;
-            outRec.IsOpen = false;
-            outRec.Splits?.Clear();
-            outRec.RecursiveSplit = null;
+            outputRecord.Index = 0;
+            outputRecord.OutputPointCount = 0;
+            outputRecord.Owner = null;
+            outputRecord.FrontEdge = null;
+            outputRecord.BackEdge = null;
+            outputRecord.Points = null;
+            outputRecord.Bounds = default;
+            outputRecord.Path.Clear();
+            outputRecord.IsOpen = false;
+            outputRecord.Splits?.Clear();
+            outputRecord.RecursiveSplit = null;
         }
 
         this.Size++;
-        return outRec;
+        return outputRecord;
     }
 
     public override void Clear()
@@ -98,7 +97,7 @@ internal sealed class OutRecPoolList : PooledList<OutRec>
         base.Clear();
         for (int i = 0; i < this.Items.Length; i++)
         {
-            OutRec active = this.Items[i];
+            OutputRecord active = this.Items[i];
             if (active == null || active.Path == Tombstone)
             {
                 break;
@@ -109,28 +108,27 @@ internal sealed class OutRecPoolList : PooledList<OutRec>
             active.FrontEdge = null;
             active.BackEdge = null;
             active.Points = null;
-            active.PolyPath = null;
             active.RecursiveSplit = null;
         }
     }
 }
 
-internal sealed class HorzJoinPoolList : PooledList<HorzJoin>
+internal sealed class HorizontalJoinPoolList : PooledList<HorizontalJoin>
 {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public HorzJoin Add(OutPt ltor, OutPt rtol)
+    public HorizontalJoin Add(OutputPoint ltor, OutputPoint rtol)
     {
         this.TryGrow();
-        HorzJoin hJoin = this.Items[this.Size];
+        HorizontalJoin hJoin = this.Items[this.Size];
         if (hJoin == null)
         {
-            hJoin = new HorzJoin(ltor, rtol);
+            hJoin = new HorizontalJoin(ltor, rtol);
             this.Items[this.Size] = hJoin;
         }
         else
         {
-            hJoin.Op1 = ltor;
-            hJoin.Op2 = rtol;
+            hJoin.LeftToRight = ltor;
+            hJoin.RightToLeft = rtol;
         }
 
         this.Size++;
