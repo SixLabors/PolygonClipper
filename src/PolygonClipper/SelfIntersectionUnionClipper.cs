@@ -26,14 +26,11 @@ internal sealed class SelfIntersectionUnionClipper
     private readonly List<HorizontalSegment> horizontalSegments;
     private readonly HorizontalJoinPoolList horizontalJoins;
     private readonly OutputPointPoolList outputPointPool;
-    private readonly List<Contour> pathPool;
     private int currentMinimaIndex;
     private double currentBottomY;
     private bool isSortedMinimaList;
-    private bool hasOpenPaths;
     private bool buildHierarchy;
     private bool succeeded;
-    private int pathPoolIndex;
 
     internal SelfIntersectionUnionClipper()
     {
@@ -45,7 +42,6 @@ internal sealed class SelfIntersectionUnionClipper
         this.horizontalSegments = [];
         this.horizontalJoins = [];
         this.outputPointPool = [];
-        this.pathPool = [];
         this.freeActives = new Stack<Active>();
         this.PreserveCollinear = true;
     }
@@ -297,9 +293,6 @@ internal sealed class SelfIntersectionUnionClipper
         this.horizontalSegments.Clear();
         this.horizontalJoins.Clear();
         this.outputPointPool.Clear();
-
-        // Keep pooled actives between runs to reduce allocations when the clipper is reused.
-        this.pathPoolIndex = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -310,7 +303,6 @@ internal sealed class SelfIntersectionUnionClipper
         this.vertexList.Clear();
         this.currentMinimaIndex = 0;
         this.isSortedMinimaList = false;
-        this.hasOpenPaths = false;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -375,35 +367,17 @@ internal sealed class SelfIntersectionUnionClipper
     private LocalMinima PopLocalMinima() => this.minimaList[this.currentMinimaIndex++];
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal void AddSubject(Contour path) => this.AddPath(path, ClipperPathType.Subject);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal void AddSubject(List<Contour> paths) => this.AddPaths(paths, ClipperPathType.Subject);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void AddPath(Contour path, ClipperPathType polytype, bool isOpen = false)
+    internal void AddSubject(List<Contour> paths)
     {
-        List<Contour> tmp = [path];
-        this.AddPaths(tmp, polytype, isOpen);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void AddPaths(List<Contour> paths, ClipperPathType polytype, bool isOpen = false)
-    {
-        if (isOpen)
-        {
-            this.hasOpenPaths = true;
-        }
-
         this.isSortedMinimaList = false;
-        this.AddPathsToVertexList(paths, polytype, isOpen);
+        this.AddPathsToVertexList(paths, ClipperPathType.Subject);
     }
 
     /// <summary>
     /// Registers a local minima vertex once for the sweep.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void AddLocalMinima(ClipVertex vertex, ClipperPathType polytype, bool isOpen, List<LocalMinima> minimaList)
+    private static void AddLocalMinima(ClipVertex vertex, ClipperPathType polytype, List<LocalMinima> minimaList)
     {
         // Make sure the ClipVertex is added only once.
         if ((vertex.Flags & VertexFlags.LocalMin) != VertexFlags.None)
@@ -412,13 +386,13 @@ internal sealed class SelfIntersectionUnionClipper
         }
 
         vertex.Flags |= VertexFlags.LocalMin;
-        minimaList.Add(new LocalMinima(vertex, polytype, isOpen));
+        minimaList.Add(new LocalMinima(vertex, polytype));
     }
 
     /// <summary>
     /// Builds circular vertex lists and captures local minima/maxima for the sweep.
     /// </summary>
-    private void AddPathsToVertexList(List<Contour> paths, ClipperPathType polytype, bool isOpen)
+    private void AddPathsToVertexList(List<Contour> paths, ClipperPathType polytype)
     {
         int totalVertCnt = 0;
         foreach (Contour path in paths)
@@ -456,55 +430,32 @@ internal sealed class SelfIntersectionUnionClipper
                 continue;
             }
 
-            if (!isOpen && PolygonUtilities.PointEquals(prevVertex.Point, v0.Point))
+            if (PolygonUtilities.PointEquals(prevVertex.Point, v0.Point))
             {
                 prevVertex = prevVertex.Prev;
             }
 
             prevVertex.Next = v0;
             v0.Prev = prevVertex;
-            if (!isOpen && prevVertex.Next == prevVertex)
+            if (prevVertex.Next == prevVertex)
             {
                 continue;
             }
 
             // OK, we have a valid path
-            bool goingUp;
-            if (isOpen)
+            prevVertex = v0.Prev;
+            while (prevVertex != v0 && PolygonUtilities.IsAlmostZero(prevVertex!.Point.Y - v0.Point.Y))
             {
-                currVertex = v0.Next;
-                while (currVertex != v0 && PolygonUtilities.IsAlmostZero(currVertex!.Point.Y - v0.Point.Y))
-                {
-                    currVertex = currVertex.Next;
-                }
-
-                goingUp = currVertex!.Point.Y <= v0.Point.Y;
-                if (goingUp)
-                {
-                    v0.Flags = VertexFlags.OpenStart;
-                    AddLocalMinima(v0, polytype, true, this.minimaList);
-                }
-                else
-                {
-                    v0.Flags = VertexFlags.OpenStart | VertexFlags.LocalMax;
-                }
+                prevVertex = prevVertex.Prev;
             }
-            else
+
+            if (prevVertex == v0)
             {
-                prevVertex = v0.Prev;
-                while (prevVertex != v0 && PolygonUtilities.IsAlmostZero(prevVertex!.Point.Y - v0.Point.Y))
-                {
-                    prevVertex = prevVertex.Prev;
-                }
-
-                if (prevVertex == v0)
-                {
-                    // Only open paths can be completely flat.
-                    continue;
-                }
-
-                goingUp = prevVertex.Point.Y > v0.Point.Y;
+                // Closed paths cannot be completely flat.
+                continue;
             }
+
+            bool goingUp = prevVertex.Point.Y > v0.Point.Y;
 
             bool goingUp0 = goingUp;
             prevVertex = v0;
@@ -519,30 +470,18 @@ internal sealed class SelfIntersectionUnionClipper
                 else if (currVertex.Point.Y < prevVertex.Point.Y && !goingUp)
                 {
                     goingUp = true;
-                    AddLocalMinima(prevVertex, polytype, isOpen, this.minimaList);
+                    AddLocalMinima(prevVertex, polytype, this.minimaList);
                 }
 
                 prevVertex = currVertex;
                 currVertex = currVertex.Next;
             }
 
-            if (isOpen)
-            {
-                prevVertex.Flags |= VertexFlags.OpenEnd;
-                if (goingUp)
-                {
-                    prevVertex.Flags |= VertexFlags.LocalMax;
-                }
-                else
-                {
-                    AddLocalMinima(prevVertex, polytype, isOpen, this.minimaList);
-                }
-            }
-            else if (goingUp != goingUp0)
+            if (goingUp != goingUp0)
             {
                 if (goingUp0)
                 {
-                    AddLocalMinima(prevVertex, polytype, false, this.minimaList);
+                    AddLocalMinima(prevVertex, polytype, this.minimaList);
                 }
                 else
                 {
@@ -1374,7 +1313,7 @@ internal sealed class SelfIntersectionUnionClipper
         OutputPoint? resultOp = null;
 
         // MANAGE OPEN PATH INTERSECTIONS SEPARATELY ...
-        if (this.hasOpenPaths && (ae1.IsOpen || ae2.IsOpen))
+        if (ae1.IsOpen || ae2.IsOpen)
         {
             if (ae1.IsOpen && ae2.IsOpen)
             {
@@ -3348,50 +3287,6 @@ internal sealed class SelfIntersectionUnionClipper
         return true;
     }
 
-    private bool BuildPaths(List<Contour> solutionClosed, List<Contour> solutionOpen)
-    {
-        solutionClosed.Clear();
-        solutionOpen.Clear();
-        solutionClosed.EnsureCapacity(this.outputRecordPool.Count);
-        solutionOpen.EnsureCapacity(this.outputRecordPool.Count);
-        this.pathPoolIndex = 0;
-
-        int i = 0;
-
-        // this.outputRecordPool.Count is not static here because
-        // CleanCollinear can indirectly add additional OutputRecord
-        while (i < this.outputRecordPool.Count)
-        {
-            OutputRecord outputRecord = this.outputRecordPool[i++];
-            if (outputRecord.Points == null)
-            {
-                continue;
-            }
-
-            Contour path = this.GetPooledPath(outputRecord.OutputPointCount);
-            if (outputRecord.IsOpen)
-            {
-                if (BuildPath(outputRecord.Points, this.ReverseSolution, true, path))
-                {
-                    solutionOpen.Add(path);
-                }
-            }
-            else
-            {
-                this.CleanCollinear(outputRecord);
-
-                // closed paths should always return a Positive orientation
-                // except when ReverseSolution == true
-                if (BuildPath(outputRecord.Points, this.ReverseSolution, false, path))
-                {
-                    solutionClosed.Add(path);
-                }
-            }
-        }
-
-        return true;
-    }
-
     private void BuildContours(List<Contour> solution)
     {
         solution.Clear();
@@ -3627,51 +3522,6 @@ internal sealed class SelfIntersectionUnionClipper
                 polygon[contour.ParentIndex.Value].AddHoleIndex(index);
             }
         }
-    }
-
-    /// <summary>
-    /// Retrieves a reusable <see cref="Contour"/> with at least the specified capacity.
-    /// </summary>
-    /// <param name="capacity">The minimum capacity required for the path.</param>
-    /// <returns>A cleared path ready for reuse.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private Contour GetPooledPath(int capacity)
-    {
-        if (this.pathPoolIndex < this.pathPool.Count)
-        {
-            Contour path = this.pathPool[this.pathPoolIndex++];
-            path.Clear();
-            path.EnsureVertexCapacity(capacity);
-
-            return path;
-        }
-
-        Contour newPath = new(capacity);
-        this.pathPool.Add(newPath);
-        this.pathPoolIndex++;
-        return newPath;
-    }
-
-    internal bool Execute(
-        ClipperFillRule clipperFillRule,
-        List<Contour> solutionClosed,
-        List<Contour> solutionOpen)
-    {
-        solutionClosed.Clear();
-        solutionOpen.Clear();
-        this.buildHierarchy = false;
-        try
-        {
-            this.ExecuteInternal(clipperFillRule);
-            this.BuildPaths(solutionClosed, solutionOpen);
-        }
-        catch
-        {
-            this.succeeded = false;
-        }
-
-        this.ClearSolutionOnly();
-        return this.succeeded;
     }
 
     internal bool Execute(
