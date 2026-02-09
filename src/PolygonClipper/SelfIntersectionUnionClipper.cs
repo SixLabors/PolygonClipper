@@ -228,7 +228,8 @@ internal sealed class SelfIntersectionUnionClipper
     private static bool OutputRecordIsAscending(ActiveEdge hotEdge) => hotEdge == hotEdge.OutputRecord!.FrontEdge;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool EdgesAdjacentInAEL(IntersectNode inode) => (inode.Edge1.NextInAel == inode.Edge2) || (inode.Edge1.PrevInAel == inode.Edge2);
+    private static bool EdgesAdjacentInAEL(in IntersectNode inode)
+        => (inode.Edge1.NextInAel == inode.Edge2) || (inode.Edge1.PrevInAel == inode.Edge2);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ClearSolutionOnly()
@@ -1512,9 +1513,7 @@ internal sealed class SelfIntersectionUnionClipper
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void AddToHorizontalSegmentList(OutputPoint op)
-    {
-        this.horizontalSegments.Add(new HorizontalSegment(op));
-    }
+        => this.horizontalSegments.Add(new HorizontalSegment(op));
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static OutputPoint GetLastOp(ActiveEdge hotEdge)

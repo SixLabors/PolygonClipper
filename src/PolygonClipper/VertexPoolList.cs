@@ -164,19 +164,42 @@ internal sealed class HorizontalJoinPoolList : PooledList<HorizontalJoin>
 /// <summary>
 /// Base class for pool-backed lists with stable indexing and reuse.
 /// </summary>
+/// <remarks>
+/// These lists are append-only during a run and reset via <see cref="Clear" /> to
+/// reuse previously allocated storage and object instances. The internal array
+/// can grow but never shrinks, so callers should treat <see cref="Capacity" />
+/// as a long-lived pool size. Elements are only valid in the range
+/// <c>[0, Count)</c>; indices remain stable for the lifetime of a run, which allows
+/// pooled nodes to store indices instead of references when needed.
+/// </remarks>
 internal abstract class PooledList<T> : IReadOnlyList<T>
     where T : class
 {
     private const int DefaultCapacity = 4;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PooledList{T}" /> class.
+    /// </summary>
     protected PooledList() => this.Items = [];
 
+    /// <summary>
+    /// Gets the number of items that have been added during the current run.
+    /// </summary>
     public int Count => this.Size;
 
+    /// <summary>
+    /// Gets the backing array used for pooled storage.
+    /// </summary>
     protected T[] Items { get; private set; }
 
+    /// <summary>
+    /// Gets or sets the number of active items in the pool.
+    /// </summary>
     protected int Size { get; set; }
 
+    /// <summary>
+    /// Gets or sets the current capacity of the pooled storage.
+    /// </summary>
     public int Capacity
     {
         get => this.Items.Length;
@@ -198,29 +221,42 @@ internal abstract class PooledList<T> : IReadOnlyList<T>
         }
     }
 
+    /// <summary>
+    /// Gets the item at the specified index within the active range.
+    /// </summary>
     public T this[int index]
     {
         get
         {
-            if ((uint)index >= (uint)this.Size)
-            {
-                throw new ArgumentOutOfRangeException(nameof(index));
-            }
-
+            DebugGuard.MustBeLessThan((uint)index, (uint)this.Size, nameof(index));
             return this.Items[index];
         }
     }
 
+    /// <summary>
+    /// Ensures the pool can hold at least <paramref name="capacity" /> items.
+    /// </summary>
     public void EnsureCapacity(int capacity) => this.Capacity = capacity;
 
+    /// <summary>
+    /// Resets the active count to zero without clearing the backing array.
+    /// </summary>
     public virtual void Clear() => this.Size = 0;
 
+    /// <summary>
+    /// Gets a struct enumerator over the active items.
+    /// </summary>
     public PooledListEnumerator<T> GetEnumerator() => new(this);
 
+    /// <inheritdoc/>
     IEnumerator<T> IEnumerable<T>.GetEnumerator() => new PooledListEnumerator<T>(this);
 
+    /// <inheritdoc/>
     IEnumerator IEnumerable.GetEnumerator() => new PooledListEnumerator<T>(this);
 
+    /// <summary>
+    /// Grows the pool by at least one slot, doubling capacity when needed.
+    /// </summary>
     protected void TryGrow()
     {
         int newSize = this.Size + 1;
@@ -233,6 +269,9 @@ internal abstract class PooledList<T> : IReadOnlyList<T>
         this.Capacity = newCapacity;
     }
 
+    /// <summary>
+    /// Struct enumerator for iterating active items without allocations.
+    /// </summary>
     internal struct PooledListEnumerator<TItem> : IEnumerator<TItem>
         where TItem : class
     {

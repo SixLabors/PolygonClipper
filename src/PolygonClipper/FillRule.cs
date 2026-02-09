@@ -18,24 +18,3 @@ internal enum FillRule
     /// </summary>
     Negative
 }
-
-/// <summary>
-/// Describes the relationship between a point and a polygon.
-/// </summary>
-internal enum PointInPolygonResult
-{
-    /// <summary>
-    /// The point lies on the polygon boundary.
-    /// </summary>
-    IsOn = 0,
-
-    /// <summary>
-    /// The point lies strictly inside the polygon.
-    /// </summary>
-    IsInside = 1,
-
-    /// <summary>
-    /// The point lies outside the polygon.
-    /// </summary>
-    IsOutside = 2
-}
