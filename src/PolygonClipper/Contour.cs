@@ -12,7 +12,7 @@ namespace SixLabors.PolygonClipper;
 /// </summary>
 [DebuggerDisplay("Count = {Count}")]
 #pragma warning disable CA1710 // Identifiers should have correct suffix
-public sealed class Contour : IReadOnlyCollection<Vertex>
+public sealed class Contour : IReadOnlyList<Vertex>
 #pragma warning restore CA1710 // Identifiers should have correct suffix
 {
     private bool hasCachedOrientation;
@@ -219,6 +219,13 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     /// <param name="index">The index of the vertex to remove.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void RemoveVertexAt(int index) => this.vertices.RemoveAt(index);
+
+    /// <summary>
+    /// Ensures the internal vertex capacity can accommodate the specified count.
+    /// </summary>
+    /// <param name="capacity">The minimum capacity to ensure.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal void EnsureVertexCapacity(int capacity) => this.vertices.EnsureCapacity(capacity);
 
     /// <summary>
     /// Clears all vertices and holes from the contour.

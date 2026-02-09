@@ -52,27 +52,16 @@ internal static class SelfIntersectionRemover
             return [];
         }
 
-        // Normalize contour orientation so positive fill (Clipper2 union) is consistent.
-        Polygon orientedPolygon = OrientContoursForPositiveFill(polygon);
-
-        // Sweep and split to build a planar arrangement with explicit intersection vertices.
-        List<DirectedSegment> segments = BuildArrangementSegments(orientedPolygon);
-        if (segments.Count == 0)
+        Polygon oriented = OrientContoursForPositiveFill(polygon);
+        List<Contour> contours = SelfIntersectionClipper.Union(oriented);
+        if (contours.Count == 0)
         {
             return [];
         }
 
-        // Build half-edges, enumerate faces, and classify boundary edges by winding.
-        HalfEdgeGraph graph = BuildHalfEdgeGraph(segments);
-        List<Face> faces = EnumerateFaces(graph);
-        ComputeFaceWindings(graph, faces, segments);
-        List<Contour> contours = ExtractBoundaryContours(graph);
-        List<Contour> mergedContours = MergeTouchingContours(contours);
-
-        List<Contour> result = new(mergedContours.Count);
-        foreach (Contour contour in mergedContours)
+        List<Contour> result = new(contours.Count);
+        foreach (Contour contour in contours)
         {
-            CleanupContour(contour);
             if (contour.Count > 2)
             {
                 RotateContourToLowestPoint(contour);
@@ -235,6 +224,22 @@ internal static class SelfIntersectionRemover
             for (int i = 0; i < count; i++)
             {
                 bounds[i] = polygon[i].GetBoundingBox();
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                for (int j = i + 1; j < count; j++)
+                {
+                    if (!BoundsOverlap(bounds[i], bounds[j]))
+                    {
+                        continue;
+                    }
+
+                    if (ContoursHaveIntersection(polygon[i], polygon[j], bounds[i], bounds[j]))
+                    {
+                        return polygon;
+                    }
+                }
             }
 
             for (int i = 0; i < count; i++)
@@ -575,18 +580,10 @@ internal static class SelfIntersectionRemover
         StatusLine statusLine = new(polygon.VertexCount >> 1);
         Span<SegmentSplit> segmentSplitSpan = CollectionsMarshal.AsSpan(segmentSplits);
 
-        // Guard against pathological input that could otherwise leave the sweep stuck in an infinite loop.
-        int maxIterations = unorderedEvents.Count * 10;
-        int iterations = 0;
         Span<SweepEvent> workspace = new SweepEvent[4];
 
         while (eventQueue.Count > 0)
         {
-            if (++iterations > maxIterations)
-            {
-                break;
-            }
-
             SweepEvent sweepEvent = eventQueue.Dequeue();
 
             if (sweepEvent.Left)
@@ -869,18 +866,36 @@ internal static class SelfIntersectionRemover
         // If the topology is ambiguous (multiple edges with identical angles), fall back to per-edge sampling.
         if (HasAmbiguousVertices(graph))
         {
-            ComputeEdgeWindingBySampling(graph, segments);
+            WindingIndex windingIndex = BuildWindingIndex(segments);
+            ComputeEdgeWindingBySampling(graph, windingIndex);
             return;
         }
 
+        WindingIndex? windingIndexCache = null;
+        int windingSampleCount = 0;
+
+        int ComputeSampleWinding(in Vertex sample)
+        {
+            windingSampleCount++;
+            if (windingIndexCache == null && ShouldBuildWindingIndex(segments.Count, windingSampleCount))
+            {
+                windingIndexCache = BuildWindingIndex(segments);
+            }
+
+            return windingIndexCache is null
+                ? ComputeWindingNumber(sample, segments)
+                : ComputeWindingNumber(sample, windingIndexCache.Value);
+        }
+
         const int unassigned = int.MinValue;
-        for (int i = 0; i < faces.Count; i++)
+        int faceCount = faces.Count;
+        for (int i = 0; i < faceCount; i++)
         {
             faces[i].Winding = unassigned;
         }
 
         Stack<Face> stack = new();
-        for (int i = 0; i < faces.Count; i++)
+        for (int i = 0; i < faceCount; i++)
         {
             Face face = faces[i];
             if (face.Winding != unassigned)
@@ -890,7 +905,7 @@ internal static class SelfIntersectionRemover
 
             // Seed each connected component by sampling a point inside one of its faces.
             Vertex sample = GetFaceSamplePoint(face);
-            face.Winding = ComputeWindingNumber(sample, segments);
+            face.Winding = ComputeSampleWinding(sample);
             stack.Push(face);
 
             while (stack.Count > 0)
@@ -921,6 +936,22 @@ internal static class SelfIntersectionRemover
             HalfEdge edge = graph.Edges[i];
             edge.LeftWinding = edge.Face?.Winding ?? 0;
         }
+
+        // No ambiguity: face propagation is sufficient.
+    }
+
+    /// <summary>
+    /// Determines whether building a winding index is worthwhile for the current query count.
+    /// </summary>
+    /// <param name="segmentCount">The number of directed segments in the arrangement.</param>
+    /// <param name="sampleCount">The number of winding samples requested so far.</param>
+    /// <returns><see langword="true"/> if a winding index should be built.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool ShouldBuildWindingIndex(int segmentCount, int sampleCount)
+    {
+        const int minSegmentCount = 2048;
+        const int minSampleCount = 4;
+        return segmentCount >= minSegmentCount && sampleCount >= minSampleCount;
     }
 
     /// <summary>
@@ -965,8 +996,8 @@ internal static class SelfIntersectionRemover
     /// Computes windings by sampling a point to the left of each edge.
     /// </summary>
     /// <param name="graph">The half-edge graph.</param>
-    /// <param name="segments">The directed segments used for winding tests.</param>
-    private static void ComputeEdgeWindingBySampling(HalfEdgeGraph graph, List<DirectedSegment> segments)
+    /// <param name="windingIndex">The preprocessed winding index for winding tests.</param>
+    private static void ComputeEdgeWindingBySampling(HalfEdgeGraph graph, WindingIndex windingIndex)
     {
         // Sample per edge when face propagation cannot safely resolve windings.
         for (int i = 0; i < graph.Edges.Count; i++)
@@ -987,7 +1018,7 @@ internal static class SelfIntersectionRemover
             Vertex midpoint = (a + b) * 0.5;
             Vertex normal = new Vertex(-delta.Y, delta.X) / length;
             Vertex sample = midpoint + (normal * epsilon);
-            edge.LeftWinding = ComputeWindingNumber(sample, segments);
+            edge.LeftWinding = ComputeWindingNumber(sample, windingIndex);
         }
     }
 
@@ -1376,45 +1407,42 @@ internal static class SelfIntersectionRemover
     }
 
     /// <summary>
-    /// Advances to the next boundary edge, wrapping when the walk returns to the starting edge.
+    /// Advances to the next boundary edge along the left face boundary.
     /// </summary>
     /// <param name="edge">The current boundary edge.</param>
     /// <returns>The next boundary edge or <see langword="null"/> if traversal fails.</returns>
     private static HalfEdge? NextBoundaryEdge(HalfEdge edge)
     {
-        List<HalfEdge> outgoing = edge.Destination.Outgoing;
-        if (outgoing.Count == 0)
+        HalfEdge? twin = edge.Twin;
+        if (twin == null)
         {
             return null;
         }
 
-        // Prefer the smallest positive delta in angle to keep a consistent boundary walk.
-        double inAngle = edge.Angle;
-        double bestDelta = double.PositiveInfinity;
-        HalfEdge? best = null;
-
-        for (int i = 0; i < outgoing.Count; i++)
+        List<HalfEdge> outgoing = edge.Destination.Outgoing;
+        int count = outgoing.Count;
+        if (count == 0)
         {
-            HalfEdge candidate = outgoing[i];
-            if (!IsBoundaryEdge(candidate))
+            return null;
+        }
+
+        int index = twin.OutgoingIndex;
+        for (int i = 0; i < count; i++)
+        {
+            index--;
+            if (index < 0)
             {
-                continue;
+                index = count - 1;
             }
 
-            double delta = candidate.Angle - inAngle;
-            if (delta < 0)
+            HalfEdge candidate = outgoing[index];
+            if (IsBoundaryEdge(candidate))
             {
-                delta += Math.PI * 2;
-            }
-
-            if (delta < bestDelta)
-            {
-                bestDelta = delta;
-                best = candidate;
+                return candidate;
             }
         }
 
-        return best;
+        return null;
     }
 
     /// <summary>
@@ -1430,25 +1458,268 @@ internal static class SelfIntersectionRemover
         {
             Vertex a = segments[i].Source;
             Vertex b = segments[i].Target;
+            int windDelta = segments[i].WindDelta;
 
             // Standard winding-number test using upward/downward crossings of a horizontal ray.
             if (a.Y <= point.Y)
             {
                 if (b.Y > point.Y && IsLeft(a, b, point) > 0)
                 {
-                    winding++;
+                    winding += windDelta;
                 }
             }
             else
             {
                 if (b.Y <= point.Y && IsLeft(a, b, point) < 0)
                 {
-                    winding--;
+                    winding -= windDelta;
                 }
             }
         }
 
         return winding;
+    }
+
+    /// <summary>
+    /// Computes the winding number of the arrangement at the specified point using a preprocessed index.
+    /// </summary>
+    /// <param name="point">The sample point.</param>
+    /// <param name="windingIndex">The preprocessed winding index.</param>
+    /// <returns>The winding number relative to the positive fill rule.</returns>
+    private static int ComputeWindingNumber(Vertex point, WindingIndex windingIndex)
+    {
+        WindingSegment[] segments = windingIndex.Segments;
+        if (segments.Length == 0 || windingIndex.MaxY <= windingIndex.MinY)
+        {
+            return 0;
+        }
+
+        if (windingIndex.Buckets is null || windingIndex.Buckets.Length == 0)
+        {
+            return ComputeWindingNumber(point, segments);
+        }
+
+        double y = point.Y;
+        if (y < windingIndex.MinY || y >= windingIndex.MaxY)
+        {
+            return 0;
+        }
+
+        int bucketCount = windingIndex.Buckets.Length;
+        int bucketIndex = (int)((y - windingIndex.MinY) * windingIndex.InvBucketHeight);
+        if (bucketIndex < 0)
+        {
+            bucketIndex = 0;
+        }
+        else if (bucketIndex >= bucketCount)
+        {
+            bucketIndex = bucketCount - 1;
+        }
+
+        return ComputeWindingNumber(point, segments, windingIndex.Buckets[bucketIndex]);
+    }
+
+    /// <summary>
+    /// Computes the winding number of the arrangement at the specified point using preprocessed segments.
+    /// </summary>
+    /// <param name="point">The sample point.</param>
+    /// <param name="segments">The preprocessed directed segments.</param>
+    /// <returns>The winding number relative to the positive fill rule.</returns>
+    private static int ComputeWindingNumber(Vertex point, WindingSegment[] segments)
+    {
+        int winding = 0;
+        double x = point.X;
+        double y = point.Y;
+
+        for (int i = 0; i < segments.Length; i++)
+        {
+            WindingSegment segment = segments[i];
+            if (y < segment.MinY || y >= segment.MaxY)
+            {
+                continue;
+            }
+
+            double cross = (segment.Dx * (y - segment.Source.Y)) - (segment.Dy * (x - segment.Source.X));
+            if (segment.IsUpward)
+            {
+                if (cross > 0)
+                {
+                    winding += segment.WindDelta;
+                }
+            }
+            else
+            {
+                if (cross < 0)
+                {
+                    winding -= segment.WindDelta;
+                }
+            }
+        }
+
+        return winding;
+    }
+
+    /// <summary>
+    /// Computes the winding number using only the segments in the provided bucket.
+    /// </summary>
+    /// <param name="point">The sample point.</param>
+    /// <param name="segments">All preprocessed segments.</param>
+    /// <param name="bucket">The bucket containing candidate segment indices.</param>
+    /// <returns>The winding number relative to the positive fill rule.</returns>
+    private static int ComputeWindingNumber(Vertex point, WindingSegment[] segments, List<int> bucket)
+    {
+        int winding = 0;
+        double x = point.X;
+        double y = point.Y;
+
+        ReadOnlySpan<int> indices = CollectionsMarshal.AsSpan(bucket);
+        for (int i = 0; i < indices.Length; i++)
+        {
+            WindingSegment segment = segments[indices[i]];
+            if (y < segment.MinY || y >= segment.MaxY)
+            {
+                continue;
+            }
+
+            double cross = (segment.Dx * (y - segment.Source.Y)) - (segment.Dy * (x - segment.Source.X));
+            if (segment.IsUpward)
+            {
+                if (cross > 0)
+                {
+                    winding += segment.WindDelta;
+                }
+            }
+            else
+            {
+                if (cross < 0)
+                {
+                    winding -= segment.WindDelta;
+                }
+            }
+        }
+
+        return winding;
+    }
+
+    /// <summary>
+    /// Builds a preprocessed segment index for winding number evaluations.
+    /// </summary>
+    /// <param name="segments">The directed segments to preprocess.</param>
+    /// <returns>The winding index.</returns>
+    private static WindingIndex BuildWindingIndex(List<DirectedSegment> segments)
+    {
+        int count = segments.Count;
+        if (count == 0)
+        {
+            return new WindingIndex(Array.Empty<WindingSegment>(), null, 0, 0, 0);
+        }
+
+        WindingSegment[] result = new WindingSegment[count];
+        double globalMinY = double.PositiveInfinity;
+        double globalMaxY = double.NegativeInfinity;
+        for (int i = 0; i < count; i++)
+        {
+            DirectedSegment segment = segments[i];
+            Vertex source = segment.Source;
+            Vertex target = segment.Target;
+            int windDelta = segment.WindDelta;
+            double dx = target.X - source.X;
+            double dy = target.Y - source.Y;
+            bool upward = source.Y <= target.Y;
+            double minY = upward ? source.Y : target.Y;
+            double maxY = upward ? target.Y : source.Y;
+
+            if (minY < globalMinY)
+            {
+                globalMinY = minY;
+            }
+
+            if (maxY > globalMaxY)
+            {
+                globalMaxY = maxY;
+            }
+
+            result[i] = new WindingSegment(source, dx, dy, minY, maxY, upward, windDelta);
+        }
+
+        List<int>[]? buckets = null;
+        double invBucketHeight = 0;
+        const int minBucketSegments = 128;
+        if (count >= minBucketSegments && globalMaxY > globalMinY)
+        {
+            int bucketCount = GetWindingBucketCount(count);
+            buckets = new List<int>[bucketCount];
+            int defaultCapacity = Math.Max(4, count / bucketCount);
+            for (int i = 0; i < bucketCount; i++)
+            {
+                buckets[i] = new List<int>(defaultCapacity);
+            }
+
+            invBucketHeight = bucketCount / (globalMaxY - globalMinY);
+            for (int i = 0; i < result.Length; i++)
+            {
+                WindingSegment segment = result[i];
+                if (segment.MinY == segment.MaxY)
+                {
+                    continue;
+                }
+
+                int start = (int)((segment.MinY - globalMinY) * invBucketHeight);
+                int end = (int)((segment.MaxY - globalMinY) * invBucketHeight);
+
+                if (start < 0)
+                {
+                    start = 0;
+                }
+                else if (start >= bucketCount)
+                {
+                    start = bucketCount - 1;
+                }
+
+                if (end < 0)
+                {
+                    end = 0;
+                }
+                else if (end >= bucketCount)
+                {
+                    end = bucketCount - 1;
+                }
+
+                // Expand by one bucket to guard against rounding artifacts at bucket boundaries.
+                if (start > 0)
+                {
+                    start--;
+                }
+
+                if (end < bucketCount - 1)
+                {
+                    end++;
+                }
+
+                for (int b = start; b <= end; b++)
+                {
+                    buckets[b].Add(i);
+                }
+            }
+        }
+
+        return new WindingIndex(result, buckets, globalMinY, globalMaxY, invBucketHeight);
+    }
+
+    /// <summary>
+    /// Picks a bucket count for winding-number queries based on segment count.
+    /// </summary>
+    /// <param name="segmentCount">The number of segments.</param>
+    /// <returns>The bucket count to allocate.</returns>
+    private static int GetWindingBucketCount(int segmentCount)
+    {
+        int bucketCount = segmentCount / 64;
+        if (bucketCount < 16)
+        {
+            return 16;
+        }
+
+        return bucketCount > 512 ? 512 : bucketCount;
     }
 
     /// <summary>
@@ -1586,7 +1857,7 @@ internal static class SelfIntersectionRemover
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool PtsReallyClose(Vertex a, Vertex b)
-        => Math.Abs(a.X - b.X) < 2 && Math.Abs(a.Y - b.Y) < 2;
+        => Math.Abs(a.X - b.X) < 2e-6 && Math.Abs(a.Y - b.Y) < 2e-6;
 
     /// <summary>
     /// Removes a node from the circular list and returns the next node (or null if exhausted).
@@ -1748,7 +2019,7 @@ internal static class SelfIntersectionRemover
         Vertex ab = b - a;
         double cross = Math.Abs(Vertex.Cross(ab, ac));
         double distance = cross / Math.Sqrt(lenSq);
-        return distance <= 1e-3;
+        return distance <= 1e-6;
     }
 
     /// <summary>
@@ -1763,7 +2034,7 @@ internal static class SelfIntersectionRemover
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool ArePointsClose(Vertex a, Vertex b)
-        => Math.Abs(a.X - b.X) <= 1e-5 && Math.Abs(a.Y - b.Y) <= 1e-5;
+        => Math.Abs(a.X - b.X) <= 1e-6 && Math.Abs(a.Y - b.Y) <= 1e-6;
 
     /// <summary>
     /// Adds a split point to a segment's split list, ignoring near-duplicates.
@@ -2032,6 +2303,28 @@ internal static class SelfIntersectionRemover
     /// Represents a directed edge between two vertices in the arrangement.
     /// </summary>
     private readonly record struct DirectedSegment(Vertex Source, Vertex Target, int WindDelta);
+
+    /// <summary>
+    /// Stores preprocessed segment data for faster winding number queries.
+    /// </summary>
+    private readonly record struct WindingSegment(
+        Vertex Source,
+        double Dx,
+        double Dy,
+        double MinY,
+        double MaxY,
+        bool IsUpward,
+        int WindDelta);
+
+    /// <summary>
+    /// Stores segment data plus optional buckets for faster winding queries.
+    /// </summary>
+    private readonly record struct WindingIndex(
+        WindingSegment[] Segments,
+        List<int>[]? Buckets,
+        double MinY,
+        double MaxY,
+        double InvBucketHeight);
 
     /// <summary>
     /// Holds split points for a segment, allocating only when intersections occur.
