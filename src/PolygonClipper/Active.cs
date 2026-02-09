@@ -47,7 +47,7 @@ internal sealed class Active
     /// <summary>
     /// Gets or sets the winding count for the opposite path type.
     /// </summary>
-    internal int WindCount2 { get; set; } // winding count of the opposite polytype
+    internal int WindCount2 { get; set; } // secondary winding count for non-subject paths
 
     /// <summary>
     /// Gets or sets the output record this edge contributes to.

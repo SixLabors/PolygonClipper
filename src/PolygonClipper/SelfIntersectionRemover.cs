@@ -80,7 +80,7 @@ internal static class SelfIntersectionRemover
 
         GetLowestPathInfo(subject, out int lowestPathIdx, out bool isNegArea);
         bool pathsReversed = lowestPathIdx >= 0 && isNegArea;
-        ClipperFillRule fillRule = pathsReversed ? ClipperFillRule.Negative : ClipperFillRule.Positive;
+        FillRule fillRule = pathsReversed ? FillRule.Negative : FillRule.Positive;
 
         SelfIntersectionUnionClipper clipper = cachedClipper ??= new SelfIntersectionUnionClipper();
         clipper.Clear();
@@ -256,7 +256,7 @@ internal static class SelfIntersectionRemover
                         continue;
                     }
 
-                    if (PolygonUtilities.PointInPolygon(testPoint, subject[j]) != ClipperPointInPolygonResult.IsInside)
+                    if (PolygonUtilities.PointInPolygon(testPoint, subject[j]) != PointInPolygonResult.IsInside)
                     {
                         continue;
                     }

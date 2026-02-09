@@ -319,13 +319,13 @@ internal static class PolygonUtilities
     /// <summary>
     /// Determines whether a point is inside a contour.
     /// </summary>
-    public static ClipperPointInPolygonResult PointInPolygon(in Vertex point, Contour polygon)
+    public static PointInPolygonResult PointInPolygon(in Vertex point, Contour polygon)
     {
         int len = polygon.Count;
         int start = 0;
         if (len < 3)
         {
-            return ClipperPointInPolygonResult.IsOutside;
+            return PointInPolygonResult.IsOutside;
         }
 
         while (start < len && IsAlmostZero(polygon[start].Y - point.Y))
@@ -335,7 +335,7 @@ internal static class PolygonUtilities
 
         if (start == len)
         {
-            return ClipperPointInPolygonResult.IsOutside;
+            return PointInPolygonResult.IsOutside;
         }
 
         bool isAbove = polygon[start].Y < point.Y;
@@ -384,7 +384,7 @@ internal static class PolygonUtilities
                 if (IsAlmostZero(curr.X - point.X) ||
                     (IsAlmostZero(curr.Y - prev.Y) && ((point.X < prev.X) != (point.X < curr.X))))
                 {
-                    return ClipperPointInPolygonResult.IsOn;
+                    return PointInPolygonResult.IsOn;
                 }
 
                 i++;
@@ -409,7 +409,7 @@ internal static class PolygonUtilities
                 int cps2 = CrossSign(prev, curr, point);
                 if (cps2 == 0)
                 {
-                    return ClipperPointInPolygonResult.IsOn;
+                    return PointInPolygonResult.IsOn;
                 }
 
                 if ((cps2 < 0) == isAbove)
@@ -424,7 +424,7 @@ internal static class PolygonUtilities
 
         if (isAbove == startingAbove)
         {
-            return val == 0 ? ClipperPointInPolygonResult.IsOutside : ClipperPointInPolygonResult.IsInside;
+            return val == 0 ? PointInPolygonResult.IsOutside : PointInPolygonResult.IsInside;
         }
 
         if (i == len)
@@ -438,7 +438,7 @@ internal static class PolygonUtilities
 
         if (cps == 0)
         {
-            return ClipperPointInPolygonResult.IsOn;
+            return PointInPolygonResult.IsOn;
         }
 
         if ((cps < 0) == isAbove)
@@ -446,7 +446,7 @@ internal static class PolygonUtilities
             val = 1 - val;
         }
 
-        return val == 0 ? ClipperPointInPolygonResult.IsOutside : ClipperPointInPolygonResult.IsInside;
+        return val == 0 ? PointInPolygonResult.IsOutside : PointInPolygonResult.IsInside;
     }
 
     /// <summary>
@@ -454,26 +454,26 @@ internal static class PolygonUtilities
     /// </summary>
     public static bool PathContainsPath(Contour inner, Contour outer)
     {
-        ClipperPointInPolygonResult pip = ClipperPointInPolygonResult.IsOn;
+        PointInPolygonResult pip = PointInPolygonResult.IsOn;
         for (int i = 0; i < inner.Count; i++)
         {
             switch (PointInPolygon(inner[i], outer))
             {
-                case ClipperPointInPolygonResult.IsOutside:
-                    if (pip == ClipperPointInPolygonResult.IsOutside)
+                case PointInPolygonResult.IsOutside:
+                    if (pip == PointInPolygonResult.IsOutside)
                     {
                         return false;
                     }
 
-                    pip = ClipperPointInPolygonResult.IsOutside;
+                    pip = PointInPolygonResult.IsOutside;
                     break;
-                case ClipperPointInPolygonResult.IsInside:
-                    if (pip == ClipperPointInPolygonResult.IsInside)
+                case PointInPolygonResult.IsInside:
+                    if (pip == PointInPolygonResult.IsInside)
                     {
                         return true;
                     }
 
-                    pip = ClipperPointInPolygonResult.IsInside;
+                    pip = PointInPolygonResult.IsInside;
                     break;
                 default:
                     break;
@@ -481,7 +481,7 @@ internal static class PolygonUtilities
         }
 
         Vertex midpoint = GetBoundsMidPoint(inner);
-        return PointInPolygon(midpoint, outer) != ClipperPointInPolygonResult.IsOutside;
+        return PointInPolygon(midpoint, outer) != PointInPolygonResult.IsOutside;
     }
 
     /// <summary>

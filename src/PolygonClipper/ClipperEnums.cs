@@ -3,23 +3,39 @@
 
 namespace SixLabors.PolygonClipper;
 
-internal enum ClipperFillRule
+/// <summary>
+/// Specifies the winding rule used to decide which regions are filled.
+/// </summary>
+internal enum FillRule
 {
-    EvenOdd,
-    NonZero,
+    /// <summary>
+    /// Counts winding in the positive direction as filled.
+    /// </summary>
     Positive,
+
+    /// <summary>
+    /// Counts winding in the negative direction as filled.
+    /// </summary>
     Negative
 }
 
-internal enum ClipperPathType
+/// <summary>
+/// Describes the relationship between a point and a polygon.
+/// </summary>
+internal enum PointInPolygonResult
 {
-    Subject,
-    Clip
-}
-
-internal enum ClipperPointInPolygonResult
-{
+    /// <summary>
+    /// The point lies on the polygon boundary.
+    /// </summary>
     IsOn = 0,
+
+    /// <summary>
+    /// The point lies strictly inside the polygon.
+    /// </summary>
     IsInside = 1,
+
+    /// <summary>
+    /// The point lies outside the polygon.
+    /// </summary>
     IsOutside = 2
 }

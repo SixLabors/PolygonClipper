@@ -14,7 +14,7 @@ namespace SixLabors.PolygonClipper;
 /// </remarks>
 internal sealed class SelfIntersectionUnionClipper
 {
-    private ClipperFillRule fillRule;
+    private FillRule fillRule;
     private Active? activeEdges;
     private Active? sortedEdges;
     private readonly Stack<Active> freeActives;
@@ -52,12 +52,6 @@ internal sealed class SelfIntersectionUnionClipper
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void SwapActives(ref Active ae1, ref Active ae2) => (ae2, ae1) = (ae1, ae2);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ClipperPathType GetPolyType(Active ae) => ae.LocalMin.PathType;
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsSamePolyType(Active ae1, Active ae2) => ae1.LocalMin.PathType == ae2.LocalMin.PathType;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Active? GetMaximaPair(Active ae)
@@ -329,14 +323,14 @@ internal sealed class SelfIntersectionUnionClipper
     internal void AddSubject(List<Contour> paths)
     {
         this.isSortedMinimaList = false;
-        this.AddPathsToVertexList(paths, ClipperPathType.Subject);
+        this.AddPathsToVertexList(paths);
     }
 
     /// <summary>
     /// Registers a local minima vertex once for the sweep.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void AddLocalMinima(ClipVertex vertex, ClipperPathType polytype, List<LocalMinima> minimaList)
+    private static void AddLocalMinima(ClipVertex vertex, List<LocalMinima> minimaList)
     {
         // Make sure the ClipVertex is added only once.
         if ((vertex.Flags & VertexFlags.LocalMin) != VertexFlags.None)
@@ -345,13 +339,13 @@ internal sealed class SelfIntersectionUnionClipper
         }
 
         vertex.Flags |= VertexFlags.LocalMin;
-        minimaList.Add(new LocalMinima(vertex, polytype));
+        minimaList.Add(new LocalMinima(vertex));
     }
 
     /// <summary>
     /// Builds circular vertex lists and captures local minima/maxima for the sweep.
     /// </summary>
-    private void AddPathsToVertexList(List<Contour> paths, ClipperPathType polytype)
+    private void AddPathsToVertexList(List<Contour> paths)
     {
         int totalVertCnt = 0;
         foreach (Contour path in paths)
@@ -429,7 +423,7 @@ internal sealed class SelfIntersectionUnionClipper
                 else if (currVertex.Point.Y < prevVertex.Point.Y && !goingUp)
                 {
                     goingUp = true;
-                    AddLocalMinima(prevVertex, polytype, this.minimaList);
+                    AddLocalMinima(prevVertex, this.minimaList);
                 }
 
                 prevVertex = currVertex;
@@ -440,7 +434,7 @@ internal sealed class SelfIntersectionUnionClipper
             {
                 if (goingUp0)
                 {
-                    AddLocalMinima(prevVertex, polytype, this.minimaList);
+                    AddLocalMinima(prevVertex, this.minimaList);
                 }
                 else
                 {
@@ -453,68 +447,39 @@ internal sealed class SelfIntersectionUnionClipper
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private bool IsContributingClosed(Active ae)
     {
-        switch (this.fillRule)
+        if (this.fillRule == FillRule.Positive)
         {
-            case ClipperFillRule.Positive:
-                if (ae.WindCount != 1)
-                {
-                    return false;
-                }
+            if (ae.WindCount != 1)
+            {
+                return false;
+            }
 
-                break;
-            case ClipperFillRule.Negative:
-                if (ae.WindCount != -1)
-                {
-                    return false;
-                }
-
-                break;
-            case ClipperFillRule.NonZero:
-                if (Math.Abs(ae.WindCount) != 1)
-                {
-                    return false;
-                }
-
-                break;
+            return ae.WindCount2 <= 0;
         }
 
-        return this.fillRule switch
+        if (ae.WindCount != -1)
         {
-            ClipperFillRule.Positive => ae.WindCount2 <= 0,
-            ClipperFillRule.Negative => ae.WindCount2 >= 0,
-            _ => ae.WindCount2 == 0
-        };
+            return false;
+        }
+
+        return ae.WindCount2 >= 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void SetWindCountForClosedPathEdge(Active ae)
+    private static void SetWindCountForClosedPathEdge(Active ae)
     {
         // Wind counts refer to polygon regions not edges, so here an edge's WindCnt
         // indicates the higher of the wind counts for the two regions touching the
         // edge. (nb: Adjacent regions can only ever have their wind counts differ by one.)
         Active? ae2 = ae.PrevInAel;
 
-        // find the nearest closed path edge of the same PolyType in AEL (heading left)
-        ClipperPathType pt = GetPolyType(ae);
-        while (ae2 != null && GetPolyType(ae2) != pt)
-        {
-            ae2 = ae2.PrevInAel;
-        }
-
         if (ae2 == null)
         {
             ae.WindCount = ae.WindDelta;
-            ae2 = this.activeEdges;
-        }
-        else if (this.fillRule == ClipperFillRule.EvenOdd)
-        {
-            ae.WindCount = ae.WindDelta;
-            ae.WindCount2 = ae2.WindCount2;
-            ae2 = ae2.NextInAel;
         }
         else
         {
-            // NonZero, positive, or negative filling here ...
+            // Positive or negative filling here ...
             // when e2's WindCnt is in the SAME direction as its WindDx,
             // then polygon will fill on the right of 'e2' (and 'e' will be inside)
             // nb: neither e2.WindCnt nor e2.WindDx should ever be 0.
@@ -537,7 +502,7 @@ internal sealed class SelfIntersectionUnionClipper
                 }
                 else
                 {
-                    // now outside all polys of same polytype so set own WC ...
+                    // now outside all polygons so set own WC ...
                     ae.WindCount = ae.WindDelta;
                 }
             }
@@ -555,38 +520,9 @@ internal sealed class SelfIntersectionUnionClipper
                     ae.WindCount = ae2.WindCount + ae.WindDelta;
                 }
             }
-
-            ae.WindCount2 = ae2.WindCount2;
-
-            // Get ready to calculate WindCnt2.
-            ae2 = ae2.NextInAel;
         }
 
-        // update windCount2 ...
-        if (this.fillRule == ClipperFillRule.EvenOdd)
-        {
-            while (ae2 != ae)
-            {
-                if (GetPolyType(ae2!) != pt)
-                {
-                    ae.WindCount2 = ae.WindCount2 == 0 ? 1 : 0;
-                }
-
-                ae2 = ae2!.NextInAel;
-            }
-        }
-        else
-        {
-            while (ae2 != ae)
-            {
-                if (GetPolyType(ae2!) != pt)
-                {
-                    ae.WindCount2 += ae2!.WindDelta;
-                }
-
-                ae2 = ae2!.NextInAel;
-            }
-        }
+        ae.WindCount2 = 0;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -760,7 +696,7 @@ internal sealed class SelfIntersectionUnionClipper
             leftBound.IsLeftBound = true;
             this.InsertLeftEdge(leftBound);
 
-            this.SetWindCountForClosedPathEdge(leftBound);
+            SetWindCountForClosedPathEdge(leftBound);
             contributing = this.IsContributingClosed(leftBound);
 
             rightBound.WindCount = leftBound.WindCount;
@@ -1061,70 +997,33 @@ internal sealed class SelfIntersectionUnionClipper
 
         // UPDATE WINDING COUNTS...
         int oldE1WindCount, oldE2WindCount;
-        if (ae1.LocalMin.PathType == ae2.LocalMin.PathType)
+        if (ae1.WindCount + ae2.WindDelta == 0)
         {
-            if (this.fillRule == ClipperFillRule.EvenOdd)
-            {
-                oldE1WindCount = ae1.WindCount;
-                ae1.WindCount = ae2.WindCount;
-                ae2.WindCount = oldE1WindCount;
-            }
-            else
-            {
-                if (ae1.WindCount + ae2.WindDelta == 0)
-                {
-                    ae1.WindCount = -ae1.WindCount;
-                }
-                else
-                {
-                    ae1.WindCount += ae2.WindDelta;
-                }
-
-                if (ae2.WindCount - ae1.WindDelta == 0)
-                {
-                    ae2.WindCount = -ae2.WindCount;
-                }
-                else
-                {
-                    ae2.WindCount -= ae1.WindDelta;
-                }
-            }
+            ae1.WindCount = -ae1.WindCount;
         }
         else
         {
-            if (this.fillRule != ClipperFillRule.EvenOdd)
-            {
-                ae1.WindCount2 += ae2.WindDelta;
-            }
-            else
-            {
-                ae1.WindCount2 = ae1.WindCount2 == 0 ? 1 : 0;
-            }
-
-            if (this.fillRule != ClipperFillRule.EvenOdd)
-            {
-                ae2.WindCount2 -= ae1.WindDelta;
-            }
-            else
-            {
-                ae2.WindCount2 = ae2.WindCount2 == 0 ? 1 : 0;
-            }
+            ae1.WindCount += ae2.WindDelta;
         }
 
-        switch (this.fillRule)
+        if (ae2.WindCount - ae1.WindDelta == 0)
         {
-            case ClipperFillRule.Positive:
-                oldE1WindCount = ae1.WindCount;
-                oldE2WindCount = ae2.WindCount;
-                break;
-            case ClipperFillRule.Negative:
-                oldE1WindCount = -ae1.WindCount;
-                oldE2WindCount = -ae2.WindCount;
-                break;
-            default:
-                oldE1WindCount = Math.Abs(ae1.WindCount);
-                oldE2WindCount = Math.Abs(ae2.WindCount);
-                break;
+            ae2.WindCount = -ae2.WindCount;
+        }
+        else
+        {
+            ae2.WindCount -= ae1.WindDelta;
+        }
+
+        if (this.fillRule == FillRule.Positive)
+        {
+            oldE1WindCount = ae1.WindCount;
+            oldE2WindCount = ae2.WindCount;
+        }
+        else
+        {
+            oldE1WindCount = -ae1.WindCount;
+            oldE2WindCount = -ae2.WindCount;
         }
 
         bool e1WindCountIs0or1 = oldE1WindCount is 0 or 1;
@@ -1141,8 +1040,7 @@ internal sealed class SelfIntersectionUnionClipper
         // if both edges are 'hot' ...
         if (ae1.IsHot && ae2.IsHot)
         {
-            if ((oldE1WindCount != 0 && oldE1WindCount != 1) || (oldE2WindCount != 0 && oldE2WindCount != 1) ||
-                    (ae1.LocalMin.PathType != ae2.LocalMin.PathType))
+            if ((oldE1WindCount != 0 && oldE1WindCount != 1) || (oldE2WindCount != 0 && oldE2WindCount != 1))
             {
                 this.AddLocalMaxPoly(ae1, ae2, pt);
             }
@@ -1177,27 +1075,18 @@ internal sealed class SelfIntersectionUnionClipper
         else
         {
             double e1Wc2, e2Wc2;
-            switch (this.fillRule)
+            if (this.fillRule == FillRule.Positive)
             {
-                case ClipperFillRule.Positive:
-                    e1Wc2 = ae1.WindCount2;
-                    e2Wc2 = ae2.WindCount2;
-                    break;
-                case ClipperFillRule.Negative:
-                    e1Wc2 = -ae1.WindCount2;
-                    e2Wc2 = -ae2.WindCount2;
-                    break;
-                default:
-                    e1Wc2 = Math.Abs(ae1.WindCount2);
-                    e2Wc2 = Math.Abs(ae2.WindCount2);
-                    break;
+                e1Wc2 = ae1.WindCount2;
+                e2Wc2 = ae2.WindCount2;
+            }
+            else
+            {
+                e1Wc2 = -ae1.WindCount2;
+                e2Wc2 = -ae2.WindCount2;
             }
 
-            if (!IsSamePolyType(ae1, ae2))
-            {
-                this.AddLocalMinPoly(ae1, ae2, pt);
-            }
-            else if (oldE1WindCount == 1 && oldE2WindCount == 1)
+            if (oldE1WindCount == 1 && oldE2WindCount == 1)
             {
                 if (e1Wc2 > 0 && e2Wc2 > 0)
                 {
@@ -1297,9 +1186,9 @@ internal sealed class SelfIntersectionUnionClipper
         }
     }
 
-    private void ExecuteInternal(ClipperFillRule clipperFillRule)
+    private void ExecuteInternal(FillRule fillRule)
     {
-        this.fillRule = clipperFillRule;
+        this.fillRule = fillRule;
         this.Reset();
         if (!this.PopScanline(out double y))
         {
@@ -2272,11 +2161,11 @@ internal sealed class SelfIntersectionUnionClipper
         return result;
     }
 
-    private static ClipperPointInPolygonResult PointInOpPolygon(Vertex pt, OutputPoint op)
+    private static PointInPolygonResult PointInOpPolygon(Vertex pt, OutputPoint op)
     {
         if (op == op.Next || op.Prev == op.Next)
         {
-            return ClipperPointInPolygonResult.IsOutside;
+            return PointInPolygonResult.IsOutside;
         }
 
         OutputPoint op2 = op;
@@ -2294,7 +2183,7 @@ internal sealed class SelfIntersectionUnionClipper
         // Not a proper polygon.
         if (op.Point.Y == pt.Y)
         {
-            return ClipperPointInPolygonResult.IsOutside;
+            return PointInPolygonResult.IsOutside;
         }
 
         // must be above or below to get here
@@ -2332,7 +2221,7 @@ internal sealed class SelfIntersectionUnionClipper
                 if (op2.Point.X == pt.X || (op2.Point.Y == op2.Prev.Point.Y &&
                     (pt.X < op2.Prev.Point.X) != (pt.X < op2.Point.X)))
                 {
-                    return ClipperPointInPolygonResult.IsOn;
+                    return PointInPolygonResult.IsOn;
                 }
 
                 op2 = op2.Next!;
@@ -2356,7 +2245,7 @@ internal sealed class SelfIntersectionUnionClipper
                     int d = PolygonUtilities.CrossSign(op2.Prev.Point, op2.Point, pt);
                     if (d == 0)
                     {
-                        return ClipperPointInPolygonResult.IsOn;
+                        return PointInPolygonResult.IsOn;
                     }
 
                     if ((d < 0) == isAbove)
@@ -2372,14 +2261,14 @@ internal sealed class SelfIntersectionUnionClipper
 
         if (isAbove == startingAbove)
         {
-            return val == 0 ? ClipperPointInPolygonResult.IsOutside : ClipperPointInPolygonResult.IsInside;
+            return val == 0 ? PointInPolygonResult.IsOutside : PointInPolygonResult.IsInside;
         }
 
         {
             int d = PolygonUtilities.CrossSign(op2.Prev.Point, op2.Point, pt);
             if (d == 0)
             {
-                return ClipperPointInPolygonResult.IsOn;
+                return PointInPolygonResult.IsOn;
             }
 
             if ((d < 0) == isAbove)
@@ -2388,34 +2277,34 @@ internal sealed class SelfIntersectionUnionClipper
             }
         }
 
-        return val == 0 ? ClipperPointInPolygonResult.IsOutside : ClipperPointInPolygonResult.IsInside;
+        return val == 0 ? PointInPolygonResult.IsOutside : PointInPolygonResult.IsInside;
     }
 
     private static bool Path1InsidePath2(OutputPoint op1, OutputPoint op2)
     {
         // we need to make some accommodation for rounding errors
         // so we won't jump if the first ClipVertex is found outside
-        ClipperPointInPolygonResult pip = ClipperPointInPolygonResult.IsOn;
+        PointInPolygonResult pip = PointInPolygonResult.IsOn;
         OutputPoint op = op1;
         do
         {
             switch (PointInOpPolygon(op.Point, op2))
             {
-                case ClipperPointInPolygonResult.IsOutside:
-                    if (pip == ClipperPointInPolygonResult.IsOutside)
+                case PointInPolygonResult.IsOutside:
+                    if (pip == PointInPolygonResult.IsOutside)
                     {
                         return false;
                     }
 
-                    pip = ClipperPointInPolygonResult.IsOutside;
+                    pip = PointInPolygonResult.IsOutside;
                     break;
-                case ClipperPointInPolygonResult.IsInside:
-                    if (pip == ClipperPointInPolygonResult.IsInside)
+                case PointInPolygonResult.IsInside:
+                    if (pip == PointInPolygonResult.IsInside)
                     {
                         return true;
                     }
 
-                    pip = ClipperPointInPolygonResult.IsInside;
+                    pip = PointInPolygonResult.IsInside;
                     break;
                 default:
                     break;
@@ -3061,14 +2950,14 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     internal bool Execute(
-        ClipperFillRule clipperFillRule,
+        FillRule fillRule,
         Polygon polygon)
     {
         polygon.Clear();
         this.buildHierarchy = true;
         try
         {
-            this.ExecuteInternal(clipperFillRule);
+            this.ExecuteInternal(fillRule);
             this.BuildPolygon(polygon);
         }
         catch
@@ -3081,14 +2970,14 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     internal bool Execute(
-        ClipperFillRule clipperFillRule,
+        FillRule fillRule,
         List<Contour> solution)
     {
         solution.Clear();
         this.buildHierarchy = false;
         try
         {
-            this.ExecuteInternal(clipperFillRule);
+            this.ExecuteInternal(fillRule);
             this.BuildContours(solution);
         }
         catch

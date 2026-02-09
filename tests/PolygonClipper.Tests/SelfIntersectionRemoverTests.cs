@@ -9070,7 +9070,7 @@ public class SelfIntersectionRemoverTests
 
         GetLowestPathInfo(subject, out int lowestPathIdx, out bool isNegArea);
         bool pathsReversed = lowestPathIdx >= 0 && isNegArea;
-        FillRule fillRule = pathsReversed ? FillRule.Negative : FillRule.Positive;
+        Clipper2Lib.FillRule fillRule = pathsReversed ? Clipper2Lib.FillRule.Negative : Clipper2Lib.FillRule.Positive;
 
         ClipperD clipper = new(precision)
         {
