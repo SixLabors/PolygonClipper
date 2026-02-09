@@ -63,6 +63,7 @@ internal static class SelfIntersectionRemover
         }
 
         // Normalize orientation so the union uses positive fill semantics consistently.
+        EnsureClosedContours(polygon);
         Polygon prepared = PreparePositiveFillInput(polygon);
         return UnionWithClipper(prepared);
     }
@@ -216,6 +217,22 @@ internal static class SelfIntersectionRemover
         }
 
         return oriented;
+    }
+
+    /// <summary>
+    /// Ensures all contours are explicitly closed by repeating the first vertex at the end.
+    /// </summary>
+    /// <param name="polygon">The polygon to normalize.</param>
+    private static void EnsureClosedContours(Polygon polygon)
+    {
+        for (int i = 0; i < polygon.Count; i++)
+        {
+            Contour contour = polygon[i];
+            if (contour.Count > 0 && contour[0] != contour[^1])
+            {
+                contour.Add(contour[0]);
+            }
+        }
     }
 
     /// <summary>
@@ -415,37 +432,30 @@ internal static class SelfIntersectionRemover
         return area * 0.5D;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int GetVertexCount(Contour contour)
-    {
-        int count = contour.Count;
-        return count > 1 && contour[0] == contour[^1] ? count - 1 : count;
-    }
-
     private static bool HasSelfIntersection(Contour contour)
     {
-        int vertexCount = GetVertexCount(contour);
-        if (vertexCount < 4)
+        int segmentCount = contour.Count - 1;
+        if (segmentCount < 3)
         {
             return false;
         }
 
-        for (int i = 0; i < vertexCount; i++)
+        for (int i = 0; i < segmentCount; i++)
         {
-            Segment segmentA = new(contour[i], contour[(i + 1) % vertexCount]);
+            Segment segmentA = new(contour[i], contour[i + 1]);
             if (segmentA.IsDegenerate())
             {
                 continue;
             }
 
-            for (int j = i + 1; j < vertexCount; j++)
+            for (int j = i + 1; j < segmentCount; j++)
             {
-                if (j == i || j == i + 1 || (i == 0 && j == vertexCount - 1))
+                if (j == i || j == i + 1 || (i == 0 && j == segmentCount - 1))
                 {
                     continue;
                 }
 
-                Segment segmentB = new(contour[j], contour[(j + 1) % vertexCount]);
+                Segment segmentB = new(contour[j], contour[j + 1]);
                 if (segmentB.IsDegenerate())
                 {
                     continue;
@@ -468,12 +478,12 @@ internal static class SelfIntersectionRemover
             return false;
         }
 
-        int leftCount = GetVertexCount(left);
-        int rightCount = GetVertexCount(right);
+        int leftCount = left.Count - 1;
+        int rightCount = right.Count - 1;
 
         for (int i = 0; i < leftCount; i++)
         {
-            Segment leftSegment = new(left[i], left[(i + 1) % leftCount]);
+            Segment leftSegment = new(left[i], left[i + 1]);
             if (leftSegment.IsDegenerate())
             {
                 continue;
@@ -481,7 +491,7 @@ internal static class SelfIntersectionRemover
 
             for (int j = 0; j < rightCount; j++)
             {
-                Segment rightSegment = new(right[j], right[(j + 1) % rightCount]);
+                Segment rightSegment = new(right[j], right[j + 1]);
                 if (rightSegment.IsDegenerate())
                 {
                     continue;
