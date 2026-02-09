@@ -155,6 +155,7 @@ internal static class PolygonUtilities
         }
         else
         {
+            intersection = a1 + (t * d1);
         }
 
         return true;
