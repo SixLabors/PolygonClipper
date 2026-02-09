@@ -381,18 +381,6 @@ internal sealed class SelfIntersectionUnionClipper
     internal void AddSubject(List<Contour> paths) => this.AddPaths(paths, ClipperPathType.Subject);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal void AddOpenSubject(Contour path) => this.AddPath(path, ClipperPathType.Subject, true);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal void AddOpenSubject(List<Contour> paths) => this.AddPaths(paths, ClipperPathType.Subject, true);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal void AddClip(Contour path) => this.AddPath(path, ClipperPathType.Clip);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal void AddClip(List<Contour> paths) => this.AddPaths(paths, ClipperPathType.Clip);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void AddPath(Contour path, ClipperPathType polytype, bool isOpen = false)
     {
         List<Contour> tmp = [path];
@@ -1908,7 +1896,7 @@ internal sealed class SelfIntersectionUnionClipper
                     if (right!.CurrentX < left!.CurrentX)
                     {
                         Active? tmp = right.PrevInSel!;
-                        for (; ;)
+                        while (true)
                         {
                             this.AddNewIntersectNode(tmp, right, topY);
                             if (tmp == left)
@@ -2139,7 +2127,7 @@ internal sealed class SelfIntersectionUnionClipper
             this.AddToHorizontalSegmentList(op);
         }
 
-        for (; ;)
+        while (true)
         {
             // loops through consec. horizontal edges (if open)
             Active? ae = isLeftToRight ? horizontalEdge.NextInAel : horizontalEdge.PrevInAel;
@@ -3093,7 +3081,7 @@ internal sealed class SelfIntersectionUnionClipper
 
         OutputPoint startOp = outputRecord.Points!;
         OutputPoint? op2 = startOp;
-        for (; ;)
+        while (true)
         {
             // NB if preserveCollinear == true, then only remove 180 deg. spikes
             if (PolygonUtilities.IsCollinear(op2!.Prev.Point, op2.Point, op2.Next!.Point) &&
@@ -3209,7 +3197,6 @@ internal sealed class SelfIntersectionUnionClipper
         // else { splitOp = null; splitOp.Next = null; }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void FixSelfIntersects(OutputRecord outputRecord)
     {
         OutputPoint op2 = outputRecord.Points!;
@@ -3219,7 +3206,7 @@ internal sealed class SelfIntersectionUnionClipper
             return;
         }
 
-        for (; ;)
+        while (true)
         {
             if (PolygonUtilities.SegmentsIntersect(
                 op2!.Prev.Point,
@@ -3271,7 +3258,7 @@ internal sealed class SelfIntersectionUnionClipper
         }
     }
 
-    internal static bool BuildPath(OutputPoint? op, bool reverse, bool isOpen, Contour path)
+    private static bool BuildPath(OutputPoint? op, bool reverse, bool isOpen, Contour path)
     {
         if (op == null || op.Next == op || (!isOpen && op.Next == op.Prev))
         {
@@ -3304,20 +3291,13 @@ internal sealed class SelfIntersectionUnionClipper
                 path.Add(lastPt);
             }
 
-            if (reverse)
-            {
-                op2 = op2.Prev;
-            }
-            else
-            {
-                op2 = op2.Next!;
-            }
+            op2 = reverse ? op2.Prev : op2.Next!;
         }
 
         return path.Count != 3 || isOpen || !IsVerySmallTriangle(op2);
     }
 
-    internal static bool BuildContour(OutputPoint? op, bool reverse, bool isOpen, Contour contour)
+    private static bool BuildContour(OutputPoint? op, bool reverse, bool isOpen, Contour contour)
     {
         if (op == null || op.Next == op || (!isOpen && op.Next == op.Prev))
         {
@@ -3672,53 +3652,6 @@ internal sealed class SelfIntersectionUnionClipper
         return newPath;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal Box2 GetBounds()
-    {
-        double minX = double.MaxValue;
-        double minY = double.MaxValue;
-        double maxX = -double.MaxValue;
-        double maxY = -double.MaxValue;
-
-        foreach (ClipVertex t in this.vertexList)
-        {
-            ClipVertex v = t;
-            do
-            {
-                if (v.Point.X < minX)
-                {
-                    minX = v.Point.X;
-                }
-
-                if (v.Point.X > maxX)
-                {
-                    maxX = v.Point.X;
-                }
-
-                if (v.Point.Y < minY)
-                {
-                    minY = v.Point.Y;
-                }
-
-                if (v.Point.Y > maxY)
-                {
-                    maxY = v.Point.Y;
-                }
-
-                v = v.Next!;
-            }
-            while (v != t);
-        }
-
-        if (Math.Abs(minX - double.MaxValue) < PolygonUtilities.FloatingPointTolerance)
-        {
-            return default;
-        }
-
-        Box2 bounds = new(new Vertex(minX, minY), new Vertex(maxX, maxY));
-        return bounds.IsEmpty() ? default : bounds;
-    }
-
     internal bool Execute(
         ClipperFillRule clipperFillRule,
         List<Contour> solutionClosed,
@@ -3785,17 +3718,18 @@ internal sealed class SelfIntersectionUnionClipper
     {
         public readonly int Compare(IntersectNode a, IntersectNode b)
         {
-            if (!PolygonUtilities.IsAlmostZero(a.Point.Y - b.Point.Y))
+            Vertex delta = a.Point - b.Point;
+            if (!PolygonUtilities.IsAlmostZero(delta.Y))
             {
-                return (a.Point.Y > b.Point.Y) ? -1 : 1;
+                return delta.Y > 0 ? -1 : 1;
             }
 
-            if (PolygonUtilities.IsAlmostZero(a.Point.X - b.Point.X))
+            if (PolygonUtilities.IsAlmostZero(delta.X))
             {
                 return 0;
             }
 
-            return (a.Point.X < b.Point.X) ? -1 : 1;
+            return delta.X < 0 ? -1 : 1;
         }
     }
 }

@@ -64,13 +64,7 @@ internal static class SelfIntersectionRemover
 
         // Normalize orientation so the union uses positive fill semantics consistently.
         Polygon prepared = PreparePositiveFillInput(polygon);
-        Polygon result = UnionWithClipper(prepared);
-        if (result.Count == 0)
-        {
-            return [];
-        }
-
-        return result;
+        return UnionWithClipper(prepared);
     }
 
     /// <summary>
@@ -93,11 +87,13 @@ internal static class SelfIntersectionRemover
         for (int i = 0; i < count; i++)
         {
             Contour contour = polygon[i];
-            if (contour.ParentIndex != null || contour.HoleCount > 0)
+            if (contour.ParentIndex == null && contour.HoleCount <= 0)
             {
-                hasHierarchy = true;
-                break;
+                continue;
             }
+
+            hasHierarchy = true;
+            break;
         }
 
         if (hasHierarchy)
