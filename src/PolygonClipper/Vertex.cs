@@ -99,7 +99,8 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <param name="right">The second vertex.</param>
     /// <returns>The vertex that results from dividing <paramref name="left" /> by <paramref name="right" />.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Vertex operator /(in Vertex left, in Vertex right) => AsVertexUnsafe(AsVector128Unsafe(left) / AsVector128Unsafe(right));
+    public static Vertex operator /(in Vertex left, in Vertex right)
+        => AsVertexUnsafe(AsVector128Unsafe(left) / AsVector128Unsafe(right));
 
     /// <summary>
     /// Divides the specified vertex by a specified scalar value.
@@ -108,7 +109,8 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <param name="right">The scalar value.</param>
     /// <returns>The result of the division.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Vertex operator /(in Vertex left, double right) => AsVertexUnsafe(AsVector128Unsafe(left) / right);
+    public static Vertex operator /(in Vertex left, double right)
+        => AsVertexUnsafe(AsVector128Unsafe(left) / right);
 
     /// <summary>
     /// Divides the specified vertex by the specified scalar value.
@@ -141,6 +143,7 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <param name="a">The first vertex.</param>
     /// <param name="b">The second vertex.</param>
     /// <returns>The <see cref="double"/> dot product.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static double Dot(in Vertex a, in Vertex b)
     {
         Vector128<double> a128 = AsVector128Unsafe(a);
@@ -154,15 +157,16 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <param name="a">The first vertex.</param>
     /// <param name="b">The second vertex.</param>
     /// <returns>The <see cref="double"/> cross product.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static double Cross(in Vertex a, in Vertex b)
         => (a.X * b.Y) - (a.Y * b.X);
 
     /// <summary>Computes the Euclidean distance between the two given vertices.</summary>
-    /// <param name="value1">The first vertex.</param>
-    /// <param name="value2">The second vertex.</param>
+    /// <param name="a">The first vertex.</param>
+    /// <param name="b">The second vertex.</param>
     /// <returns>The distance.</returns>
-    public static double Distance(in Vertex value1, in Vertex value2)
-        => double.Sqrt(DistanceSquared(value1, value2));
+    public static double Distance(in Vertex a, in Vertex b)
+        => double.Sqrt(DistanceSquared(a, b));
 
     /// <summary>Returns the Euclidean distance squared between two specified vertices.</summary>
     /// <param name="a">The first vertex.</param>

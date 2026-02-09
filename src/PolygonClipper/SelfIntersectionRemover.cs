@@ -1818,7 +1818,7 @@ internal static class SelfIntersectionRemover
         {
             if (IsCollinear(op2!.Prev.Point, op2.Point, op2.Next.Point) &&
                 (ArePointsClose(op2.Point, op2.Prev.Point) || ArePointsClose(op2.Point, op2.Next.Point) || !preserveCollinear ||
-                 (DotProduct(op2.Prev.Point, op2.Point, op2.Next.Point) < 0)))
+                 (PolygonUtilities.Dot(op2.Prev.Point, op2.Point, op2.Next.Point) < 0)))
             {
                 bool removedStart = op2 == currentStart;
                 op2 = DisposeNode(op2);
@@ -1953,13 +1953,6 @@ internal static class SelfIntersectionRemover
         double distance = cross / Math.Sqrt(lenSq);
         return distance <= 1e-6;
     }
-
-    /// <summary>
-    /// Computes the dot product of two segments sharing the middle vertex.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static double DotProduct(Vertex pt1, Vertex pt2, Vertex pt3)
-        => Vertex.Dot(pt2 - pt1, pt3 - pt2);
 
     /// <summary>
     /// Checks whether two vertices are almost coincident using a tight epsilon.

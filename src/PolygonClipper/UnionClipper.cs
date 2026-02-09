@@ -218,8 +218,7 @@ internal sealed class UnionClipper
         OutputPoint op2 = op;
         do
         {
-            area += (double)(op2.Prev.Point.Y + op2.Point.Y) *
-                (op2.Prev.Point.X - op2.Point.X);
+            area += Vertex.Cross(op2.Prev.Point, op2.Point);
             op2 = op2.Next!;
         }
         while (op2 != op);
@@ -622,7 +621,7 @@ internal sealed class UnionClipper
         }
 
         // get the turning direction  a1.Top, a2.Bot, a2.Top
-        int d = PolygonUtilities.CrossProductSign(resident.Top, newcomer.Bot, newcomer.Top);
+        int d = PolygonUtilities.CrossSign(resident.Top, newcomer.Bot, newcomer.Top);
         if (d != 0)
         {
             return d < 0;
@@ -634,7 +633,7 @@ internal sealed class UnionClipper
         // the direction they're about to turn
         if (!resident.IsMaxima && (resident.Top.Y > newcomer.Top.Y))
         {
-            return PolygonUtilities.CrossProductSign(
+            return PolygonUtilities.CrossSign(
                 newcomer.Bot,
                 resident.Top,
                 resident.NextVertex.Point) <= 0;
@@ -642,7 +641,7 @@ internal sealed class UnionClipper
 
         if (!newcomer.IsMaxima && (newcomer.Top.Y > resident.Top.Y))
         {
-            return PolygonUtilities.CrossProductSign(
+            return PolygonUtilities.CrossSign(
                 newcomer.Bot,
                 newcomer.Top,
                 newcomer.NextVertex.Point) >= 0;
@@ -671,7 +670,7 @@ internal sealed class UnionClipper
         }
 
         // compare turning direction of the alternate bound
-        return (PolygonUtilities.CrossProductSign(
+        return (PolygonUtilities.CrossSign(
             resident.PrevPrevVertex.Point,
             newcomer.Bot,
             newcomer.PrevPrevVertex.Point) > 0) == newcomerIsLeft;
@@ -2717,7 +2716,7 @@ internal sealed class UnionClipper
                 }
                 else
                 {
-                    int d = PolygonUtilities.CrossProductSign(op2.Prev.Point, op2.Point, pt);
+                    int d = PolygonUtilities.CrossSign(op2.Prev.Point, op2.Point, pt);
                     if (d == 0)
                     {
                         return ClipperPointInPolygonResult.IsOn;
@@ -2740,7 +2739,7 @@ internal sealed class UnionClipper
         }
 
         {
-            int d = PolygonUtilities.CrossProductSign(op2.Prev.Point, op2.Point, pt);
+            int d = PolygonUtilities.CrossSign(op2.Prev.Point, op2.Point, pt);
             if (d == 0)
             {
                 return ClipperPointInPolygonResult.IsOn;
@@ -2940,7 +2939,7 @@ internal sealed class UnionClipper
             // NB if preserveCollinear == true, then only remove 180 deg. spikes
             if (PolygonUtilities.IsCollinear(op2!.Prev.Point, op2.Point, op2.Next!.Point) &&
                 (PolygonUtilities.PointEquals(op2.Point, op2.Prev.Point) || PolygonUtilities.PointEquals(op2.Point, op2.Next.Point) || !this.PreserveCollinear ||
-                (PolygonUtilities.DotProduct(op2.Prev.Point, op2.Point, op2.Next.Point) < 0)))
+                (PolygonUtilities.Dot(op2.Prev.Point, op2.Point, op2.Next.Point) < 0)))
             {
                 if (op2 == outputRecord.Points)
                 {

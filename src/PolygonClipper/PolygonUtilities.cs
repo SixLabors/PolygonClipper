@@ -45,12 +45,6 @@ internal static class PolygonUtilities
         => ((b.X - a.X) * (c.X - b.X)) + ((b.Y - a.Y) * (c.Y - b.Y));
 
     /// <summary>
-    /// Returns the dot product of the vectors AB and BC.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static double DotProduct(in Vertex a, in Vertex b, in Vertex c) => Dot(a, b, c);
-
-    /// <summary>
     /// Returns the cross product of the vectors AB and BC.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -71,12 +65,6 @@ internal static class PolygonUtilities
 
         return cross > 0 ? 1 : -1;
     }
-
-    /// <summary>
-    /// Returns the sign of the cross product of the vectors AB and BC.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static int CrossProductSign(in Vertex a, in Vertex b, in Vertex c) => CrossSign(a, b, c);
 
     /// <summary>
     /// Returns true when three vertices are collinear.
@@ -125,16 +113,16 @@ internal static class PolygonUtilities
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static double PerpendicularDistanceSquared(in Vertex point, in Vertex line1, in Vertex line2)
     {
-        double a = point.X - line1.X;
-        double b = point.Y - line1.Y;
-        double c = line2.X - line1.X;
-        double d = line2.Y - line1.Y;
-        if (c == 0D && d == 0D)
+        Vertex toPoint = point - line1;
+        Vertex direction = line2 - line1;
+        double lengthSquared = Vertex.Dot(direction, direction);
+        if (lengthSquared == 0D)
         {
             return 0D;
         }
 
-        return ((a * d) - (c * b)) * ((a * d) - (c * b)) / ((c * c) + (d * d));
+        double cross = Vertex.Cross(toPoint, direction);
+        return (cross * cross) / lengthSquared;
     }
 
     /// <summary>
@@ -147,18 +135,16 @@ internal static class PolygonUtilities
         in Vertex b2,
         out Vertex intersection)
     {
-        double dy1 = a2.Y - a1.Y;
-        double dx1 = a2.X - a1.X;
-        double dy2 = b2.Y - b1.Y;
-        double dx2 = b2.X - b1.X;
-        double det = (dy1 * dx2) - (dy2 * dx1);
+        Vertex d1 = a2 - a1;
+        Vertex d2 = b2 - b1;
+        double det = Vertex.Cross(d2, d1);
         if (IsAlmostZero(det))
         {
             intersection = default;
             return false;
         }
 
-        double t = (((a1.X - b1.X) * dy2) - ((a1.Y - b1.Y) * dx2)) / det;
+        double t = Vertex.Cross(a1 - b1, d2) / det;
         if (t <= 0D || IsAlmostZero(t))
         {
             intersection = a1;
@@ -169,7 +155,6 @@ internal static class PolygonUtilities
         }
         else
         {
-            intersection = new Vertex(a1.X + (t * dx1), a1.Y + (t * dy1));
         }
 
         return true;
@@ -180,14 +165,13 @@ internal static class PolygonUtilities
     /// </summary>
     public static Vertex ClosestPointOnSegment(in Vertex point, in Vertex seg1, in Vertex seg2)
     {
-        if (IsAlmostZero(seg1.X - seg2.X) && IsAlmostZero(seg1.Y - seg2.Y))
+        Vertex direction = seg2 - seg1;
+        if (IsAlmostZero(direction.X) && IsAlmostZero(direction.Y))
         {
             return seg1;
         }
 
-        double dx = seg2.X - seg1.X;
-        double dy = seg2.Y - seg1.Y;
-        double q = (((point.X - seg1.X) * dx) + ((point.Y - seg1.Y) * dy)) / ((dx * dx) + (dy * dy));
+        double q = Vertex.Dot(point - seg1, direction) / Vertex.Dot(direction, direction);
         if (q < 0D)
         {
             q = 0D;
@@ -197,7 +181,7 @@ internal static class PolygonUtilities
             q = 1D;
         }
 
-        return new Vertex(seg1.X + (q * dx), seg1.Y + (q * dy));
+        return seg1 + (q * direction);
     }
 
     /// <summary>
@@ -205,11 +189,9 @@ internal static class PolygonUtilities
     /// </summary>
     public static bool SegmentsIntersect(in Vertex a1, in Vertex a2, in Vertex b1, in Vertex b2, bool inclusive = false)
     {
-        double dy1 = a2.Y - a1.Y;
-        double dx1 = a2.X - a1.X;
-        double dy2 = b2.Y - b1.Y;
-        double dx2 = b2.X - b1.X;
-        double cp = (dy1 * dx2) - (dy2 * dx1);
+        Vertex d1 = a2 - a1;
+        Vertex d2 = b2 - b1;
+        double cp = Vertex.Cross(d2, d1);
         if (IsAlmostZero(cp))
         {
             return false;
@@ -217,7 +199,7 @@ internal static class PolygonUtilities
 
         if (inclusive)
         {
-            double t = ((a1.X - b1.X) * dy2) - ((a1.Y - b1.Y) * dx2);
+            double t = Vertex.Cross(a1 - b1, d2);
             if (IsAlmostZero(t))
             {
                 return true;
@@ -235,7 +217,7 @@ internal static class PolygonUtilities
                 return false;
             }
 
-            t = ((a1.X - b1.X) * dy1) - ((a1.Y - b1.Y) * dx1);
+            t = Vertex.Cross(a1 - b1, d1);
             if (IsAlmostZero(t))
             {
                 return true;
@@ -249,7 +231,7 @@ internal static class PolygonUtilities
             return cp < 0D && t >= cp;
         }
 
-        double t2 = ((a1.X - b1.X) * dy2) - ((a1.Y - b1.Y) * dx2);
+        double t2 = Vertex.Cross(a1 - b1, d2);
         if (IsAlmostZero(t2))
         {
             return false;
@@ -267,7 +249,7 @@ internal static class PolygonUtilities
             return false;
         }
 
-        t2 = ((a1.X - b1.X) * dy1) - ((a1.Y - b1.Y) * dx1);
+        t2 = Vertex.Cross(a1 - b1, d1);
         if (IsAlmostZero(t2))
         {
             return false;
