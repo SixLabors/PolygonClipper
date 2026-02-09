@@ -72,9 +72,9 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ClipVertex? GetCurrentYMaximaVertex(ActiveEdge ae)
+    private static SweepVertex? GetCurrentYMaximaVertex(ActiveEdge ae)
     {
-        ClipVertex? result = ae.VertexTop;
+        SweepVertex? result = ae.VertexTop;
         if (ae.WindDelta > 0)
         {
             while (PolygonUtilities.IsAlmostZero(result!.Next!.Point.Y - result.Point.Y))
@@ -262,7 +262,7 @@ internal sealed class SelfIntersectionUnionClipper
     {
         if (!this.isSortedMinimaList)
         {
-            this.minimaList.Sort(default(LocalMinimaComparer));
+            this.minimaList.Sort(new LocalMinimaComparer());
             this.isSortedMinimaList = true;
         }
 
@@ -331,7 +331,7 @@ internal sealed class SelfIntersectionUnionClipper
     /// Registers a local minima vertex once for the sweep.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void AddLocalMinima(ClipVertex vertex, List<LocalMinima> minimaList)
+    private static void AddLocalMinima(SweepVertex vertex, List<LocalMinima> minimaList)
     {
         // Make sure the ClipVertex is added only once.
         if ((vertex.Flags & VertexFlags.LocalMin) != VertexFlags.None)
@@ -359,9 +359,9 @@ internal sealed class SelfIntersectionUnionClipper
 
         foreach (Contour path in paths)
         {
-            ClipVertex? v0 = null;
-            ClipVertex? prevVertex = null;
-            ClipVertex? currVertex;
+            SweepVertex? v0 = null;
+            SweepVertex? prevVertex = null;
+            SweepVertex? currVertex;
             foreach (Vertex pt in path)
             {
                 if (v0 == null)
@@ -1446,7 +1446,7 @@ internal sealed class SelfIntersectionUnionClipper
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool ResetHorizontalDirection(
         ActiveEdge horizontalEdge,
-        ClipVertex? vertexMax,
+        SweepVertex? vertexMax,
         out double leftX,
         out double rightX)
     {
@@ -1541,7 +1541,7 @@ internal sealed class SelfIntersectionUnionClipper
     {
         double y = horizontalEdge.Bottom.Y;
 
-        ClipVertex? vertex_max = GetCurrentYMaximaVertex(horizontalEdge);
+        SweepVertex? vertex_max = GetCurrentYMaximaVertex(horizontalEdge);
 
         bool isLeftToRight =
             ResetHorizontalDirection(horizontalEdge, vertex_max, out double leftX, out double rightX);
@@ -2133,7 +2133,7 @@ internal sealed class SelfIntersectionUnionClipper
     {
         if (op == op.Next || op.Prev == op.Next)
         {
-            return PointInPolygonResult.IsOutside;
+            return PointInPolygonResult.Outside;
         }
 
         OutputPoint op2 = op;
@@ -2151,7 +2151,7 @@ internal sealed class SelfIntersectionUnionClipper
         // Not a proper polygon.
         if (op.Point.Y == pt.Y)
         {
-            return PointInPolygonResult.IsOutside;
+            return PointInPolygonResult.Outside;
         }
 
         // must be above or below to get here
@@ -2189,7 +2189,7 @@ internal sealed class SelfIntersectionUnionClipper
                 if (op2.Point.X == pt.X || (op2.Point.Y == op2.Prev.Point.Y &&
                     (pt.X < op2.Prev.Point.X) != (pt.X < op2.Point.X)))
                 {
-                    return PointInPolygonResult.IsOn;
+                    return PointInPolygonResult.On;
                 }
 
                 op2 = op2.Next!;
@@ -2213,7 +2213,7 @@ internal sealed class SelfIntersectionUnionClipper
                     int d = PolygonUtilities.CrossSign(op2.Prev.Point, op2.Point, pt);
                     if (d == 0)
                     {
-                        return PointInPolygonResult.IsOn;
+                        return PointInPolygonResult.On;
                     }
 
                     if ((d < 0) == isAbove)
@@ -2229,14 +2229,14 @@ internal sealed class SelfIntersectionUnionClipper
 
         if (isAbove == startingAbove)
         {
-            return val == 0 ? PointInPolygonResult.IsOutside : PointInPolygonResult.IsInside;
+            return val == 0 ? PointInPolygonResult.Outside : PointInPolygonResult.Inside;
         }
 
         {
             int d = PolygonUtilities.CrossSign(op2.Prev.Point, op2.Point, pt);
             if (d == 0)
             {
-                return PointInPolygonResult.IsOn;
+                return PointInPolygonResult.On;
             }
 
             if ((d < 0) == isAbove)
@@ -2245,34 +2245,34 @@ internal sealed class SelfIntersectionUnionClipper
             }
         }
 
-        return val == 0 ? PointInPolygonResult.IsOutside : PointInPolygonResult.IsInside;
+        return val == 0 ? PointInPolygonResult.Outside : PointInPolygonResult.Inside;
     }
 
     private static bool Path1InsidePath2(OutputPoint op1, OutputPoint op2)
     {
         // we need to make some accommodation for rounding errors
         // so we won't jump if the first ClipVertex is found outside
-        PointInPolygonResult pip = PointInPolygonResult.IsOn;
+        PointInPolygonResult pip = PointInPolygonResult.On;
         OutputPoint op = op1;
         do
         {
             switch (PointInOpPolygon(op.Point, op2))
             {
-                case PointInPolygonResult.IsOutside:
-                    if (pip == PointInPolygonResult.IsOutside)
+                case PointInPolygonResult.Outside:
+                    if (pip == PointInPolygonResult.Outside)
                     {
                         return false;
                     }
 
-                    pip = PointInPolygonResult.IsOutside;
+                    pip = PointInPolygonResult.Outside;
                     break;
-                case PointInPolygonResult.IsInside:
-                    if (pip == PointInPolygonResult.IsInside)
+                case PointInPolygonResult.Inside:
+                    if (pip == PointInPolygonResult.Inside)
                     {
                         return true;
                     }
 
-                    pip = PointInPolygonResult.IsInside;
+                    pip = PointInPolygonResult.Inside;
                     break;
                 default:
                     break;

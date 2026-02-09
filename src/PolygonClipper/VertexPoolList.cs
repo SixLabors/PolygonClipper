@@ -10,19 +10,19 @@ namespace SixLabors.PolygonClipper;
 /// <summary>
 /// Pool-backed list of clip vertices reused across clipping operations.
 /// </summary>
-internal sealed class VertexPoolList : PooledList<ClipVertex>
+internal sealed class VertexPoolList : PooledList<SweepVertex>
 {
     /// <summary>
     /// Adds or reuses a clip vertex initialized with the given data.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ClipVertex Add(Vertex point, VertexFlags flags, ClipVertex? prev)
+    public SweepVertex Add(Vertex point, VertexFlags flags, SweepVertex? prev)
     {
         this.TryGrow();
-        ClipVertex poolVertex = this.Items[this.Size];
+        SweepVertex poolVertex = this.Items[this.Size];
         if (poolVertex == null)
         {
-            poolVertex = new ClipVertex(point, flags, prev);
+            poolVertex = new SweepVertex(point, flags, prev);
             this.Items[this.Size] = poolVertex;
         }
         else

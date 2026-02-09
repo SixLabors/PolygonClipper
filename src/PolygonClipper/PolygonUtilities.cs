@@ -326,7 +326,7 @@ internal static class PolygonUtilities
         int start = 0;
         if (len < 3)
         {
-            return PointInPolygonResult.IsOutside;
+            return PointInPolygonResult.Outside;
         }
 
         while (start < len && IsAlmostZero(polygon[start].Y - point.Y))
@@ -336,7 +336,7 @@ internal static class PolygonUtilities
 
         if (start == len)
         {
-            return PointInPolygonResult.IsOutside;
+            return PointInPolygonResult.Outside;
         }
 
         bool isAbove = polygon[start].Y < point.Y;
@@ -385,7 +385,7 @@ internal static class PolygonUtilities
                 if (IsAlmostZero(curr.X - point.X) ||
                     (IsAlmostZero(curr.Y - prev.Y) && ((point.X < prev.X) != (point.X < curr.X))))
                 {
-                    return PointInPolygonResult.IsOn;
+                    return PointInPolygonResult.On;
                 }
 
                 i++;
@@ -410,7 +410,7 @@ internal static class PolygonUtilities
                 int cps2 = CrossSign(prev, curr, point);
                 if (cps2 == 0)
                 {
-                    return PointInPolygonResult.IsOn;
+                    return PointInPolygonResult.On;
                 }
 
                 if ((cps2 < 0) == isAbove)
@@ -425,7 +425,7 @@ internal static class PolygonUtilities
 
         if (isAbove == startingAbove)
         {
-            return val == 0 ? PointInPolygonResult.IsOutside : PointInPolygonResult.IsInside;
+            return val == 0 ? PointInPolygonResult.Outside : PointInPolygonResult.Inside;
         }
 
         if (i == len)
@@ -439,7 +439,7 @@ internal static class PolygonUtilities
 
         if (cps == 0)
         {
-            return PointInPolygonResult.IsOn;
+            return PointInPolygonResult.On;
         }
 
         if ((cps < 0) == isAbove)
@@ -447,7 +447,7 @@ internal static class PolygonUtilities
             val = 1 - val;
         }
 
-        return val == 0 ? PointInPolygonResult.IsOutside : PointInPolygonResult.IsInside;
+        return val == 0 ? PointInPolygonResult.Outside : PointInPolygonResult.Inside;
     }
 
     /// <summary>
@@ -455,26 +455,26 @@ internal static class PolygonUtilities
     /// </summary>
     public static bool PathContainsPath(Contour inner, Contour outer)
     {
-        PointInPolygonResult pip = PointInPolygonResult.IsOn;
+        PointInPolygonResult pip = PointInPolygonResult.On;
         for (int i = 0; i < inner.Count; i++)
         {
             switch (PointInPolygon(inner[i], outer))
             {
-                case PointInPolygonResult.IsOutside:
-                    if (pip == PointInPolygonResult.IsOutside)
+                case PointInPolygonResult.Outside:
+                    if (pip == PointInPolygonResult.Outside)
                     {
                         return false;
                     }
 
-                    pip = PointInPolygonResult.IsOutside;
+                    pip = PointInPolygonResult.Outside;
                     break;
-                case PointInPolygonResult.IsInside:
-                    if (pip == PointInPolygonResult.IsInside)
+                case PointInPolygonResult.Inside:
+                    if (pip == PointInPolygonResult.Inside)
                     {
                         return true;
                     }
 
-                    pip = PointInPolygonResult.IsInside;
+                    pip = PointInPolygonResult.Inside;
                     break;
                 default:
                     break;
@@ -482,7 +482,7 @@ internal static class PolygonUtilities
         }
 
         Vertex midpoint = GetBoundsMidPoint(inner);
-        return PointInPolygon(midpoint, outer) != PointInPolygonResult.IsOutside;
+        return PointInPolygon(midpoint, outer) != PointInPolygonResult.Outside;
     }
 
     /// <summary>

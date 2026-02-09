@@ -77,7 +77,7 @@ internal sealed class ActiveEdge
     /// <summary>
     /// Gets or sets the current top vertex for this edge's bound.
     /// </summary>
-    public ClipVertex? VertexTop { get; set; }
+    public SweepVertex? VertexTop { get; set; }
 
     /// <summary>
     /// Gets or sets the local minima that spawned this edge.
@@ -127,12 +127,12 @@ internal sealed class ActiveEdge
     /// <summary>
     /// Gets the next input vertex along the bound in the winding direction.
     /// </summary>
-    public ClipVertex NextVertex => this.WindDelta > 0 ? this.VertexTop!.Next! : this.VertexTop!.Prev!;
+    public SweepVertex NextVertex => this.WindDelta > 0 ? this.VertexTop!.Next! : this.VertexTop!.Prev!;
 
     /// <summary>
     /// Gets the vertex two steps behind the current top, used for turn tests.
     /// </summary>
-    public ClipVertex PrevPrevVertex => this.WindDelta > 0 ? this.VertexTop!.Prev!.Prev! : this.VertexTop!.Next!.Next!;
+    public SweepVertex PrevPrevVertex => this.WindDelta > 0 ? this.VertexTop!.Prev!.Prev! : this.VertexTop!.Next!.Next!;
 
     /// <summary>
     /// Finds the previous hot edge in the AEL, if any.

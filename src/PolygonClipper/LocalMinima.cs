@@ -11,12 +11,12 @@ internal readonly struct LocalMinima : IEquatable<LocalMinima>
     /// <summary>
     /// Initializes a new instance of the <see cref="LocalMinima"/> struct.
     /// </summary>
-    internal LocalMinima(ClipVertex vertex) => this.Vertex = vertex;
+    internal LocalMinima(SweepVertex vertex) => this.Vertex = vertex;
 
     /// <summary>
     /// Gets the vertex associated with this local minima.
     /// </summary>
-    internal ClipVertex Vertex { get; }
+    internal SweepVertex Vertex { get; }
 
     public static bool operator ==(LocalMinima lm1, LocalMinima lm2) => lm1.Equals(lm2);
 
@@ -32,8 +32,8 @@ internal readonly struct LocalMinima : IEquatable<LocalMinima>
 /// <summary>
 /// Orders local minima so higher Y-values are processed first during the sweep.
 /// </summary>
-internal struct LocalMinimaComparer : IComparer<LocalMinima>
+internal sealed class LocalMinimaComparer : IComparer<LocalMinima>
 {
-    public readonly int Compare(LocalMinima locMin1, LocalMinima locMin2)
+    public int Compare(LocalMinima locMin1, LocalMinima locMin2)
         => locMin2.Vertex.Point.Y.CompareTo(locMin1.Vertex.Point.Y);
 }

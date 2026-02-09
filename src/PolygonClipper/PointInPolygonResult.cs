@@ -11,15 +11,15 @@ internal enum PointInPolygonResult
     /// <summary>
     /// The point lies on the polygon boundary.
     /// </summary>
-    IsOn = 0,
+    On = 0,
 
     /// <summary>
     /// The point lies strictly inside the polygon.
     /// </summary>
-    IsInside = 1,
+    Inside = 1,
 
     /// <summary>
     /// The point lies outside the polygon.
     /// </summary>
-    IsOutside = 2
+    Outside = 2
 }

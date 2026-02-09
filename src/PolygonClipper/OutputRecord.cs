@@ -11,52 +11,52 @@ internal sealed class OutputRecord
     /// <summary>
     /// Gets or sets the stable index assigned when the record is pooled.
     /// </summary>
-    internal int Index { get; set; }
+    public int Index { get; set; }
 
     /// <summary>
     /// Gets or sets the number of output points in the contour.
     /// </summary>
-    internal int OutputPointCount { get; set; }
+    public int OutputPointCount { get; set; }
 
     /// <summary>
     /// Gets or sets the containing output record, if any.
     /// </summary>
-    internal OutputRecord? Owner { get; set; }
+    public OutputRecord? Owner { get; set; }
 
     /// <summary>
     /// Gets or sets the front edge that defines the output orientation.
     /// </summary>
-    internal ActiveEdge? FrontEdge { get; set; }
+    public ActiveEdge? FrontEdge { get; set; }
 
     /// <summary>
     /// Gets or sets the back edge that defines the output orientation.
     /// </summary>
-    internal ActiveEdge? BackEdge { get; set; }
+    public ActiveEdge? BackEdge { get; set; }
 
     /// <summary>
     /// Gets or sets the circular linked list of output points.
     /// </summary>
-    internal OutputPoint? Points { get; set; }
+    public OutputPoint? Points { get; set; }
 
     /// <summary>
     /// Gets or sets the cached bounds for ownership tests.
     /// </summary>
-    internal Box2 Bounds { get; set; }
+    public Box2 Bounds { get; set; }
 
     /// <summary>
     /// Gets or sets the temporary contour used during bounds checks.
     /// </summary>
-    internal Contour Path { get; set; } = [];
+    public Contour Path { get; set; } = [];
 
     /// <summary>
     /// Gets or sets split indices used to resolve complex self-intersections.
     /// </summary>
-    internal List<int>? Splits { get; set; }
+    public List<int>? Splits { get; set; }
 
     /// <summary>
     /// Gets or sets the cached split ownership used to avoid recursion.
     /// </summary>
-    internal OutputRecord? RecursiveSplit { get; set; }
+    public OutputRecord? RecursiveSplit { get; set; }
 }
 
 /// <summary>
@@ -67,7 +67,7 @@ internal sealed class OutputPoint
     /// <summary>
     /// Initializes a new instance of the <see cref="OutputPoint"/> class.
     /// </summary>
-    internal OutputPoint(Vertex point, OutputRecord outputRecord)
+    public OutputPoint(Vertex point, OutputRecord outputRecord)
     {
         this.Point = point;
         this.OutputRecord = outputRecord;
@@ -79,27 +79,27 @@ internal sealed class OutputPoint
     /// <summary>
     /// Gets or sets the vertex coordinate.
     /// </summary>
-    internal Vertex Point { get; set; }
+    public Vertex Point { get; set; }
 
     /// <summary>
     /// Gets or sets the next point in the linked list.
     /// </summary>
-    internal OutputPoint? Next { get; set; }
+    public OutputPoint? Next { get; set; }
 
     /// <summary>
     /// Gets or sets the previous point in the linked list.
     /// </summary>
-    internal OutputPoint Prev { get; set; }
+    public OutputPoint Prev { get; set; }
 
     /// <summary>
     /// Gets or sets the owning output record.
     /// </summary>
-    internal OutputRecord OutputRecord { get; set; }
+    public OutputRecord OutputRecord { get; set; }
 
     /// <summary>
     /// Gets or sets the horizontal segment reference used for joins.
     /// </summary>
-    internal HorizontalSegment? HorizontalSegment { get; set; }
+    public HorizontalSegment? HorizontalSegment { get; set; }
 }
 
 /// <summary>
@@ -110,7 +110,7 @@ internal sealed class HorizontalSegment
     /// <summary>
     /// Initializes a new instance of the <see cref="HorizontalSegment"/> class.
     /// </summary>
-    internal HorizontalSegment(OutputPoint op)
+    public HorizontalSegment(OutputPoint op)
     {
         this.LeftPoint = op;
         this.RightPoint = null;
@@ -120,17 +120,17 @@ internal sealed class HorizontalSegment
     /// <summary>
     /// Gets or sets the left-most point of the segment.
     /// </summary>
-    internal OutputPoint? LeftPoint { get; set; }
+    public OutputPoint? LeftPoint { get; set; }
 
     /// <summary>
     /// Gets or sets the right-most point of the segment.
     /// </summary>
-    internal OutputPoint? RightPoint { get; set; }
+    public OutputPoint? RightPoint { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether the segment runs left-to-right.
     /// </summary>
-    internal bool LeftToRight { get; set; }
+    public bool LeftToRight { get; set; }
 }
 
 /// <summary>
@@ -141,7 +141,7 @@ internal sealed class HorizontalJoin
     /// <summary>
     /// Initializes a new instance of the <see cref="HorizontalJoin"/> class.
     /// </summary>
-    internal HorizontalJoin(OutputPoint leftToRight, OutputPoint rightToLeft)
+    public HorizontalJoin(OutputPoint leftToRight, OutputPoint rightToLeft)
     {
         this.LeftToRight = leftToRight;
         this.RightToLeft = rightToLeft;
@@ -150,10 +150,10 @@ internal sealed class HorizontalJoin
     /// <summary>
     /// Gets or sets the left-to-right point of the join.
     /// </summary>
-    internal OutputPoint? LeftToRight { get; set; }
+    public OutputPoint? LeftToRight { get; set; }
 
     /// <summary>
     /// Gets or sets the right-to-left point of the join.
     /// </summary>
-    internal OutputPoint? RightToLeft { get; set; }
+    public OutputPoint? RightToLeft { get; set; }
 }

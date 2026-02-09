@@ -256,7 +256,7 @@ internal static class SelfIntersectionRemover
                         continue;
                     }
 
-                    if (PolygonUtilities.PointInPolygon(testPoint, subject[j]) != PointInPolygonResult.IsInside)
+                    if (PolygonUtilities.PointInPolygon(testPoint, subject[j]) != PointInPolygonResult.Inside)
                     {
                         continue;
                     }
