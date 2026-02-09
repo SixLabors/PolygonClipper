@@ -47,6 +47,10 @@ internal static class SelfIntersectionRemover
     [ThreadStatic]
     private static List<Contour>? cachedSubjectPaths;
 
+    // Cached source indices to keep subject and source contours aligned.
+    [ThreadStatic]
+    private static List<int>? cachedSubjectIndices;
+
     /// <summary>
     /// Processes a polygon to remove self-intersections using the positive fill rule.
     /// </summary>
@@ -62,177 +66,7 @@ internal static class SelfIntersectionRemover
             return [];
         }
 
-        // Normalize orientation so the union uses positive fill semantics consistently.
-        EnsureClosedContours(polygon);
-        Polygon prepared = PreparePositiveFillInput(polygon);
-        return UnionWithClipper(prepared);
-    }
-
-    /// <summary>
-    /// Ensures contour orientation matches the positive fill rule (externals counterclockwise, holes clockwise).
-    /// </summary>
-    /// <param name="polygon">The polygon to prepare.</param>
-    /// <returns>The original polygon when no changes are needed, otherwise a reoriented copy.</returns>
-    private static Polygon PreparePositiveFillInput(Polygon polygon)
-    {
-        int count = polygon.Count;
-        if (count <= 1)
-        {
-            return polygon;
-        }
-
-        int[] parentIndices = new int[count];
-        Array.Fill(parentIndices, -1);
-
-        bool hasHierarchy = false;
-        for (int i = 0; i < count; i++)
-        {
-            Contour contour = polygon[i];
-            if (contour.ParentIndex == null && contour.HoleCount <= 0)
-            {
-                continue;
-            }
-
-            hasHierarchy = true;
-            break;
-        }
-
-        if (hasHierarchy)
-        {
-            for (int i = 0; i < count; i++)
-            {
-                parentIndices[i] = polygon[i].ParentIndex ?? -1;
-            }
-        }
-        else
-        {
-            Box2[] bounds = new Box2[count];
-            double[] absAreas = new double[count];
-            for (int i = 0; i < count; i++)
-            {
-                Contour contour = polygon[i];
-                bounds[i] = contour.GetBoundingBox();
-                absAreas[i] = Math.Abs(GetSignedArea(contour));
-
-                if (HasSelfIntersection(contour))
-                {
-                    // Avoid reorienting inputs that are already self-intersecting.
-                    return polygon;
-                }
-            }
-
-            for (int i = 0; i < count; i++)
-            {
-                for (int j = i + 1; j < count; j++)
-                {
-                    if (ContoursIntersect(polygon[i], polygon[j], bounds[i], bounds[j]))
-                    {
-                        // Contours overlap; keep original orientation to avoid changing fill behavior.
-                        return polygon;
-                    }
-                }
-            }
-
-            for (int i = 0; i < count; i++)
-            {
-                Contour contour = polygon[i];
-                if (contour.Count == 0)
-                {
-                    continue;
-                }
-
-                // Use a stable vertex sample for containment checks.
-                Vertex testPoint = GetContourTestPoint(contour);
-                double smallestArea = double.PositiveInfinity;
-                int parentIndex = -1;
-
-                for (int j = 0; j < count; j++)
-                {
-                    if (i == j || !bounds[j].Contains(testPoint))
-                    {
-                        continue;
-                    }
-
-                    if (PolygonUtilities.PointInPolygon(testPoint, polygon[j]) != ClipperPointInPolygonResult.IsInside)
-                    {
-                        continue;
-                    }
-
-                    if (absAreas[j] < smallestArea)
-                    {
-                        smallestArea = absAreas[j];
-                        parentIndex = j;
-                    }
-                }
-
-                parentIndices[i] = parentIndex;
-            }
-        }
-
-        int[] depths = new int[count];
-        bool needsCopy = false;
-        for (int i = 0; i < count; i++)
-        {
-            int depth = GetDepth(i, parentIndices);
-            depths[i] = depth;
-
-            Contour contour = polygon[i];
-            if (contour.Count == 0)
-            {
-                continue;
-            }
-
-            bool shouldBeCounterClockwise = (depth & 1) == 0;
-            if (contour.IsCounterClockwise() != shouldBeCounterClockwise)
-            {
-                needsCopy = true;
-            }
-        }
-
-        if (!needsCopy)
-        {
-            return polygon;
-        }
-
-        Polygon oriented = new(count);
-        for (int i = 0; i < count; i++)
-        {
-            Contour source = polygon[i];
-            Contour copy = new(source.Count);
-            for (int j = 0; j < source.Count; j++)
-            {
-                copy.Add(source[j]);
-            }
-
-            if ((depths[i] & 1) == 0)
-            {
-                copy.SetCounterClockwise();
-            }
-            else
-            {
-                copy.SetClockwise();
-            }
-
-            oriented.Add(copy);
-        }
-
-        return oriented;
-    }
-
-    /// <summary>
-    /// Ensures all contours are explicitly closed by repeating the first vertex at the end.
-    /// </summary>
-    /// <param name="polygon">The polygon to normalize.</param>
-    private static void EnsureClosedContours(Polygon polygon)
-    {
-        for (int i = 0; i < polygon.Count; i++)
-        {
-            Contour contour = polygon[i];
-            if (contour.Count > 0 && contour[0] != contour[^1])
-            {
-                contour.Add(contour[0]);
-            }
-        }
+        return UnionWithClipper(polygon);
     }
 
     /// <summary>
@@ -270,21 +104,200 @@ internal static class SelfIntersectionRemover
         subject.Clear();
         subject.EnsureCapacity(polygon.Count);
 
+        List<int> sourceIndices = cachedSubjectIndices ??= new List<int>(polygon.Count);
+        sourceIndices.Clear();
+        sourceIndices.EnsureCapacity(polygon.Count);
+
         List<Contour> pathPool = cachedSubjectPaths ??= new List<Contour>(polygon.Count);
         for (int i = 0; i < polygon.Count; i++)
         {
             Contour contour = polygon[i];
-            Contour path = GetPooledPath(pathPool, i, contour.Count);
-            for (int j = 0; j < contour.Count; j++)
+            if (contour.Count == 0)
             {
-                Vertex vertex = contour[j];
-                path.Add(new Vertex(vertex.X, -vertex.Y));
+                continue;
             }
 
+            bool isClosed = contour.Count > 1 && contour[0] == contour[^1];
+            int capacity = contour.Count + (isClosed ? 0 : 1);
+            int subjectIndex = subject.Count;
+            Contour path = GetPooledPath(pathPool, subjectIndex, capacity);
+            path.ParentIndex = null;
+            path.Depth = 0;
+
+            CopyContourVertices(contour, isClosed, path);
             subject.Add(path);
+            sourceIndices.Add(i);
         }
 
+        ApplyPositiveFillOrientation(polygon, subject, sourceIndices);
+
         return subject;
+    }
+
+    private static void CopyContourVertices(Contour source, bool isClosed, Contour destination)
+    {
+        if (source.Count == 0)
+        {
+            return;
+        }
+
+        for (int i = 0; i < source.Count; i++)
+        {
+            Vertex vertex = source[i];
+            destination.Add(new Vertex(vertex.X, -vertex.Y));
+        }
+
+        if (!isClosed && destination.Count > 0 && destination[^1] != destination[0])
+        {
+            destination.Add(destination[0]);
+        }
+    }
+
+    private static void ApplyPositiveFillOrientation(Polygon source, List<Contour> subject, List<int> sourceIndices)
+    {
+        bool[]? reverseFlags = BuildPositiveFillReversalFlags(source, subject, sourceIndices);
+        if (reverseFlags == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < reverseFlags.Length; i++)
+        {
+            if (reverseFlags[i])
+            {
+                subject[i].Reverse();
+            }
+        }
+    }
+
+    private static bool[]? BuildPositiveFillReversalFlags(Polygon source, List<Contour> subject, List<int> sourceIndices)
+    {
+        int count = subject.Count;
+        if (count <= 1)
+        {
+            return null;
+        }
+
+        int[] parentIndices = new int[count];
+        Array.Fill(parentIndices, -1);
+
+        bool hasHierarchy = false;
+        for (int i = 0; i < count; i++)
+        {
+            Contour contour = source[sourceIndices[i]];
+            if (contour.ParentIndex == null && contour.HoleCount <= 0)
+            {
+                continue;
+            }
+
+            hasHierarchy = true;
+            break;
+        }
+
+        if (hasHierarchy)
+        {
+            int[] sourceToSubject = new int[source.Count];
+            Array.Fill(sourceToSubject, -1);
+            for (int i = 0; i < sourceIndices.Count; i++)
+            {
+                sourceToSubject[sourceIndices[i]] = i;
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                int sourceIndex = sourceIndices[i];
+                int parentIndex = source[sourceIndex].ParentIndex ?? -1;
+                parentIndices[i] = parentIndex >= 0 && parentIndex < sourceToSubject.Length
+                    ? sourceToSubject[parentIndex]
+                    : -1;
+            }
+        }
+        else
+        {
+            Box2[] bounds = new Box2[count];
+            double[] absAreas = new double[count];
+            for (int i = 0; i < count; i++)
+            {
+                Contour contour = subject[i];
+                bounds[i] = contour.GetBoundingBox();
+                absAreas[i] = Math.Abs(GetSignedArea(contour));
+
+                if (HasSelfIntersection(contour))
+                {
+                    // Avoid reorienting inputs that are already self-intersecting.
+                    return null;
+                }
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                for (int j = i + 1; j < count; j++)
+                {
+                    if (ContoursIntersect(subject[i], subject[j], bounds[i], bounds[j]))
+                    {
+                        // Contours overlap; keep original orientation to avoid changing fill behavior.
+                        return null;
+                    }
+                }
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                Contour contour = subject[i];
+                if (contour.Count == 0)
+                {
+                    continue;
+                }
+
+                // Use a stable vertex sample for containment checks.
+                Vertex testPoint = GetContourTestPoint(contour);
+                double smallestArea = double.PositiveInfinity;
+                int parentIndex = -1;
+
+                for (int j = 0; j < count; j++)
+                {
+                    if (i == j || !bounds[j].Contains(testPoint))
+                    {
+                        continue;
+                    }
+
+                    if (PolygonUtilities.PointInPolygon(testPoint, subject[j]) != ClipperPointInPolygonResult.IsInside)
+                    {
+                        continue;
+                    }
+
+                    if (absAreas[j] < smallestArea)
+                    {
+                        smallestArea = absAreas[j];
+                        parentIndex = j;
+                    }
+                }
+
+                parentIndices[i] = parentIndex;
+            }
+        }
+
+        bool[] reverseFlags = new bool[count];
+        bool needsReversal = false;
+        for (int i = 0; i < count; i++)
+        {
+            Contour contour = subject[i];
+            if (contour.Count == 0)
+            {
+                continue;
+            }
+
+            int depth = GetDepth(i, parentIndices);
+            bool shouldBeCounterClockwise = (depth & 1) == 0;
+            bool isCounterClockwise = GetSignedArea(contour) >= 0D;
+            if (isCounterClockwise != shouldBeCounterClockwise)
+            {
+                reverseFlags[i] = true;
+                needsReversal = true;
+            }
+        }
+
+        return needsReversal ? reverseFlags : null;
     }
 
     /// <summary>
@@ -434,28 +447,28 @@ internal static class SelfIntersectionRemover
 
     private static bool HasSelfIntersection(Contour contour)
     {
-        int segmentCount = contour.Count - 1;
-        if (segmentCount < 3)
+        int vertexCount = contour.Count - 1;
+        if (vertexCount < 4)
         {
             return false;
         }
 
-        for (int i = 0; i < segmentCount; i++)
+        for (int i = 0; i < vertexCount; i++)
         {
-            Segment segmentA = new(contour[i], contour[i + 1]);
+            Segment segmentA = new(contour[i], contour[(i + 1) % vertexCount]);
             if (segmentA.IsDegenerate())
             {
                 continue;
             }
 
-            for (int j = i + 1; j < segmentCount; j++)
+            for (int j = i + 1; j < vertexCount; j++)
             {
-                if (j == i || j == i + 1 || (i == 0 && j == segmentCount - 1))
+                if (j == i || j == i + 1 || (i == 0 && j == vertexCount - 1))
                 {
                     continue;
                 }
 
-                Segment segmentB = new(contour[j], contour[j + 1]);
+                Segment segmentB = new(contour[j], contour[(j + 1) % vertexCount]);
                 if (segmentB.IsDegenerate())
                 {
                     continue;
@@ -483,7 +496,7 @@ internal static class SelfIntersectionRemover
 
         for (int i = 0; i < leftCount; i++)
         {
-            Segment leftSegment = new(left[i], left[i + 1]);
+            Segment leftSegment = new(left[i], left[(i + 1) % leftCount]);
             if (leftSegment.IsDegenerate())
             {
                 continue;
@@ -491,7 +504,7 @@ internal static class SelfIntersectionRemover
 
             for (int j = 0; j < rightCount; j++)
             {
-                Segment rightSegment = new(right[j], right[j + 1]);
+                Segment rightSegment = new(right[j], right[(j + 1) % rightCount]);
                 if (rightSegment.IsDegenerate())
                 {
                     continue;
