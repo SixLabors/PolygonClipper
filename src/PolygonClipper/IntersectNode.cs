@@ -8,7 +8,7 @@ namespace SixLabors.PolygonClipper;
 // Y coordinates to the smallest while keeping edges adjacent.
 internal readonly struct IntersectNode
 {
-    internal IntersectNode(Vertex point, Active edge1, Active edge2)
+    internal IntersectNode(Vertex point, ActiveEdge edge1, ActiveEdge edge2)
     {
         this.Point = point;
         this.Edge1 = edge1;
@@ -17,7 +17,7 @@ internal readonly struct IntersectNode
 
     internal Vertex Point { get; }
 
-    internal Active Edge1 { get; }
+    internal ActiveEdge Edge1 { get; }
 
-    internal Active Edge2 { get; }
+    internal ActiveEdge Edge2 { get; }
 }

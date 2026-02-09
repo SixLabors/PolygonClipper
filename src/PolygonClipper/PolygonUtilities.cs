@@ -27,7 +27,8 @@ internal static class PolygonUtilities
     /// Determines whether a value is almost zero.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool IsAlmostZero(double value) => Math.Abs(value) <= FloatingPointTolerance;
+    public static bool IsAlmostZero(double value)
+        => Math.Abs(value) <= FloatingPointTolerance;
 
     /// <summary>
     /// Compares two vertices for near-equality.

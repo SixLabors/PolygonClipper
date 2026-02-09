@@ -26,12 +26,12 @@ internal sealed class OutputRecord
     /// <summary>
     /// Gets or sets the front edge that defines the output orientation.
     /// </summary>
-    internal Active? FrontEdge { get; set; }
+    internal ActiveEdge? FrontEdge { get; set; }
 
     /// <summary>
     /// Gets or sets the back edge that defines the output orientation.
     /// </summary>
-    internal Active? BackEdge { get; set; }
+    internal ActiveEdge? BackEdge { get; set; }
 
     /// <summary>
     /// Gets or sets the circular linked list of output points.

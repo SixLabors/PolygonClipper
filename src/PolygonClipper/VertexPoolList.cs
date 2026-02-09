@@ -115,19 +115,19 @@ internal sealed class OutputRecordPoolList : PooledList<OutputRecord>
         base.Clear();
         for (int i = 0; i < this.Items.Length; i++)
         {
-            OutputRecord active = this.Items[i];
-            if (active == null || active.Path == Tombstone)
+            OutputRecord outputRecord = this.Items[i];
+            if (outputRecord == null || outputRecord.Path == Tombstone)
             {
                 break;
             }
 
             // Mark paths so pooled records are not accidentally reused without reset.
-            active.Path = Tombstone;
-            active.Owner = null;
-            active.FrontEdge = null;
-            active.BackEdge = null;
-            active.Points = null;
-            active.RecursiveSplit = null;
+            outputRecord.Path = Tombstone;
+            outputRecord.Owner = null;
+            outputRecord.FrontEdge = null;
+            outputRecord.BackEdge = null;
+            outputRecord.Points = null;
+            outputRecord.RecursiveSplit = null;
         }
     }
 }

@@ -15,9 +15,9 @@ namespace SixLabors.PolygonClipper;
 internal sealed class SelfIntersectionUnionClipper
 {
     private FillRule fillRule;
-    private Active? activeEdges;
-    private Active? sortedEdges;
-    private readonly Stack<Active> freeActives;
+    private ActiveEdge? activeEdges;
+    private ActiveEdge? sortedEdges;
+    private readonly Stack<ActiveEdge> freeActives;
     private readonly List<LocalMinima> minimaList;
     private readonly List<IntersectNode> intersectList;
     private readonly VertexPoolList vertexList;
@@ -42,7 +42,7 @@ internal sealed class SelfIntersectionUnionClipper
         this.horizontalSegments = [];
         this.horizontalJoins = [];
         this.outputPointPool = [];
-        this.freeActives = new Stack<Active>();
+        this.freeActives = new Stack<ActiveEdge>();
         this.PreserveCollinear = true;
     }
 
@@ -51,12 +51,12 @@ internal sealed class SelfIntersectionUnionClipper
     internal bool ReverseSolution { get; set; }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void SwapActives(ref Active ae1, ref Active ae2) => (ae2, ae1) = (ae1, ae2);
+    private static void SwapActives(ref ActiveEdge ae1, ref ActiveEdge ae2) => (ae2, ae1) = (ae1, ae2);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static Active? GetMaximaPair(Active ae)
+    private static ActiveEdge? GetMaximaPair(ActiveEdge ae)
     {
-        Active? ae2 = ae.NextInAel;
+        ActiveEdge? ae2 = ae.NextInAel;
         while (ae2 != null)
         {
             if (ae2.VertexTop == ae.VertexTop)
@@ -72,7 +72,7 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ClipVertex? GetCurrentYMaximaVertex(Active ae)
+    private static ClipVertex? GetCurrentYMaximaVertex(ActiveEdge ae)
     {
         ClipVertex? result = ae.VertexTop;
         if (ae.WindDelta > 0)
@@ -100,21 +100,21 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void SetSides(OutputRecord outputRecord, Active startEdge, Active endEdge)
+    private static void SetSides(OutputRecord outputRecord, ActiveEdge startEdge, ActiveEdge endEdge)
     {
         outputRecord.FrontEdge = startEdge;
         outputRecord.BackEdge = endEdge;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void SwapOutputRecords(Active ae1, Active ae2)
+    private static void SwapOutputRecords(ActiveEdge ae1, ActiveEdge ae2)
     {
         // At least one edge has an assigned outputRecord.
         OutputRecord? or1 = ae1.OutputRecord;
         OutputRecord? or2 = ae2.OutputRecord;
         if (or1 == or2)
         {
-            Active? ae = or1!.FrontEdge;
+            ActiveEdge? ae = or1!.FrontEdge;
             or1.FrontEdge = or1.BackEdge;
             or1.BackEdge = ae;
             return;
@@ -210,7 +210,7 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void UncoupleOutputRecord(Active ae)
+    private static void UncoupleOutputRecord(ActiveEdge ae)
     {
         OutputRecord? outputRecord = ae.OutputRecord;
         if (outputRecord == null)
@@ -225,7 +225,7 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool OutputRecordIsAscending(Active hotEdge) => hotEdge == hotEdge.OutputRecord!.FrontEdge;
+    private static bool OutputRecordIsAscending(ActiveEdge hotEdge) => hotEdge == hotEdge.OutputRecord!.FrontEdge;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool EdgesAdjacentInAEL(IntersectNode inode) => (inode.Edge1.NextInAel == inode.Edge2) || (inode.Edge1.PrevInAel == inode.Edge2);
@@ -445,7 +445,7 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private bool IsContributingClosed(Active ae)
+    private bool IsContributingClosed(ActiveEdge ae)
     {
         if (this.fillRule == FillRule.Positive)
         {
@@ -456,12 +456,12 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void SetWindCountForClosedPathEdge(Active ae)
+    private static void SetWindCountForClosedPathEdge(ActiveEdge ae)
     {
         // Wind counts refer to polygon regions not edges, so here an edge's WindCnt
         // indicates the higher of the wind counts for the two regions touching the
         // edge. (nb: Adjacent regions can only ever have their wind counts differ by one.)
-        Active? ae2 = ae.PrevInAel;
+        ActiveEdge? ae2 = ae.PrevInAel;
 
         if (ae2 == null)
         {
@@ -514,15 +514,15 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsValidAelOrder(Active resident, Active newcomer)
+    private static bool IsValidAelOrder(ActiveEdge resident, ActiveEdge newcomer)
     {
         if (newcomer.CurrentX != resident.CurrentX)
         {
             return newcomer.CurrentX > resident.CurrentX;
         }
 
-        // get the turning direction  a1.Top, a2.Bot, a2.Top
-        int d = PolygonUtilities.CrossSign(resident.Top, newcomer.Bot, newcomer.Top);
+        // get the turning direction  a1.Top, a2.Bottom, a2.Top
+        int d = PolygonUtilities.CrossSign(resident.Top, newcomer.Bottom, newcomer.Top);
         if (d != 0)
         {
             return d < 0;
@@ -534,7 +534,7 @@ internal sealed class SelfIntersectionUnionClipper
         if (!resident.IsMaxima && (resident.Top.Y > newcomer.Top.Y))
         {
             return PolygonUtilities.CrossSign(
-                newcomer.Bot,
+                newcomer.Bottom,
                 resident.Top,
                 resident.NextVertex.Point) <= 0;
         }
@@ -542,15 +542,15 @@ internal sealed class SelfIntersectionUnionClipper
         if (!newcomer.IsMaxima && (newcomer.Top.Y > resident.Top.Y))
         {
             return PolygonUtilities.CrossSign(
-                newcomer.Bot,
+                newcomer.Bottom,
                 newcomer.Top,
                 newcomer.NextVertex.Point) >= 0;
         }
 
-        double y = newcomer.Bot.Y;
+        double y = newcomer.Bottom.Y;
         bool newcomerIsLeft = newcomer.IsLeftBound;
 
-        if (resident.Bot.Y != y || resident.LocalMin.Vertex.Point.Y != y)
+        if (resident.Bottom.Y != y || resident.LocalMin.Vertex.Point.Y != y)
         {
             return newcomer.IsLeftBound;
         }
@@ -563,7 +563,7 @@ internal sealed class SelfIntersectionUnionClipper
 
         if (PolygonUtilities.IsCollinear(
             resident.PrevPrevVertex.Point,
-            resident.Bot,
+            resident.Bottom,
             resident.Top))
         {
             return true;
@@ -572,12 +572,12 @@ internal sealed class SelfIntersectionUnionClipper
         // compare turning direction of the alternate bound
         return (PolygonUtilities.CrossSign(
             resident.PrevPrevVertex.Point,
-            newcomer.Bot,
+            newcomer.Bottom,
             newcomer.PrevPrevVertex.Point) > 0) == newcomerIsLeft;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void InsertLeftEdge(Active ae)
+    private void InsertLeftEdge(ActiveEdge ae)
     {
         if (this.activeEdges == null)
         {
@@ -594,7 +594,7 @@ internal sealed class SelfIntersectionUnionClipper
         }
         else
         {
-            Active ae2 = this.activeEdges;
+            ActiveEdge ae2 = this.activeEdges;
             while (ae2.NextInAel != null && IsValidAelOrder(ae2.NextInAel, ae))
             {
                 ae2 = ae2.NextInAel;
@@ -618,7 +618,7 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void InsertRightEdge(Active ae, Active ae2)
+    private static void InsertRightEdge(ActiveEdge ae, ActiveEdge ae2)
     {
         ae2.NextInAel = ae.NextInAel;
         if (ae.NextInAel != null)
@@ -637,8 +637,8 @@ internal sealed class SelfIntersectionUnionClipper
         while (this.HasLocMinAtY(botY))
         {
             LocalMinima localMinima = this.PopLocalMinima();
-            Active leftBound = this.NewActive();
-            leftBound.Bot = localMinima.Vertex.Point;
+            ActiveEdge leftBound = this.NewActive();
+            leftBound.Bottom = localMinima.Vertex.Point;
             leftBound.CurrentX = localMinima.Vertex.Point.X;
             leftBound.WindDelta = -1;
             leftBound.VertexTop = localMinima.Vertex.Prev;
@@ -647,8 +647,8 @@ internal sealed class SelfIntersectionUnionClipper
             leftBound.LocalMin = localMinima;
             leftBound.UpdateDx();
 
-            Active rightBound = this.NewActive();
-            rightBound.Bot = localMinima.Vertex.Point;
+            ActiveEdge rightBound = this.NewActive();
+            rightBound.Bottom = localMinima.Vertex.Point;
             rightBound.CurrentX = localMinima.Vertex.Point.X;
             rightBound.WindDelta = 1;
 
@@ -692,17 +692,17 @@ internal sealed class SelfIntersectionUnionClipper
 
             if (contributing)
             {
-                this.AddLocalMinPoly(leftBound, rightBound, leftBound.Bot, true);
+                this.AddLocalMinPoly(leftBound, rightBound, leftBound.Bottom, true);
                 if (!leftBound.IsHorizontal)
                 {
-                    this.CheckJoinLeft(leftBound, leftBound.Bot);
+                    this.CheckJoinLeft(leftBound, leftBound.Bottom);
                 }
             }
 
             while (rightBound.NextInAel != null &&
                           IsValidAelOrder(rightBound.NextInAel, rightBound))
             {
-                this.IntersectEdges(rightBound, rightBound.NextInAel, rightBound.Bot);
+                this.IntersectEdges(rightBound, rightBound.NextInAel, rightBound.Bottom);
                 this.SwapPositionsInAEL(rightBound, rightBound.NextInAel);
             }
 
@@ -712,7 +712,7 @@ internal sealed class SelfIntersectionUnionClipper
             }
             else
             {
-                this.CheckJoinRight(rightBound, rightBound.Bot);
+                this.CheckJoinRight(rightBound, rightBound.Bottom);
                 this.InsertScanline(rightBound.Top.Y);
             }
 
@@ -728,14 +728,14 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void PushHorizontal(Active ae)
+    private void PushHorizontal(ActiveEdge ae)
     {
         ae.NextInSel = this.sortedEdges;
         this.sortedEdges = ae;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private bool PopHorizontal(out Active? ae)
+    private bool PopHorizontal(out ActiveEdge? ae)
     {
         ae = this.sortedEdges;
         if (this.sortedEdges == null)
@@ -748,13 +748,13 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private OutputPoint AddLocalMinPoly(Active ae1, Active ae2, Vertex pt, bool isNew = false)
+    private OutputPoint AddLocalMinPoly(ActiveEdge ae1, ActiveEdge ae2, Vertex pt, bool isNew = false)
     {
         OutputRecord outputRecord = this.NewOutputRecord();
         ae1.OutputRecord = outputRecord;
         ae2.OutputRecord = outputRecord;
 
-        Active? prevHotEdge = ae1.GetPrevHotEdge();
+        ActiveEdge? prevHotEdge = ae1.GetPrevHotEdge();
 
         // e.WindDelta is the winding direction of the **input** paths
         // and unrelated to the winding direction of output polygons.
@@ -796,7 +796,7 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private OutputPoint? AddLocalMaxPoly(Active ae1, Active ae2, Vertex pt)
+    private OutputPoint? AddLocalMaxPoly(ActiveEdge ae1, ActiveEdge ae2, Vertex pt)
     {
         if (IsJoined(ae1))
         {
@@ -822,7 +822,7 @@ internal sealed class SelfIntersectionUnionClipper
 
             if (this.buildHierarchy)
             {
-                Active? e = ae1.GetPrevHotEdge();
+                ActiveEdge? e = ae1.GetPrevHotEdge();
                 if (e == null)
                 {
                     outputRecord.Owner = null;
@@ -853,7 +853,7 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void JoinOutputRecordPaths(Active ae1, Active ae2)
+    private static void JoinOutputRecordPaths(ActiveEdge ae1, ActiveEdge ae2)
     {
         // join ae2 OutputRecord path onto ae1 OutputRecord path and then delete ae2 OutputRecord path
         // pointers. (NB Only very rarely do the joining ends share the same coords.)
@@ -902,7 +902,7 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private OutputPoint AddOutputPoint(Active ae, Vertex pt)
+    private OutputPoint AddOutputPoint(ActiveEdge ae, Vertex pt)
     {
         // outputRecord.Points: a circular doubly-linked list of OutputPoint where ...
         // opFront[.Prev]* ~~~> opBack & opBack == opFront.Next
@@ -942,17 +942,17 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void UpdateEdgeIntoAEL(Active ae)
+    private void UpdateEdgeIntoAEL(ActiveEdge ae)
     {
-        ae.Bot = ae.Top;
+        ae.Bottom = ae.Top;
         ae.VertexTop = ae.NextVertex;
         ae.Top = ae.VertexTop!.Point;
-        ae.CurrentX = ae.Bot.X;
+        ae.CurrentX = ae.Bottom.X;
         ae.UpdateDx();
 
         if (IsJoined(ae))
         {
-            this.Split(ae, ae.Bot);
+            this.Split(ae, ae.Bottom);
         }
 
         if (ae.IsHorizontal)
@@ -964,13 +964,13 @@ internal sealed class SelfIntersectionUnionClipper
 
         this.InsertScanline(ae.Top.Y);
 
-        this.CheckJoinLeft(ae, ae.Bot);
+        this.CheckJoinLeft(ae, ae.Bottom);
 
         // (#500)
-        this.CheckJoinRight(ae, ae.Bot, true);
+        this.CheckJoinRight(ae, ae.Bottom, true);
     }
 
-    private void IntersectEdges(Active ae1, Active ae2, Vertex pt)
+    private void IntersectEdges(ActiveEdge ae1, ActiveEdge ae2, Vertex pt)
     {
         if (IsJoined(ae1))
         {
@@ -1069,10 +1069,10 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void DeleteFromAEL(Active ae)
+    private void DeleteFromAEL(ActiveEdge ae)
     {
-        Active? prev = ae.PrevInAel;
-        Active? next = ae.NextInAel;
+        ActiveEdge? prev = ae.PrevInAel;
+        ActiveEdge? next = ae.NextInAel;
         if (prev == null && next == null && (ae != this.activeEdges))
         {
             // Already deleted.
@@ -1098,10 +1098,10 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void PoolDeletedActive(Active ae)
+    private void PoolDeletedActive(ActiveEdge ae)
     {
         // clear refs to allow GC
-        ae.Bot = default;
+        ae.Bottom = default;
         ae.Top = default;
         ae.Dx = 0.0;
         ae.WindCount = 0;
@@ -1119,16 +1119,16 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private Active NewActive()
+    private ActiveEdge NewActive()
     {
-        Active ae;
+        ActiveEdge ae;
         if (this.freeActives.Count == 0)
         {
-            ae = new Active();
+            ae = new ActiveEdge();
         }
         else
         {
-            // recycle active from free list
+            // recycle ActiveEdge from free list
             ae = this.freeActives.Pop();
         }
 
@@ -1138,7 +1138,7 @@ internal sealed class SelfIntersectionUnionClipper
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void AdjustCurrXAndCopyToSEL(double topY)
     {
-        Active? ae = this.activeEdges;
+        ActiveEdge? ae = this.activeEdges;
         this.sortedEdges = ae;
         while (ae != null)
         {
@@ -1169,7 +1169,7 @@ internal sealed class SelfIntersectionUnionClipper
         while (this.succeeded)
         {
             this.InsertLocalMinimaIntoAEL(y);
-            Active? ae;
+            ActiveEdge? ae;
             while (this.PopHorizontal(out ae))
             {
                 this.DoHorizontal(ae!);
@@ -1219,10 +1219,10 @@ internal sealed class SelfIntersectionUnionClipper
     private void DisposeIntersectNodes() => this.intersectList.Clear();
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void AddNewIntersectNode(Active ae1, Active ae2, double topY)
+    private void AddNewIntersectNode(ActiveEdge ae1, ActiveEdge ae2, double topY)
     {
         if (!PolygonUtilities.TryGetLineIntersection(
-            ae1.Bot, ae1.Top, ae2.Bot, ae2.Top, out Vertex ip))
+            ae1.Bottom, ae1.Top, ae2.Bottom, ae2.Top, out Vertex ip))
         {
             ip = new Vertex(ae1.CurrentX, topY);
         }
@@ -1237,24 +1237,24 @@ internal sealed class SelfIntersectionUnionClipper
                 {
                     if (absDx1 > absDx2)
                     {
-                        ip = PolygonUtilities.ClosestPointOnSegment(ip, ae1.Bot, ae1.Top);
+                        ip = PolygonUtilities.ClosestPointOnSegment(ip, ae1.Bottom, ae1.Top);
                     }
                     else
                     {
-                        ip = PolygonUtilities.ClosestPointOnSegment(ip, ae2.Bot, ae2.Top);
+                        ip = PolygonUtilities.ClosestPointOnSegment(ip, ae2.Bottom, ae2.Top);
                     }
 
                     break;
                 }
 
                 case true:
-                    ip = PolygonUtilities.ClosestPointOnSegment(ip, ae1.Bot, ae1.Top);
+                    ip = PolygonUtilities.ClosestPointOnSegment(ip, ae1.Bottom, ae1.Top);
                     break;
                 default:
                 {
                     if (absDx2 > 100)
                     {
-                        ip = PolygonUtilities.ClosestPointOnSegment(ip, ae2.Bot, ae2.Top);
+                        ip = PolygonUtilities.ClosestPointOnSegment(ip, ae2.Bottom, ae2.Top);
                     }
                     else
                     {
@@ -1273,9 +1273,9 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static Active? ExtractFromSEL(Active ae)
+    private static ActiveEdge? ExtractFromSEL(ActiveEdge ae)
     {
-        Active? res = ae.NextInSel;
+        ActiveEdge? res = ae.NextInSel;
         if (res != null)
         {
             res.PrevInSel = ae.PrevInSel;
@@ -1286,7 +1286,7 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void Insert1Before2InSEL(Active ae1, Active ae2)
+    private static void Insert1Before2InSEL(ActiveEdge ae1, ActiveEdge ae2)
     {
         ae1.PrevInSel = ae2.PrevInSel;
         if (ae1.PrevInSel != null)
@@ -1313,23 +1313,23 @@ internal sealed class SelfIntersectionUnionClipper
         // sort that ensures only adjacent edges are intersecting. Intersect info is
         // stored in FIntersectList ready to be processed in ProcessIntersectList.
         // Re merge sorts see https://stackoverflow.com/a/46319131/359538
-        Active? left = this.sortedEdges;
+        ActiveEdge? left = this.sortedEdges;
 
         while (left!.Jump != null)
         {
-            Active? prevBase = null;
+            ActiveEdge? prevBase = null;
             while (left?.Jump != null)
             {
-                Active? currBase = left;
-                Active? right = left.Jump;
-                Active? lEnd = right;
-                Active? rEnd = right.Jump;
+                ActiveEdge? currBase = left;
+                ActiveEdge? right = left.Jump;
+                ActiveEdge? lEnd = right;
+                ActiveEdge? rEnd = right.Jump;
                 left.Jump = rEnd;
                 while (left != lEnd && right != rEnd)
                 {
                     if (right!.CurrentX < left!.CurrentX)
                     {
-                        Active? tmp = right.PrevInSel!;
+                        ActiveEdge? tmp = right.PrevInSel!;
                         while (true)
                         {
                             this.AddNewIntersectNode(tmp, right, topY);
@@ -1417,16 +1417,16 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void SwapPositionsInAEL(Active ae1, Active ae2)
+    private void SwapPositionsInAEL(ActiveEdge ae1, ActiveEdge ae2)
     {
         // preconditon: ae1 must be immediately to the left of ae2
-        Active? next = ae2.NextInAel;
+        ActiveEdge? next = ae2.NextInAel;
         if (next != null)
         {
             next.PrevInAel = ae1;
         }
 
-        Active? prev = ae1.PrevInAel;
+        ActiveEdge? prev = ae1.PrevInAel;
         if (prev != null)
         {
             prev.NextInAel = ae2;
@@ -1444,17 +1444,17 @@ internal sealed class SelfIntersectionUnionClipper
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool ResetHorizontalDirection(
-        Active horizontalEdge,
+        ActiveEdge horizontalEdge,
         ClipVertex? vertexMax,
         out double leftX,
         out double rightX)
     {
-        if (horizontalEdge.Bot.X == horizontalEdge.Top.X)
+        if (horizontalEdge.Bottom.X == horizontalEdge.Top.X)
         {
             // the horizontal edge is going nowhere ...
             leftX = horizontalEdge.CurrentX;
             rightX = horizontalEdge.CurrentX;
-            Active? ae = horizontalEdge.NextInAel;
+            ActiveEdge? ae = horizontalEdge.NextInAel;
             while (ae != null && ae.VertexTop != vertexMax)
             {
                 ae = ae.NextInAel;
@@ -1477,7 +1477,7 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void TrimHorizontal(Active horizontalEdge, bool preserveCollinear)
+    private static void TrimHorizontal(ActiveEdge horizontalEdge, bool preserveCollinear)
     {
         bool wasTrimmed = false;
         Vertex pt = horizontalEdge.NextVertex.Point;
@@ -1487,7 +1487,7 @@ internal sealed class SelfIntersectionUnionClipper
             // always trim 180 deg. spikes (in closed paths)
             // but otherwise break if preserveCollinear = true
             if (preserveCollinear &&
-                (pt.X < horizontalEdge.Top.X) != (horizontalEdge.Bot.X < horizontalEdge.Top.X))
+                (pt.X < horizontalEdge.Top.X) != (horizontalEdge.Bottom.X < horizontalEdge.Top.X))
             {
                 break;
             }
@@ -1517,14 +1517,14 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static OutputPoint GetLastOp(Active hotEdge)
+    private static OutputPoint GetLastOp(ActiveEdge hotEdge)
     {
         OutputRecord outputRecord = hotEdge.OutputRecord!;
         return (hotEdge == outputRecord.FrontEdge) ?
             outputRecord.Points! : outputRecord.Points!.Next!;
     }
 
-    private void DoHorizontal(Active horizontalEdge)
+    private void DoHorizontal(ActiveEdge horizontalEdge)
     /*******************************************************************************
       * Notes: Horizontal edges (HEs) at scanline intersections (i.e. at the top or    *
       * bottom of a scanbeam) are processed as if layered.The order in which HEs     *
@@ -1540,7 +1540,7 @@ internal sealed class SelfIntersectionUnionClipper
       *         /              |        /       |       /                            *
       *******************************************************************************/
     {
-        double y = horizontalEdge.Bot.Y;
+        double y = horizontalEdge.Bottom.Y;
 
         ClipVertex? vertex_max = GetCurrentYMaximaVertex(horizontalEdge);
 
@@ -1556,7 +1556,7 @@ internal sealed class SelfIntersectionUnionClipper
         while (true)
         {
             // loops through consecutive horizontal edges
-            Active? ae = isLeftToRight ? horizontalEdge.NextInAel : horizontalEdge.PrevInAel;
+            ActiveEdge? ae = isLeftToRight ? horizontalEdge.NextInAel : horizontalEdge.PrevInAel;
 
             while (ae != null)
             {
@@ -1681,7 +1681,7 @@ internal sealed class SelfIntersectionUnionClipper
     {
         // Sorted edges are reused to flag horizontals (see PushHorizontal below).
         this.sortedEdges = null;
-        Active? ae = this.activeEdges;
+        ActiveEdge? ae = this.activeEdges;
         while (ae != null)
         {
             // NB 'ae' will never be horizontal here
@@ -1721,12 +1721,12 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private Active? DoMaxima(Active ae)
+    private ActiveEdge? DoMaxima(ActiveEdge ae)
     {
-        Active? prevE = ae.PrevInAel;
-        Active? nextE = ae.NextInAel;
+        ActiveEdge? prevE = ae.PrevInAel;
+        ActiveEdge? nextE = ae.NextInAel;
 
-        Active? maxPair = GetMaximaPair(ae);
+        ActiveEdge? maxPair = GetMaximaPair(ae);
         if (maxPair == null)
         {
             // eMaxPair is horizontal.
@@ -1764,9 +1764,9 @@ internal sealed class SelfIntersectionUnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsJoined(Active e) => e.JoinWith != JoinWith.None;
+    private static bool IsJoined(ActiveEdge e) => e.JoinWith != JoinWith.None;
 
-    private void Split(Active e, Vertex currPt)
+    private void Split(ActiveEdge e, Vertex currPt)
     {
         if (e.JoinWith == JoinWith.Right)
         {
@@ -1784,11 +1784,11 @@ internal sealed class SelfIntersectionUnionClipper
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void CheckJoinLeft(
-        Active e,
+        ActiveEdge e,
         Vertex pt,
         bool checkCurrX = false)
     {
-        Active? prev = e.PrevInAel;
+        ActiveEdge? prev = e.PrevInAel;
         if (prev == null ||
             !e.IsHot || !prev.IsHot ||
             e.IsHorizontal || prev.IsHorizontal)
@@ -1798,7 +1798,7 @@ internal sealed class SelfIntersectionUnionClipper
 
         // Avoid trivial joins.
         if ((pt.Y < e.Top.Y + PolygonUtilities.ClosePointTolerance || pt.Y < prev.Top.Y + PolygonUtilities.ClosePointTolerance) &&
-            ((e.Bot.Y > pt.Y) || (prev.Bot.Y > pt.Y)))
+            ((e.Bottom.Y > pt.Y) || (prev.Bottom.Y > pt.Y)))
         {
             // (#490)
             return;
@@ -1806,7 +1806,7 @@ internal sealed class SelfIntersectionUnionClipper
 
         if (checkCurrX)
         {
-            if (PolygonUtilities.PerpendicularDistanceSquared(pt, prev.Bot, prev.Top) > PolygonUtilities.JoinDistanceSquared)
+            if (PolygonUtilities.PerpendicularDistanceSquared(pt, prev.Bottom, prev.Top) > PolygonUtilities.JoinDistanceSquared)
             {
                 return;
             }
@@ -1840,11 +1840,11 @@ internal sealed class SelfIntersectionUnionClipper
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void CheckJoinRight(
-        Active e,
+        ActiveEdge e,
         Vertex pt,
         bool checkCurrX = false)
     {
-        Active? next = e.NextInAel;
+        ActiveEdge? next = e.NextInAel;
         if (next == null ||
             !e.IsHot || !next.IsHot ||
             e.IsHorizontal || next.IsHorizontal)
@@ -1854,7 +1854,7 @@ internal sealed class SelfIntersectionUnionClipper
 
         // Avoid trivial joins.
         if ((pt.Y < e.Top.Y + PolygonUtilities.ClosePointTolerance || pt.Y < next.Top.Y + PolygonUtilities.ClosePointTolerance) &&
-            ((e.Bot.Y > pt.Y) || (next.Bot.Y > pt.Y)))
+            ((e.Bottom.Y > pt.Y) || (next.Bottom.Y > pt.Y)))
         {
             // (#490)
             return;
@@ -1862,7 +1862,7 @@ internal sealed class SelfIntersectionUnionClipper
 
         if (checkCurrX)
         {
-            if (PolygonUtilities.PerpendicularDistanceSquared(pt, next.Bot, next.Top) > PolygonUtilities.JoinDistanceSquared)
+            if (PolygonUtilities.PerpendicularDistanceSquared(pt, next.Bottom, next.Top) > PolygonUtilities.JoinDistanceSquared)
             {
                 return;
             }
