@@ -120,7 +120,7 @@ internal static class SelfIntersectionClipper
 
         if (lowestPathIdx >= 0)
         {
-            isNegArea = ClipMath.Area(paths[lowestPathIdx]) < 0;
+            isNegArea = PolygonUtilities.Area(paths[lowestPathIdx]) < 0;
         }
     }
 

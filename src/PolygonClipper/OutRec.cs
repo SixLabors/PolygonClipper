@@ -20,7 +20,7 @@ internal sealed class OutRec
 
     internal PolyPathBase? PolyPath { get; set; }
 
-    internal ClipBounds Bounds { get; set; }
+    internal Box2 Bounds { get; set; }
 
     internal Contour Path { get; set; } = [];
 

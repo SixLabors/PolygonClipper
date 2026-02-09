@@ -58,7 +58,7 @@ internal sealed class Active
 
     internal bool IsOpenEnd => this.IsOpen && this.VertexTop != null && this.VertexTop.IsOpenEnd;
 
-    internal bool IsHorizontal => ClipGeometry.IsAlmostZero(this.Top.Y - this.Bot.Y);
+    internal bool IsHorizontal => PolygonUtilities.IsAlmostZero(this.Top.Y - this.Bot.Y);
 
     internal bool IsHeadingRightHorz => double.IsNegativeInfinity(this.Dx);
 
@@ -87,12 +87,12 @@ internal sealed class Active
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal double TopX(double currentY)
     {
-        if (ClipGeometry.IsAlmostZero(currentY - this.Top.Y) || ClipGeometry.IsAlmostZero(this.Top.X - this.Bot.X))
+        if (PolygonUtilities.IsAlmostZero(currentY - this.Top.Y) || PolygonUtilities.IsAlmostZero(this.Top.X - this.Bot.X))
         {
             return this.Top.X;
         }
 
-        if (ClipGeometry.IsAlmostZero(currentY - this.Bot.Y))
+        if (PolygonUtilities.IsAlmostZero(currentY - this.Bot.Y))
         {
             return this.Bot.X;
         }

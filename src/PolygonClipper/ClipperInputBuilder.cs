@@ -43,7 +43,7 @@ internal static class ClipperInputBuilder
                     continue;
                 }
 
-                if (!ClipGeometry.PointEquals(prev_v!.Point, pt))
+                if (!PolygonUtilities.PointEquals(prev_v!.Point, pt))
                 {
                     curr_v = vertexList.Add(pt, VertexFlags.None, prev_v);
                     prev_v.Next = curr_v;
@@ -56,7 +56,7 @@ internal static class ClipperInputBuilder
                 continue;
             }
 
-            if (!isOpen && ClipGeometry.PointEquals(prev_v.Point, v0.Point))
+            if (!isOpen && PolygonUtilities.PointEquals(prev_v.Point, v0.Point))
             {
                 prev_v = prev_v.Prev;
             }
@@ -73,7 +73,7 @@ internal static class ClipperInputBuilder
             if (isOpen)
             {
                 curr_v = v0.Next;
-                while (curr_v != v0 && ClipGeometry.IsAlmostZero(curr_v!.Point.Y - v0.Point.Y))
+                while (curr_v != v0 && PolygonUtilities.IsAlmostZero(curr_v!.Point.Y - v0.Point.Y))
                 {
                     curr_v = curr_v.Next;
                 }
@@ -94,7 +94,7 @@ internal static class ClipperInputBuilder
             else
             {
                 prev_v = v0.Prev;
-                while (prev_v != v0 && ClipGeometry.IsAlmostZero(prev_v!.Point.Y - v0.Point.Y))
+                while (prev_v != v0 && PolygonUtilities.IsAlmostZero(prev_v!.Point.Y - v0.Point.Y))
                 {
                     prev_v = prev_v.Prev;
                 }

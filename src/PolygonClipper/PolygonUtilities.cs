@@ -15,6 +15,76 @@ internal static class PolygonUtilities
             ? left.X.CompareTo(right.X)
             : left.Y.CompareTo(right.Y);
 
+    internal const double FloatingPointTolerance = 1e-12;
+    internal const double CoordinateEpsilon = 1e-6;
+    internal const double PointEqualityTolerance = 0.5 * CoordinateEpsilon;
+    internal const double ClosePointTolerance = 2 * CoordinateEpsilon;
+    internal const double SmallAreaTolerance = CoordinateEpsilon * CoordinateEpsilon;
+    internal const double SmallAreaTolerance2 = 2 * SmallAreaTolerance;
+    internal const double JoinDistanceSquared = 0.25 * SmallAreaTolerance;
+
+    /// <summary>
+    /// Determines whether a value is almost zero.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsAlmostZero(double value) => Math.Abs(value) <= FloatingPointTolerance;
+
+    /// <summary>
+    /// Compares two vertices for near-equality.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool PointEquals(in Vertex a, in Vertex b)
+        => Math.Abs(a.X - b.X) <= PointEqualityTolerance &&
+           Math.Abs(a.Y - b.Y) <= PointEqualityTolerance;
+
+    /// <summary>
+    /// Returns the dot product of the vectors AB and BC.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double Dot(in Vertex a, in Vertex b, in Vertex c)
+        => ((b.X - a.X) * (c.X - b.X)) + ((b.Y - a.Y) * (c.Y - b.Y));
+
+    /// <summary>
+    /// Returns the dot product of the vectors AB and BC.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double DotProduct(in Vertex a, in Vertex b, in Vertex c) => Dot(a, b, c);
+
+    /// <summary>
+    /// Returns the cross product of the vectors AB and BC.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double Cross(in Vertex a, in Vertex b, in Vertex c)
+        => ((b.X - a.X) * (c.Y - b.Y)) - ((b.Y - a.Y) * (c.X - b.X));
+
+    /// <summary>
+    /// Returns the sign of the cross product of the vectors AB and BC.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int CrossSign(in Vertex a, in Vertex b, in Vertex c)
+    {
+        double cross = Cross(a, b, c);
+        if (IsAlmostZero(cross))
+        {
+            return 0;
+        }
+
+        return cross > 0 ? 1 : -1;
+    }
+
+    /// <summary>
+    /// Returns the sign of the cross product of the vectors AB and BC.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int CrossProductSign(in Vertex a, in Vertex b, in Vertex c) => CrossSign(a, b, c);
+
+    /// <summary>
+    /// Returns true when three vertices are collinear.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsCollinear(in Vertex a, in Vertex shared, in Vertex b)
+        => IsAlmostZero(Cross(a, shared, b));
+
     /// <summary>
     /// Returns the signed area of a triangle.
     /// </summary>
@@ -25,6 +95,417 @@ internal static class PolygonUtilities
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static double SignedArea(in Vertex p0, in Vertex p1, in Vertex p2)
         => ((p0.X - p2.X) * (p1.Y - p2.Y)) - ((p1.X - p2.X) * (p0.Y - p2.Y));
+
+    /// <summary>
+    /// Computes the signed area of a contour.
+    /// </summary>
+    public static double Area(Contour path)
+    {
+        int count = path.Count;
+        if (count < 3)
+        {
+            return 0D;
+        }
+
+        double area = 0D;
+        Vertex prev = path[count - 1];
+        for (int i = 0; i < count; i++)
+        {
+            Vertex current = path[i];
+            area += (prev.Y + current.Y) * (prev.X - current.X);
+            prev = current;
+        }
+
+        return area * 0.5D;
+    }
+
+    /// <summary>
+    /// Computes the squared perpendicular distance from a point to a line segment.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static double PerpendicularDistanceSquared(in Vertex point, in Vertex line1, in Vertex line2)
+    {
+        double a = point.X - line1.X;
+        double b = point.Y - line1.Y;
+        double c = line2.X - line1.X;
+        double d = line2.Y - line1.Y;
+        if (c == 0D && d == 0D)
+        {
+            return 0D;
+        }
+
+        return ((a * d) - (c * b)) * ((a * d) - (c * b)) / ((c * c) + (d * d));
+    }
+
+    /// <summary>
+    /// Finds the intersection of two line segments, including endpoints.
+    /// </summary>
+    public static bool TryGetLineIntersection(
+        in Vertex a1,
+        in Vertex a2,
+        in Vertex b1,
+        in Vertex b2,
+        out Vertex intersection)
+    {
+        double dy1 = a2.Y - a1.Y;
+        double dx1 = a2.X - a1.X;
+        double dy2 = b2.Y - b1.Y;
+        double dx2 = b2.X - b1.X;
+        double det = (dy1 * dx2) - (dy2 * dx1);
+        if (IsAlmostZero(det))
+        {
+            intersection = default;
+            return false;
+        }
+
+        double t = (((a1.X - b1.X) * dy2) - ((a1.Y - b1.Y) * dx2)) / det;
+        if (t <= 0D || IsAlmostZero(t))
+        {
+            intersection = a1;
+        }
+        else if (t >= 1D || IsAlmostZero(t - 1D))
+        {
+            intersection = a2;
+        }
+        else
+        {
+            intersection = new Vertex(a1.X + (t * dx1), a1.Y + (t * dy1));
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Projects a point onto a segment and returns the closest point.
+    /// </summary>
+    public static Vertex ClosestPointOnSegment(in Vertex point, in Vertex seg1, in Vertex seg2)
+    {
+        if (IsAlmostZero(seg1.X - seg2.X) && IsAlmostZero(seg1.Y - seg2.Y))
+        {
+            return seg1;
+        }
+
+        double dx = seg2.X - seg1.X;
+        double dy = seg2.Y - seg1.Y;
+        double q = (((point.X - seg1.X) * dx) + ((point.Y - seg1.Y) * dy)) / ((dx * dx) + (dy * dy));
+        if (q < 0D)
+        {
+            q = 0D;
+        }
+        else if (q > 1D)
+        {
+            q = 1D;
+        }
+
+        return new Vertex(seg1.X + (q * dx), seg1.Y + (q * dy));
+    }
+
+    /// <summary>
+    /// Returns true when two segments intersect.
+    /// </summary>
+    public static bool SegmentsIntersect(in Vertex a1, in Vertex a2, in Vertex b1, in Vertex b2, bool inclusive = false)
+    {
+        double dy1 = a2.Y - a1.Y;
+        double dx1 = a2.X - a1.X;
+        double dy2 = b2.Y - b1.Y;
+        double dx2 = b2.X - b1.X;
+        double cp = (dy1 * dx2) - (dy2 * dx1);
+        if (IsAlmostZero(cp))
+        {
+            return false;
+        }
+
+        if (inclusive)
+        {
+            double t = ((a1.X - b1.X) * dy2) - ((a1.Y - b1.Y) * dx2);
+            if (IsAlmostZero(t))
+            {
+                return true;
+            }
+
+            if (t > 0D)
+            {
+                if (cp < 0D || t > cp)
+                {
+                    return false;
+                }
+            }
+            else if (cp > 0D || t < cp)
+            {
+                return false;
+            }
+
+            t = ((a1.X - b1.X) * dy1) - ((a1.Y - b1.Y) * dx1);
+            if (IsAlmostZero(t))
+            {
+                return true;
+            }
+
+            if (t > 0D)
+            {
+                return cp > 0D && t <= cp;
+            }
+
+            return cp < 0D && t >= cp;
+        }
+
+        double t2 = ((a1.X - b1.X) * dy2) - ((a1.Y - b1.Y) * dx2);
+        if (IsAlmostZero(t2))
+        {
+            return false;
+        }
+
+        if (t2 > 0D)
+        {
+            if (cp < 0D || t2 >= cp)
+            {
+                return false;
+            }
+        }
+        else if (cp > 0D || t2 <= cp)
+        {
+            return false;
+        }
+
+        t2 = ((a1.X - b1.X) * dy1) - ((a1.Y - b1.Y) * dx1);
+        if (IsAlmostZero(t2))
+        {
+            return false;
+        }
+
+        if (t2 > 0D)
+        {
+            return cp > 0D && t2 < cp;
+        }
+
+        return cp < 0D && t2 > cp;
+    }
+
+    /// <summary>
+    /// Computes the bounding box of a contour.
+    /// </summary>
+    public static Box2 GetBounds(Contour path)
+    {
+        if (path.Count == 0)
+        {
+            return default;
+        }
+
+        double minX = double.MaxValue;
+        double minY = double.MaxValue;
+        double maxX = -double.MaxValue;
+        double maxY = -double.MaxValue;
+
+        for (int i = 0; i < path.Count; i++)
+        {
+            Vertex pt = path[i];
+            if (pt.X < minX)
+            {
+                minX = pt.X;
+            }
+
+            if (pt.X > maxX)
+            {
+                maxX = pt.X;
+            }
+
+            if (pt.Y < minY)
+            {
+                minY = pt.Y;
+            }
+
+            if (pt.Y > maxY)
+            {
+                maxY = pt.Y;
+            }
+        }
+
+        if (Math.Abs(minX - double.MaxValue) < FloatingPointTolerance)
+        {
+            return default;
+        }
+
+        return new Box2(new Vertex(minX, minY), new Vertex(maxX, maxY));
+    }
+
+    /// <summary>
+    /// Returns the midpoint of a contour's bounding box.
+    /// </summary>
+    public static Vertex GetBoundsMidPoint(Contour path) => GetBounds(path).MidPoint();
+
+    /// <summary>
+    /// Determines whether a point is inside a contour.
+    /// </summary>
+    public static ClipperPointInPolygonResult PointInPolygon(in Vertex point, Contour polygon)
+    {
+        int len = polygon.Count;
+        int start = 0;
+        if (len < 3)
+        {
+            return ClipperPointInPolygonResult.IsOutside;
+        }
+
+        while (start < len && IsAlmostZero(polygon[start].Y - point.Y))
+        {
+            start++;
+        }
+
+        if (start == len)
+        {
+            return ClipperPointInPolygonResult.IsOutside;
+        }
+
+        bool isAbove = polygon[start].Y < point.Y;
+        bool startingAbove = isAbove;
+        int val = 0;
+        int i = start + 1;
+        int end = len;
+        while (true)
+        {
+            if (i == end)
+            {
+                if (end == 0 || start == 0)
+                {
+                    break;
+                }
+
+                end = start;
+                i = 0;
+            }
+
+            if (isAbove)
+            {
+                while (i < end && polygon[i].Y < point.Y)
+                {
+                    i++;
+                }
+            }
+            else
+            {
+                while (i < end && polygon[i].Y > point.Y)
+                {
+                    i++;
+                }
+            }
+
+            if (i == end)
+            {
+                continue;
+            }
+
+            Vertex curr = polygon[i];
+            Vertex prev = i > 0 ? polygon[i - 1] : polygon[len - 1];
+
+            if (IsAlmostZero(curr.Y - point.Y))
+            {
+                if (IsAlmostZero(curr.X - point.X) ||
+                    (IsAlmostZero(curr.Y - prev.Y) && ((point.X < prev.X) != (point.X < curr.X))))
+                {
+                    return ClipperPointInPolygonResult.IsOn;
+                }
+
+                i++;
+                if (i == start)
+                {
+                    break;
+                }
+
+                continue;
+            }
+
+            if (point.X < curr.X && point.X < prev.X)
+            {
+                // no-op
+            }
+            else if (point.X > prev.X && point.X > curr.X)
+            {
+                val = 1 - val;
+            }
+            else
+            {
+                int cps2 = CrossSign(prev, curr, point);
+                if (cps2 == 0)
+                {
+                    return ClipperPointInPolygonResult.IsOn;
+                }
+
+                if ((cps2 < 0) == isAbove)
+                {
+                    val = 1 - val;
+                }
+            }
+
+            isAbove = !isAbove;
+            i++;
+        }
+
+        if (isAbove == startingAbove)
+        {
+            return val == 0 ? ClipperPointInPolygonResult.IsOutside : ClipperPointInPolygonResult.IsInside;
+        }
+
+        if (i == len)
+        {
+            i = 0;
+        }
+
+        int cps = i == 0
+            ? CrossSign(polygon[len - 1], polygon[0], point)
+            : CrossSign(polygon[i - 1], polygon[i], point);
+
+        if (cps == 0)
+        {
+            return ClipperPointInPolygonResult.IsOn;
+        }
+
+        if ((cps < 0) == isAbove)
+        {
+            val = 1 - val;
+        }
+
+        return val == 0 ? ClipperPointInPolygonResult.IsOutside : ClipperPointInPolygonResult.IsInside;
+    }
+
+    /// <summary>
+    /// Returns true if the outer contour contains the inner contour.
+    /// </summary>
+    public static bool PathContainsPath(Contour inner, Contour outer)
+    {
+        ClipperPointInPolygonResult pip = ClipperPointInPolygonResult.IsOn;
+        for (int i = 0; i < inner.Count; i++)
+        {
+            switch (PointInPolygon(inner[i], outer))
+            {
+                case ClipperPointInPolygonResult.IsOutside:
+                    if (pip == ClipperPointInPolygonResult.IsOutside)
+                    {
+                        return false;
+                    }
+
+                    pip = ClipperPointInPolygonResult.IsOutside;
+                    break;
+                case ClipperPointInPolygonResult.IsInside:
+                    if (pip == ClipperPointInPolygonResult.IsInside)
+                    {
+                        return true;
+                    }
+
+                    pip = ClipperPointInPolygonResult.IsInside;
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        Vertex midpoint = GetBoundsMidPoint(inner);
+        return PointInPolygon(midpoint, outer) != ClipperPointInPolygonResult.IsOutside;
+    }
+
+    /// <summary>
+    /// Returns true if the outer contour contains the inner contour.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool Path2ContainsPath1(Contour inner, Contour outer) => PathContainsPath(inner, outer);
 
     /// <summary>
     /// Finds the intersection of two line segments, constraining results to their intersection bounding box.

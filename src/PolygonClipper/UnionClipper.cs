@@ -84,7 +84,7 @@ internal sealed class UnionClipper
         ClipVertex? result = ae.VertexTop;
         if (ae.WindDelta > 0)
         {
-            while (ClipGeometry.IsAlmostZero(result!.Next!.Point.Y - result.Point.Y) &&
+            while (PolygonUtilities.IsAlmostZero(result!.Next!.Point.Y - result.Point.Y) &&
                 ((result.Flags & (VertexFlags.OpenEnd |
                 VertexFlags.LocalMax)) == VertexFlags.None))
             {
@@ -93,7 +93,7 @@ internal sealed class UnionClipper
         }
         else
         {
-            while (ClipGeometry.IsAlmostZero(result!.Prev!.Point.Y - result.Point.Y) &&
+            while (PolygonUtilities.IsAlmostZero(result!.Prev!.Point.Y - result.Point.Y) &&
                 ((result.Flags & (VertexFlags.OpenEnd |
                 VertexFlags.LocalMax)) == VertexFlags.None))
             {
@@ -116,14 +116,14 @@ internal sealed class UnionClipper
         ClipVertex? result = ae.VertexTop;
         if (ae.WindDelta > 0)
         {
-            while (ClipGeometry.IsAlmostZero(result!.Next!.Point.Y - result.Point.Y))
+            while (PolygonUtilities.IsAlmostZero(result!.Next!.Point.Y - result.Point.Y))
             {
                 result = result.Next;
             }
         }
         else
         {
-            while (ClipGeometry.IsAlmostZero(result!.Prev!.Point.Y - result.Point.Y))
+            while (PolygonUtilities.IsAlmostZero(result!.Prev!.Point.Y - result.Point.Y))
             {
                 result = result.Prev;
             }
@@ -662,7 +662,7 @@ internal sealed class UnionClipper
         }
 
         // get the turning direction  a1.Top, a2.Bot, a2.Top
-        int d = ClipGeometry.CrossProductSign(resident.Top, newcomer.Bot, newcomer.Top);
+        int d = PolygonUtilities.CrossProductSign(resident.Top, newcomer.Bot, newcomer.Top);
         if (d != 0)
         {
             return d < 0;
@@ -674,7 +674,7 @@ internal sealed class UnionClipper
         // the direction they're about to turn
         if (!resident.IsMaxima && (resident.Top.Y > newcomer.Top.Y))
         {
-            return ClipGeometry.CrossProductSign(
+            return PolygonUtilities.CrossProductSign(
                 newcomer.Bot,
                 resident.Top,
                 resident.NextVertex.Point) <= 0;
@@ -682,7 +682,7 @@ internal sealed class UnionClipper
 
         if (!newcomer.IsMaxima && (newcomer.Top.Y > resident.Top.Y))
         {
-            return ClipGeometry.CrossProductSign(
+            return PolygonUtilities.CrossProductSign(
                 newcomer.Bot,
                 newcomer.Top,
                 newcomer.NextVertex.Point) >= 0;
@@ -702,7 +702,7 @@ internal sealed class UnionClipper
             return newcomerIsLeft;
         }
 
-        if (ClipGeometry.IsCollinear(
+        if (PolygonUtilities.IsCollinear(
             resident.PrevPrevVertex.Point,
             resident.Bot,
             resident.Top))
@@ -711,7 +711,7 @@ internal sealed class UnionClipper
         }
 
         // compare turning direction of the alternate bound
-        return (ClipGeometry.CrossProductSign(
+        return (PolygonUtilities.CrossProductSign(
             resident.PrevPrevVertex.Point,
             newcomer.Bot,
             newcomer.PrevPrevVertex.Point) > 0) == newcomerIsLeft;
@@ -1143,9 +1143,9 @@ internal sealed class UnionClipper
 
         switch (toFront)
         {
-            case true when ClipGeometry.PointEquals(pt, opFront.Point):
+            case true when PolygonUtilities.PointEquals(pt, opFront.Point):
                 return opFront;
-            case false when ClipGeometry.PointEquals(pt, opBack.Point):
+            case false when PolygonUtilities.PointEquals(pt, opBack.Point):
                 return opBack;
         }
 
@@ -1722,7 +1722,7 @@ internal sealed class UnionClipper
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void AddNewIntersectNode(Active ae1, Active ae2, double topY)
     {
-        if (!ClipGeometry.TryGetLineIntersection(
+        if (!PolygonUtilities.TryGetLineIntersection(
             ae1.Bot, ae1.Top, ae2.Bot, ae2.Top, out Vertex ip))
         {
             ip = new Vertex(ae1.CurrentX, topY);
@@ -1738,24 +1738,24 @@ internal sealed class UnionClipper
                 {
                     if (absDx1 > absDx2)
                     {
-                        ip = ClipGeometry.ClosestPointOnSegment(ip, ae1.Bot, ae1.Top);
+                        ip = PolygonUtilities.ClosestPointOnSegment(ip, ae1.Bot, ae1.Top);
                     }
                     else
                     {
-                        ip = ClipGeometry.ClosestPointOnSegment(ip, ae2.Bot, ae2.Top);
+                        ip = PolygonUtilities.ClosestPointOnSegment(ip, ae2.Bot, ae2.Top);
                     }
 
                     break;
                 }
 
                 case true:
-                    ip = ClipGeometry.ClosestPointOnSegment(ip, ae1.Bot, ae1.Top);
+                    ip = PolygonUtilities.ClosestPointOnSegment(ip, ae1.Bot, ae1.Top);
                     break;
                 default:
                 {
                     if (absDx2 > 100)
                     {
-                        ip = ClipGeometry.ClosestPointOnSegment(ip, ae2.Bot, ae2.Top);
+                        ip = PolygonUtilities.ClosestPointOnSegment(ip, ae2.Bot, ae2.Top);
                     }
                     else
                     {
@@ -2383,7 +2383,7 @@ internal sealed class UnionClipper
         }
 
         // Avoid trivial joins.
-        if ((pt.Y < e.Top.Y + ClipGeometry.ClosePointTolerance || pt.Y < prev.Top.Y + ClipGeometry.ClosePointTolerance) &&
+        if ((pt.Y < e.Top.Y + PolygonUtilities.ClosePointTolerance || pt.Y < prev.Top.Y + PolygonUtilities.ClosePointTolerance) &&
             ((e.Bot.Y > pt.Y) || (prev.Bot.Y > pt.Y)))
         {
             // (#490)
@@ -2392,17 +2392,17 @@ internal sealed class UnionClipper
 
         if (checkCurrX)
         {
-            if (ClipMath.PerpendicularDistanceSquared(pt, prev.Bot, prev.Top) > ClipGeometry.JoinDistanceSquared)
+            if (PolygonUtilities.PerpendicularDistanceSquared(pt, prev.Bot, prev.Top) > PolygonUtilities.JoinDistanceSquared)
             {
                 return;
             }
         }
-        else if (!ClipGeometry.IsAlmostZero(e.CurrentX - prev.CurrentX))
+        else if (!PolygonUtilities.IsAlmostZero(e.CurrentX - prev.CurrentX))
         {
             return;
         }
 
-        if (!ClipGeometry.IsCollinear(e.Top, pt, prev.Top))
+        if (!PolygonUtilities.IsCollinear(e.Top, pt, prev.Top))
         {
             return;
         }
@@ -2440,7 +2440,7 @@ internal sealed class UnionClipper
         }
 
         // Avoid trivial joins.
-        if ((pt.Y < e.Top.Y + ClipGeometry.ClosePointTolerance || pt.Y < next.Top.Y + ClipGeometry.ClosePointTolerance) &&
+        if ((pt.Y < e.Top.Y + PolygonUtilities.ClosePointTolerance || pt.Y < next.Top.Y + PolygonUtilities.ClosePointTolerance) &&
             ((e.Bot.Y > pt.Y) || (next.Bot.Y > pt.Y)))
         {
             // (#490)
@@ -2449,17 +2449,17 @@ internal sealed class UnionClipper
 
         if (checkCurrX)
         {
-            if (ClipMath.PerpendicularDistanceSquared(pt, next.Bot, next.Top) > ClipGeometry.JoinDistanceSquared)
+            if (PolygonUtilities.PerpendicularDistanceSquared(pt, next.Bot, next.Top) > PolygonUtilities.JoinDistanceSquared)
             {
                 return;
             }
         }
-        else if (!ClipGeometry.IsAlmostZero(e.CurrentX - next.CurrentX))
+        else if (!PolygonUtilities.IsAlmostZero(e.CurrentX - next.CurrentX))
         {
             return;
         }
 
-        if (!ClipGeometry.IsCollinear(e.Top, pt, next.Top))
+        if (!PolygonUtilities.IsCollinear(e.Top, pt, next.Top))
         {
             return;
         }
@@ -2496,7 +2496,7 @@ internal sealed class UnionClipper
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool SetHorzSegHeadingForward(HorzSegment hs, OutPt opP, OutPt opN)
     {
-        if (ClipGeometry.IsAlmostZero(opP.Point.X - opN.Point.X))
+        if (PolygonUtilities.IsAlmostZero(opP.Point.X - opN.Point.X))
         {
             return false;
         }
@@ -2689,10 +2689,10 @@ internal sealed class UnionClipper
         Contour result = [];
         OutPt op2 = op;
         while (op2.Next != op &&
-            ((ClipGeometry.IsAlmostZero(op2.Point.X - op2.Next!.Point.X) &&
-              ClipGeometry.IsAlmostZero(op2.Point.X - op2.Prev.Point.X)) ||
-             (ClipGeometry.IsAlmostZero(op2.Point.Y - op2.Next.Point.Y) &&
-              ClipGeometry.IsAlmostZero(op2.Point.Y - op2.Prev.Point.Y))))
+            ((PolygonUtilities.IsAlmostZero(op2.Point.X - op2.Next!.Point.X) &&
+              PolygonUtilities.IsAlmostZero(op2.Point.X - op2.Prev.Point.X)) ||
+             (PolygonUtilities.IsAlmostZero(op2.Point.Y - op2.Next.Point.Y) &&
+              PolygonUtilities.IsAlmostZero(op2.Point.Y - op2.Prev.Point.Y))))
         {
             op2 = op2.Next;
         }
@@ -2702,10 +2702,10 @@ internal sealed class UnionClipper
         op2 = op2.Next;
         while (op2 != op)
         {
-            if ((!ClipGeometry.IsAlmostZero(op2.Point.X - op2.Next!.Point.X) ||
-                 !ClipGeometry.IsAlmostZero(op2.Point.X - prevOp.Point.X)) &&
-                (!ClipGeometry.IsAlmostZero(op2.Point.Y - op2.Next.Point.Y) ||
-                 !ClipGeometry.IsAlmostZero(op2.Point.Y - prevOp.Point.Y)))
+            if ((!PolygonUtilities.IsAlmostZero(op2.Point.X - op2.Next!.Point.X) ||
+                 !PolygonUtilities.IsAlmostZero(op2.Point.X - prevOp.Point.X)) &&
+                (!PolygonUtilities.IsAlmostZero(op2.Point.Y - op2.Next.Point.Y) ||
+                 !PolygonUtilities.IsAlmostZero(op2.Point.Y - prevOp.Point.Y)))
             {
                 result.Add(op2.Point);
                 prevOp = op2;
@@ -2798,7 +2798,7 @@ internal sealed class UnionClipper
                 }
                 else
                 {
-                    int d = ClipGeometry.CrossProductSign(op2.Prev.Point, op2.Point, pt);
+                    int d = PolygonUtilities.CrossProductSign(op2.Prev.Point, op2.Point, pt);
                     if (d == 0)
                     {
                         return ClipperPointInPolygonResult.IsOn;
@@ -2821,7 +2821,7 @@ internal sealed class UnionClipper
         }
 
         {
-            int d = ClipGeometry.CrossProductSign(op2.Prev.Point, op2.Point, pt);
+            int d = PolygonUtilities.CrossProductSign(op2.Prev.Point, op2.Point, pt);
             if (d == 0)
             {
                 return ClipperPointInPolygonResult.IsOn;
@@ -2872,7 +2872,7 @@ internal sealed class UnionClipper
 
         // result is unclear, so try again using cleaned paths
         // (#973)
-        return ClipGeometry.Path2ContainsPath1(GetCleanPath(op1), GetCleanPath(op2));
+        return PolygonUtilities.Path2ContainsPath1(GetCleanPath(op1), GetCleanPath(op2));
     }
 
     private static void MoveSplits(OutRec fromOr, OutRec toOr)
@@ -2973,7 +2973,7 @@ internal sealed class UnionClipper
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool PtsReallyClose(Vertex pt1, Vertex pt2)
     {
-        double tolerance = ClipGeometry.ClosePointTolerance;
+        double tolerance = PolygonUtilities.ClosePointTolerance;
         return Math.Abs(pt1.X - pt2.X) < tolerance && Math.Abs(pt1.Y - pt2.Y) < tolerance;
     }
 
@@ -3019,9 +3019,9 @@ internal sealed class UnionClipper
         for (; ;)
         {
             // NB if preserveCollinear == true, then only remove 180 deg. spikes
-            if (ClipGeometry.IsCollinear(op2!.Prev.Point, op2.Point, op2.Next!.Point) &&
-                (ClipGeometry.PointEquals(op2.Point, op2.Prev.Point) || ClipGeometry.PointEquals(op2.Point, op2.Next.Point) || !this.PreserveCollinear ||
-                (ClipGeometry.DotProduct(op2.Prev.Point, op2.Point, op2.Next.Point) < 0)))
+            if (PolygonUtilities.IsCollinear(op2!.Prev.Point, op2.Point, op2.Next!.Point) &&
+                (PolygonUtilities.PointEquals(op2.Point, op2.Prev.Point) || PolygonUtilities.PointEquals(op2.Point, op2.Next.Point) || !this.PreserveCollinear ||
+                (PolygonUtilities.DotProduct(op2.Prev.Point, op2.Point, op2.Next.Point) < 0)))
             {
                 if (op2 == outrec.Points)
                 {
@@ -3058,13 +3058,13 @@ internal sealed class UnionClipper
         OutPt nextNextOp = splitOp.Next!.Next!;
         outrec.Points = prevOp;
 
-        ClipGeometry.TryGetLineIntersection(
+        PolygonUtilities.TryGetLineIntersection(
             prevOp.Point, splitOp.Point, splitOp.Next.Point, nextNextOp.Point, out Vertex ip);
 
         double area1 = Area(prevOp);
         double absArea1 = Math.Abs(area1);
 
-        if (absArea1 < ClipGeometry.SmallAreaTolerance2)
+        if (absArea1 < PolygonUtilities.SmallAreaTolerance2)
         {
             outrec.Points = null;
             return;
@@ -3075,7 +3075,7 @@ internal sealed class UnionClipper
 
         // de-link splitOp and splitOp.Next from the path
         // while inserting the intersection point
-        if (ClipGeometry.PointEquals(ip, prevOp.Point) || ClipGeometry.PointEquals(ip, nextNextOp.Point))
+        if (PolygonUtilities.PointEquals(ip, prevOp.Point) || PolygonUtilities.PointEquals(ip, nextNextOp.Point))
         {
             nextNextOp.Prev = prevOp;
             prevOp.Next = nextNextOp;
@@ -3094,7 +3094,7 @@ internal sealed class UnionClipper
         // So the only way for these areas to have the same sign is if
         // the split triangle is larger than the path containing prevOp or
         // if there's more than one self=intersection.
-        if (!(absArea2 > ClipGeometry.SmallAreaTolerance) ||
+        if (!(absArea2 > PolygonUtilities.SmallAreaTolerance) ||
                 (!(absArea2 > absArea1) &&
                   ((area2 > 0) != (area1 > 0))))
         {
@@ -3144,13 +3144,13 @@ internal sealed class UnionClipper
 
         for (; ;)
         {
-            if (ClipGeometry.SegmentsIntersect(
+            if (PolygonUtilities.SegmentsIntersect(
                 op2!.Prev.Point,
                 op2.Point,
                 op2.Next!.Point,
                 op2.Next.Next!.Point))
             {
-                if (ClipGeometry.SegmentsIntersect(
+                if (PolygonUtilities.SegmentsIntersect(
                     op2.Prev.Point,
                     op2.Point,
                     op2.Next.Next!.Point,
@@ -3221,7 +3221,7 @@ internal sealed class UnionClipper
 
         while (op2 != op)
         {
-            if (!ClipGeometry.PointEquals(op2.Point, lastPt))
+            if (!PolygonUtilities.PointEquals(op2.Point, lastPt))
             {
                 lastPt = op2.Point;
                 path.Add(lastPt);
@@ -3391,7 +3391,7 @@ internal sealed class UnionClipper
             return false;
         }
 
-        outrec.Bounds = ClipGeometry.GetBounds(outrec.Path);
+        outrec.Bounds = PolygonUtilities.GetBounds(outrec.Path);
         return true;
     }
 
@@ -3550,32 +3550,36 @@ internal sealed class UnionClipper
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal ClipBounds GetBounds()
+    internal Box2 GetBounds()
     {
-        ClipBounds bounds = ClipMath.InvalidBounds;
+        double minX = double.MaxValue;
+        double minY = double.MaxValue;
+        double maxX = -double.MaxValue;
+        double maxY = -double.MaxValue;
+
         foreach (ClipVertex t in this.vertexList)
         {
             ClipVertex v = t;
             do
             {
-                if (v.Point.X < bounds.Left)
+                if (v.Point.X < minX)
                 {
-                    bounds.Left = v.Point.X;
+                    minX = v.Point.X;
                 }
 
-                if (v.Point.X > bounds.Right)
+                if (v.Point.X > maxX)
                 {
-                    bounds.Right = v.Point.X;
+                    maxX = v.Point.X;
                 }
 
-                if (v.Point.Y < bounds.Top)
+                if (v.Point.Y < minY)
                 {
-                    bounds.Top = v.Point.Y;
+                    minY = v.Point.Y;
                 }
 
-                if (v.Point.Y > bounds.Bottom)
+                if (v.Point.Y > maxY)
                 {
-                    bounds.Bottom = v.Point.Y;
+                    maxY = v.Point.Y;
                 }
 
                 v = v.Next!;
@@ -3583,7 +3587,13 @@ internal sealed class UnionClipper
             while (v != t);
         }
 
-        return bounds.IsEmpty() ? new ClipBounds(0, 0, 0, 0) : bounds;
+        if (Math.Abs(minX - double.MaxValue) < PolygonUtilities.FloatingPointTolerance)
+        {
+            return default;
+        }
+
+        Box2 bounds = new(new Vertex(minX, minY), new Vertex(maxX, maxY));
+        return bounds.IsEmpty() ? default : bounds;
     }
 
     internal bool Execute(
@@ -3662,12 +3672,12 @@ internal sealed class UnionClipper
     {
         public readonly int Compare(IntersectNode a, IntersectNode b)
         {
-            if (!ClipGeometry.IsAlmostZero(a.Point.Y - b.Point.Y))
+            if (!PolygonUtilities.IsAlmostZero(a.Point.Y - b.Point.Y))
             {
                 return (a.Point.Y > b.Point.Y) ? -1 : 1;
             }
 
-            if (ClipGeometry.IsAlmostZero(a.Point.X - b.Point.X))
+            if (PolygonUtilities.IsAlmostZero(a.Point.X - b.Point.X))
             {
                 return 0;
             }
