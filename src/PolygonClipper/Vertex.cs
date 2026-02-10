@@ -210,6 +210,17 @@ public readonly struct Vertex : IEquatable<Vertex>
     public static Vertex Max(in Vertex a, in Vertex b)
         => AsVertexUnsafe(Vector128.Max(AsVector128Unsafe(a), AsVector128Unsafe(b)));
 
+    /// <summary>
+    /// Computes the absolute value of each element in a specified vertex.
+    /// </summary>
+    /// <param name="value">The vertex that will have its absolute value computed.</param>
+    /// <returns>
+    /// A vertex with the absolute value of each of the elements in <paramref name="value"/>.
+    /// </returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vertex Abs(in Vertex value)
+        => AsVertexUnsafe(Vector128.Abs(AsVector128Unsafe(value)));
+
     /// <inheritdoc/>
     public bool Equals(Vertex other)
         => this.X == other.X && this.Y == other.Y;

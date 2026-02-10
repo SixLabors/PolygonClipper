@@ -80,7 +80,7 @@ internal sealed class SelfIntersectionUnionClipper
         {
             if (edge2.VertexTop == edge.VertexTop)
             {
-                // Found a matching maxima pair.
+                // Matched the companion maxima edge.
                 return edge2;
             }
 
@@ -116,7 +116,7 @@ internal sealed class SelfIntersectionUnionClipper
 
         if (!result.IsMaxima)
         {
-            // Not a maxima.
+            // No maxima at the current scanline.
             result = null;
         }
 
@@ -144,7 +144,7 @@ internal sealed class SelfIntersectionUnionClipper
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void SwapOutputRecords(ActiveEdge edge1, ActiveEdge edge2)
     {
-        // At least one edge has an assigned outputRecord.
+        // At least one edge already owns an output record.
         OutputRecord? outputRecord1 = edge1.OutputRecord;
         OutputRecord? outputRecord2 = edge2.OutputRecord;
         if (outputRecord1 == outputRecord2)
@@ -197,7 +197,7 @@ internal sealed class SelfIntersectionUnionClipper
             newOwner.Owner = newOwner.Owner.Owner;
         }
 
-        // make sure that outputRecord isn't an owner of newOwner
+        // Avoid cycles: ensure outputRecord is not already an ancestor of newOwner.
         OutputRecord? tmp = newOwner;
         while (tmp != null && tmp != outputRecord)
         {
@@ -436,7 +436,7 @@ internal sealed class SelfIntersectionUnionClipper
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void RegisterLocalMinima(SweepVertex vertex, List<LocalMinima> localMinimaList)
     {
-        // Make sure the sweep vertex is added only once.
+        // Guard against registering the same vertex twice.
         if ((vertex.Flags & VertexFlags.LocalMin) != VertexFlags.None)
         {
             return;
@@ -458,7 +458,7 @@ internal sealed class SelfIntersectionUnionClipper
             totalVertCnt += path.Count;
         }
 
-        // Pre-size the pool so vertex allocation is deterministic and cheap.
+        // Pre-size the pool to avoid growth during vertex creation.
         this.vertexList.EnsureCapacity(this.vertexList.Count + totalVertCnt);
 
         foreach (Contour path in paths)
@@ -500,7 +500,7 @@ internal sealed class SelfIntersectionUnionClipper
                 continue;
             }
 
-            // OK, we have a valid path
+            // Non-degenerate closed ring.
             prevVertex = v0.Prev;
             while (prevVertex != v0 && PolygonUtilities.IsAlmostZero(prevVertex!.Point.Y - v0.Point.Y))
             {
@@ -509,7 +509,7 @@ internal sealed class SelfIntersectionUnionClipper
 
             if (prevVertex == v0)
             {
-                // Closed paths cannot be completely flat.
+                // Closed rings cannot be completely flat.
                 continue;
             }
 
@@ -572,9 +572,8 @@ internal sealed class SelfIntersectionUnionClipper
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void SetWindingCountForClosedEdge(ActiveEdge edge)
     {
-        // Wind counts refer to polygon regions not edges, so here an edge's WindCnt
-        // indicates the higher of the wind counts for the two regions touching the
-        // edge. (nb: Adjacent regions can only ever have their wind counts differ by one.)
+        // Winding counts apply to regions, not edges. The edge wind count tracks the
+        // higher of the two adjacent region counts. Adjacent regions differ by one.
         ActiveEdge? edge2 = edge.PrevInAel;
 
         if (edge2 == null)
@@ -583,44 +582,42 @@ internal sealed class SelfIntersectionUnionClipper
         }
         else
         {
-            // Positive or negative filling here ...
-            // when edge2's wind count is in the SAME direction as its wind delta,
-            // then polygon will fill on the right of 'edge2' (and 'edge' will be inside).
-            // nb: neither edge2.WindCount nor edge2.WindDelta should ever be 0.
+            // For positive/negative filling, if edge2's wind count follows its wind delta,
+            // the filled region is to the right of edge2 (so edge is inside). Neither value is 0.
             if (edge2.WindCount * edge2.WindDelta < 0)
             {
-                // opposite directions so 'edge' is outside 'edge2' ...
+                // Opposite signs: edge lies outside edge2's region.
                 if (Math.Abs(edge2.WindCount) > 1)
                 {
-                    // outside prev poly but still inside another.
+                    // Outside this polygon but still inside another.
                     if (edge2.WindDelta * edge.WindDelta < 0)
                     {
-                        // reversing direction so use the same WC
+                        // Reversing direction; keep the same winding count.
                         edge.WindCount = edge2.WindCount;
                     }
                     else
                     {
-                        // otherwise keep 'reducing' the WC by 1 (i.e. towards 0) ...
+                        // Otherwise step the winding count toward zero.
                         edge.WindCount = edge2.WindCount + edge.WindDelta;
                     }
                 }
                 else
                 {
-                    // now outside all polygons so set own WC ...
+                    // Outside all polygons; reset to the edge's own winding.
                     edge.WindCount = edge.WindDelta;
                 }
             }
             else
             {
-                // 'edge' must be inside 'edge2'
+                // Same sign: edge lies inside edge2's region.
                 if (edge2.WindDelta * edge.WindDelta < 0)
                 {
-                    // reversing direction so use the same WC
+                    // Reversing direction; keep the same winding count.
                     edge.WindCount = edge2.WindCount;
                 }
                 else
                 {
-                    // otherwise keep 'increasing' the WC by 1 (i.e. away from 0) ...
+                    // Otherwise step the winding count away from zero.
                     edge.WindCount = edge2.WindCount + edge.WindDelta;
                 }
             }
@@ -641,16 +638,16 @@ internal sealed class SelfIntersectionUnionClipper
             return newcomer.CurrentX > resident.CurrentX;
         }
 
-        // get the turning direction  a1.Top, a2.Bottom, a2.Top
+        // Compare turning direction: resident.Top -> newcomer.Bottom -> newcomer.Top.
         int d = PolygonUtilities.CrossSign(resident.Top, newcomer.Bottom, newcomer.Top);
         if (d != 0)
         {
             return d < 0;
         }
 
-        // edges must be collinear to get here
+        // Collinear case falls through.
 
-        // for collinear bounds, place them according to the next turn
+        // For collinear bounds, use the next turn to order them.
         if (!resident.IsMaxima && (resident.Top.Y > newcomer.Top.Y))
         {
             return PolygonUtilities.CrossSign(
@@ -675,7 +672,7 @@ internal sealed class SelfIntersectionUnionClipper
             return newcomer.IsLeftBound;
         }
 
-        // resident must also have just been inserted
+        // Only newly inserted edges reach this branch.
         if (resident.IsLeftBound != newcomerIsLeft)
         {
             return newcomerIsLeft;
@@ -689,7 +686,7 @@ internal sealed class SelfIntersectionUnionClipper
             return true;
         }
 
-        // compare turning direction of the alternate bound
+        // Use the alternate bound turn to break the tie.
         return (PolygonUtilities.CrossSign(
             resident.PrevPrevVertex.Point,
             newcomer.Bottom,
@@ -724,7 +721,7 @@ internal sealed class SelfIntersectionUnionClipper
                 edge2 = edge2.NextInAel;
             }
 
-            // don't separate joined edges
+            // Keep joined edges adjacent in the active list.
             if (edge2.JoinWith == JoinWith.Right)
             {
                 edge2 = edge2.NextInAel!;
@@ -765,8 +762,8 @@ internal sealed class SelfIntersectionUnionClipper
     /// <param name="botY">The current scanline Y coordinate.</param>
     private void InsertLocalMinimaIntoActiveList(double botY)
     {
-        // Add any local minima (if any) at BotY ...
-        // NB horizontal local minima edges should contain locMin.Vertex.Prev
+        // Insert all minima on the current scanline.
+        // Horizontal minima use the previous vertex as the descending bound.
         while (this.HasLocalMinimaAtY(botY))
         {
             LocalMinima localMinima = this.PopLocalMinima();
@@ -785,15 +782,15 @@ internal sealed class SelfIntersectionUnionClipper
             rightBound.CurrentX = localMinima.Vertex.Point.X;
             rightBound.WindDelta = 1;
 
-            // Ascending.
+            // Ascending bound.
             rightBound.VertexTop = localMinima.Vertex.Next;
             rightBound.Top = localMinima.Vertex.Next!.Point;
             rightBound.OutputRecord = null;
             rightBound.LocalMin = localMinima;
             rightBound.UpdateDx();
 
-            // Currently LeftB is just the descending bound and RightB is the ascending.
-            // Now if the LeftB isn't on the left of RightB then we need swap them.
+            // leftBound starts descending and rightBound ascending.
+            // Swap them if their geometric ordering is inverted.
             if (leftBound.IsHorizontal)
             {
                 if (leftBound.IsHeadingRightHorizontal)
@@ -906,10 +903,8 @@ internal sealed class SelfIntersectionUnionClipper
 
         ActiveEdge? prevHotEdge = edge1.GetPrevHotEdge();
 
-        // WindDelta is the winding direction of the **input** paths
-        // and unrelated to the winding direction of output polygons.
-        // Output orientation is determined by the edge's OutputRecord.FrontEdge which is
-        // the ascending edge (see AddLocalMinimumOutput).
+        // WindDelta reflects input winding, not output orientation.
+        // Output orientation is driven by which edge is assigned as the front (ascending) edge.
         if (prevHotEdge != null)
         {
             if (this.buildHierarchy)
@@ -989,14 +984,13 @@ internal sealed class SelfIntersectionUnionClipper
                     SetOutputOwner(outputRecord, e.OutputRecord!);
                 }
 
-                // nb: outputRecord.Owner here is likely NOT the real
-                // owner but this will be fixed in DeepCheckOwner()
+                // Owner assignment here is provisional and will be resolved later.
             }
 
             DetachOutputRecord(edge1);
         }
 
-        // and to preserve the winding orientation of OutputRecord ...
+        // Join in index order to preserve output orientation.
         else if (edge1.OutputRecord!.Index < edge2.OutputRecord!.Index)
         {
             JoinOutputRecords(edge1, edge2);
@@ -1017,8 +1011,8 @@ internal sealed class SelfIntersectionUnionClipper
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static void JoinOutputRecords(ActiveEdge edge1, ActiveEdge edge2)
     {
-        // join edge2 OutputRecord path onto edge1 OutputRecord path and then delete edge2 OutputRecord path
-        // pointers. (NB Only very rarely do the joining ends share the same coords.)
+        // Append edge2's path onto edge1's path, then discard edge2's path pointers.
+        // The joining ends rarely share coordinates, so pointer swaps are safe.
         OutputPoint p1Start = edge1.OutputRecord!.Points!;
         OutputPoint p2Start = edge2.OutputRecord!.Points!;
         OutputPoint p1End = p1Start.Next!;
@@ -1051,7 +1045,7 @@ internal sealed class SelfIntersectionUnionClipper
             }
         }
 
-        // after joining, the edge2.OutputRecord must contains no vertices ...
+        // After joining, edge2's output record contains no vertices.
         edge2.OutputRecord!.FrontEdge = null;
         edge2.OutputRecord!.BackEdge = null;
         edge2.OutputRecord!.Points = null;
@@ -1072,8 +1066,8 @@ internal sealed class SelfIntersectionUnionClipper
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private OutputPoint AddOutputPoint(ActiveEdge edge, Vertex point)
     {
-        // outputRecord.Points: a circular doubly-linked list of OutputPoint where ...
-        // opFront[.Prev]* ~~~> opBack & opBack == opFront.Next
+        // outputRecord.Points is a circular list; Points is the front point and
+        // Points.Next is the back point for this output record.
         OutputRecord outputRecord = edge.OutputRecord!;
         bool toFront = edge.IsFront;
         OutputPoint opFront = outputRecord.Points!;
@@ -1128,6 +1122,7 @@ internal sealed class SelfIntersectionUnionClipper
 
         if (IsJoined(edge))
         {
+            // Split joined edges before advancing to avoid missing intersections.
             this.SplitEdge(edge, edge.Bottom);
         }
 
@@ -1142,7 +1137,7 @@ internal sealed class SelfIntersectionUnionClipper
 
         this.CheckJoinLeft(edge, edge.Bottom);
 
-        // (#500)
+        // Issue #500: check join on the right bound at the bottom point.
         this.CheckJoinRight(edge, edge.Bottom, true);
     }
 
@@ -1164,7 +1159,7 @@ internal sealed class SelfIntersectionUnionClipper
             this.SplitEdge(edge2, point);
         }
 
-        // UPDATE WINDING COUNTS...
+        // Update winding counts for both edges.
         int oldE1WindCount, oldE2WindCount;
         if (edge1.WindCount + edge2.WindDelta == 0)
         {
@@ -1204,9 +1199,9 @@ internal sealed class SelfIntersectionUnionClipper
             return;
         }
 
-        // NOW PROCESS THE INTERSECTION ...
+        // Emit output based on hot edges and winding state.
 
-        // if both edges are 'hot' ...
+        // If both edges are hot, treat as maxima or crossing.
         if (edge1.IsHot && edge2.IsHot)
         {
             if ((oldE1WindCount != 0 && oldE1WindCount != 1) || (oldE2WindCount != 0 && oldE2WindCount != 1))
@@ -1222,13 +1217,13 @@ internal sealed class SelfIntersectionUnionClipper
             }
             else
             {
-                // can't treat as maxima & minima
+                // Treat as a crossing; emit and swap output records.
                 this.AddOutputPoint(edge1, point);
                 SwapOutputRecords(edge1, edge2);
             }
         }
 
-        // if one or other edge is 'hot' ...
+        // If only one edge is hot, emit and swap.
         else if (edge1.IsHot)
         {
             this.AddOutputPoint(edge1, point);
@@ -1240,7 +1235,7 @@ internal sealed class SelfIntersectionUnionClipper
             SwapOutputRecords(edge1, edge2);
         }
 
-        // neither edge is 'hot'
+        // If both edges are cold, only minima with winding=1 start output.
         else
         {
             if (oldE1WindCount == 1 && oldE2WindCount == 1)
@@ -1289,7 +1284,7 @@ internal sealed class SelfIntersectionUnionClipper
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void RecycleActiveEdge(ActiveEdge edge)
     {
-        // clear refs to allow GC
+        // Clear references so pooled edges do not retain objects.
         edge.Bottom = default;
         edge.Top = default;
         edge.Dx = 0.0;
@@ -1321,7 +1316,7 @@ internal sealed class SelfIntersectionUnionClipper
         }
         else
         {
-            // recycle ActiveEdge from free list
+            // Reuse a pooled edge.
             edge = this.freeActiveEdges.Pop();
         }
 
@@ -1343,11 +1338,10 @@ internal sealed class SelfIntersectionUnionClipper
             edge.NextInSel = edge.NextInAel;
             edge.Jump = edge.NextInSel;
 
-            // it is safe to ignore 'joined' edges here because
-            // if necessary they will be split in IntersectActiveEdges()
+            // Joined edges can be split later during intersection processing.
             edge.CurrentX = edge.TopX(topY);
 
-            // NB don't update edge.curr.Y yet (see AddIntersectionNode)
+            // Defer any Y updates; AddIntersectionNode uses original bounds.
             edge = edge.NextInAel;
         }
     }
@@ -1382,11 +1376,11 @@ internal sealed class SelfIntersectionUnionClipper
                 this.horizontalSegments.Clear();
             }
 
-            // Bottom of scanbeam.
+            // Advance to the next scanbeam.
             this.currentScanlineBottomY = y;
             if (!this.TryPopScanline(out y))
             {
-                // y new top of scanbeam.
+                // y is now the new top of the scanbeam.
                 break;
             }
 
@@ -1441,6 +1435,7 @@ internal sealed class SelfIntersectionUnionClipper
             intersectionPoint = new Vertex(edge1.CurrentX, topY);
         }
 
+        // Clamp intersections that drift outside the scanbeam due to numeric error.
         if (intersectionPoint.Y > this.currentScanlineBottomY || intersectionPoint.Y < topY)
         {
             double absDx1 = Math.Abs(edge1.Dx);
@@ -1534,14 +1529,11 @@ internal sealed class SelfIntersectionUnionClipper
             return false;
         }
 
-        // Calculate edge positions at the top of the current scanbeam, and from this
-        // we will determine the intersections required to reach these new positions.
+        // Compute edge positions at the top of the scanbeam to derive required intersections.
         this.UpdateCurrentXAndCopyToSortedEdges(topY);
 
-        // Find all edge intersections in the current scanbeam using a stable merge
-        // sort that ensures only adjacent edges are intersecting. Intersect info is
-        // stored in the intersection list ready to be processed in ProcessIntersectionList.
-        // Re merge sorts see https://stackoverflow.com/a/46319131/359538
+        // Find intersections via a stable merge sort so only adjacent edges intersect.
+        // Nodes are stored for ProcessIntersectionList. See https://stackoverflow.com/a/46319131/359538.
         ActiveEdge? left = this.sortedEdgeHead;
 
         while (left!.Jump != null)
@@ -1612,16 +1604,12 @@ internal sealed class SelfIntersectionUnionClipper
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ProcessIntersectionList()
     {
-        // We now have a list of intersections required so that edges will be
-        // correctly positioned at the top of the scanbeam. However, it's important
-        // that edge intersections are processed from the bottom up, but it's also
-        // crucial that intersections only occur between adjacent edges.
+        // Intersections must be processed bottom-up, and only between adjacent edges.
 
-        // First we do a quicksort so intersections proceed in a bottom up order ...
+        // Sort so intersections proceed from bottom to top.
         this.intersectionList.Sort(default(IntersectNodeComparer));
 
-        // Now as we process these intersections, we must sometimes adjust the order
-        // to ensure that intersecting edges are always adjacent ...
+        // Reorder as needed to ensure intersecting edges are adjacent.
         for (int i = 0; i < this.intersectionList.Count; ++i)
         {
             if (!AreEdgesAdjacentInActiveList(this.intersectionList[i]))
@@ -1632,7 +1620,7 @@ internal sealed class SelfIntersectionUnionClipper
                     j++;
                 }
 
-                // swap
+                // Swap into adjacency.
                 (this.intersectionList[j], this.intersectionList[i]) =
                     (this.intersectionList[i], this.intersectionList[j]);
             }
@@ -1656,7 +1644,7 @@ internal sealed class SelfIntersectionUnionClipper
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void SwapPositionsInActiveList(ActiveEdge edge1, ActiveEdge edge2)
     {
-        // preconditon: edge1 must be immediately to the left of edge2
+        // Precondition: edge1 must be immediately to the left of edge2.
         ActiveEdge? next = edge2.NextInAel;
         if (next != null)
         {
@@ -1696,7 +1684,7 @@ internal sealed class SelfIntersectionUnionClipper
     {
         if (horizontalEdge.Bottom.X == horizontalEdge.Top.X)
         {
-            // the horizontal edge is going nowhere ...
+            // Degenerate horizontal edge (zero length).
             leftX = horizontalEdge.CurrentX;
             rightX = horizontalEdge.CurrentX;
             ActiveEdge? edge = horizontalEdge.NextInAel;
@@ -1734,8 +1722,7 @@ internal sealed class SelfIntersectionUnionClipper
 
         while (point.Y == horizontalEdge.Top.Y)
         {
-            // always trim 180 deg. spikes (in closed paths)
-            // but otherwise break if preserveCollinear = true
+            // Always trim 180-degree spikes in closed paths; otherwise stop when preserving collinear.
             if (preserveCollinear &&
                 (point.X < horizontalEdge.Top.X) != (horizontalEdge.Bottom.X < horizontalEdge.Top.X))
             {
@@ -1755,7 +1742,7 @@ internal sealed class SelfIntersectionUnionClipper
 
         if (wasTrimmed)
         {
-            // +/-infinity
+            // Recompute slope after trimming.
             horizontalEdge.UpdateDx();
         }
     }
@@ -1816,14 +1803,14 @@ internal sealed class SelfIntersectionUnionClipper
 
         while (true)
         {
-            // loops through consecutive horizontal edges
+            // Traverse consecutive horizontal edges on this scanline.
             ActiveEdge? edge = isLeftToRight ? horizontalEdge.NextInAel : horizontalEdge.PrevInAel;
 
             while (edge != null)
             {
                 if (edge.VertexTop == vertexMax)
                 {
-                    // do this first!!
+                    // Handle the maxima pair before processing other intersections.
                     if (horizontalEdge.IsHot && IsJoined(edge))
                     {
                         this.SplitEdge(edge, edge.Top);
@@ -1852,12 +1839,12 @@ internal sealed class SelfIntersectionUnionClipper
                     return;
                 }
 
-                // if the horizontal edge is a maxima, keep going until we reach
-                // its maxima pair, otherwise check for break conditions
+                // If this horizontal is a maxima, keep going until its pair is reached;
+                // otherwise check for break conditions.
                 Vertex point;
                 if (vertexMax != horizontalEdge.VertexTop)
                 {
-                    // otherwise stop when 'edge' is beyond the end of the horizontal line
+                    // Stop once the edge moves beyond the horizontal span.
                     if ((isLeftToRight && edge.CurrentX > rightX) ||
                             (!isLeftToRight && edge.CurrentX < leftX))
                     {
@@ -1868,9 +1855,8 @@ internal sealed class SelfIntersectionUnionClipper
                     {
                         point = horizontalEdge.NextVertex.Point;
 
-                        // For edges at the horizontal edge's end, only stop when the horizontal
-                        // edge's outslope is greater than e's slope when heading right or when the horizontal
-                        // edge's outslope is less than e's slope when heading left.
+                        // At the horizontal end, stop only when the outslope overtakes the edge
+                        // (greater when heading right, smaller when heading left).
                         if ((isLeftToRight && (edge.TopX(point.Y) >= point.X)) ||
                                 (!isLeftToRight && (edge.TopX(point.Y) <= point.X)))
                         {
@@ -1904,14 +1890,13 @@ internal sealed class SelfIntersectionUnionClipper
                 }
             }
 
-            // check if we've finished looping
-            // through consecutive horizontals
+            // Stop once no more consecutive horizontals remain.
             if (horizontalEdge.NextVertex.Point.Y != horizontalEdge.Top.Y)
             {
                 break;
             }
 
-            // still more horizontals in bound to process ...
+            // Advance to the next horizontal segment in the bound.
             if (horizontalEdge.IsHot)
             {
                 this.AddOutputPoint(horizontalEdge, horizontalEdge.Top);
@@ -1926,14 +1911,14 @@ internal sealed class SelfIntersectionUnionClipper
                 out rightX);
         }
 
-        // End of (possible consecutive) horizontals.
+        // Finished this horizontal chain.
         if (horizontalEdge.IsHot)
         {
             OutputPoint outputPoint = this.AddOutputPoint(horizontalEdge, horizontalEdge.Top);
             this.AddHorizontalSegment(outputPoint);
         }
 
-        // This is the end of an intermediate horizontal.
+        // Advance past the final intermediate horizontal.
         this.UpdateEdgeInActiveList(horizontalEdge);
     }
 
@@ -1944,23 +1929,23 @@ internal sealed class SelfIntersectionUnionClipper
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ProcessScanbeamTop(double y)
     {
-        // Sorted edges are reused to flag horizontals (see PushHorizontalEdge below).
+        // Reuse the sorted list to collect horizontals (see PushHorizontalEdge).
         this.sortedEdgeHead = null;
         ActiveEdge? edge = this.activeEdgeHead;
         while (edge != null)
         {
-            // NB 'edge' will never be horizontal here
+            // Edge is never horizontal at this point.
             if (edge.Top.Y == y)
             {
                 edge.CurrentX = edge.Top.X;
                 if (edge.IsMaxima)
                 {
-                    // TOP OF BOUND (MAXIMA)
+                    // Maxima reached; finalize this bound.
                     edge = this.ProcessMaxima(edge);
                     continue;
                 }
 
-                // INTERMEDIATE vertex ...
+                // Intermediate vertex on the bound.
                 if (edge.IsHot)
                 {
                     this.AddOutputPoint(edge, edge.Top);
@@ -1968,14 +1953,14 @@ internal sealed class SelfIntersectionUnionClipper
 
                 this.UpdateEdgeInActiveList(edge);
 
-                // Horizontals are processed later.
+                // Queue horizontals for dedicated processing.
                 if (edge.IsHorizontal)
                 {
                     this.PushHorizontalEdge(edge);
                 }
             }
 
-            // Not the top of the edge.
+            // Edge continues through the scanbeam.
             else
             {
                 edge.CurrentX = edge.TopX(y);
@@ -1999,7 +1984,7 @@ internal sealed class SelfIntersectionUnionClipper
         ActiveEdge? maxPair = FindMaximaPair(edge);
         if (maxPair == null)
         {
-            // maxPair is horizontal.
+            // Horizontal maxima pair is handled in horizontal processing.
             return nextEdge;
         }
 
@@ -2013,8 +1998,8 @@ internal sealed class SelfIntersectionUnionClipper
             this.SplitEdge(maxPair, maxPair.Top);
         }
 
-        // only non-horizontal maxima here.
-        // process any edges between maxima pair ...
+        // Only non-horizontal maxima reach here.
+        // Process edges between the maxima pair.
         while (nextEdge != maxPair)
         {
             this.IntersectActiveEdges(edge, nextEdge!, edge.Top);
@@ -2022,7 +2007,7 @@ internal sealed class SelfIntersectionUnionClipper
             nextEdge = edge.NextInAel;
         }
 
-        // here edge.nextInAel == ENext == EMaxPair ...
+        // At this point edge.NextInAel == maxPair.
         if (edge.IsHot)
         {
             this.AddLocalMaximumOutput(edge, maxPair, edge.Top);
@@ -2082,11 +2067,11 @@ internal sealed class SelfIntersectionUnionClipper
             return;
         }
 
-        // Avoid trivial joins.
+        // Reject joins that are too close to extrema (Issue #490).
         if ((point.Y < edge.Top.Y + PolygonUtilities.ClosePointTolerance || point.Y < prev.Top.Y + PolygonUtilities.ClosePointTolerance) &&
             ((edge.Bottom.Y > point.Y) || (prev.Bottom.Y > point.Y)))
         {
-            // (#490)
+            // Issue #490.
             return;
         }
 
@@ -2144,11 +2129,11 @@ internal sealed class SelfIntersectionUnionClipper
             return;
         }
 
-        // Avoid trivial joins.
+        // Reject joins that are too close to extrema (Issue #490).
         if ((point.Y < edge.Top.Y + PolygonUtilities.ClosePointTolerance || point.Y < next.Top.Y + PolygonUtilities.ClosePointTolerance) &&
             ((edge.Bottom.Y > point.Y) || (next.Bottom.Y > point.Y)))
         {
-            // (#490)
+            // Issue #490.
             return;
         }
 
@@ -2281,7 +2266,7 @@ internal sealed class SelfIntersectionUnionClipper
         }
         else
         {
-            // (for sorting)
+            // Mark invalid so sorting pushes it to the end.
             horizontalSegment.RightPoint = null;
         }
 
@@ -2367,7 +2352,7 @@ internal sealed class SelfIntersectionUnionClipper
         {
             HorizontalSegment segment1 = this.horizontalSegments[i];
 
-            // for each HorizontalSegment, find others that overlap
+            // Find overlapping segments to generate join candidates.
             for (int j = i + 1; j < k; j++)
             {
                 HorizontalSegment segment2 = this.horizontalSegments[j];
@@ -2483,13 +2468,13 @@ internal sealed class SelfIntersectionUnionClipper
         }
         while (outputPoint != outputPoint2);
 
-        // Not a proper polygon.
+        // Degenerate ring.
         if (outputPoint.Point.Y == point.Y)
         {
             return PointInPolygonResult.Outside;
         }
 
-        // must be above or below to get here
+        // Point is strictly above or below the starting Y.
         bool isAbove = outputPoint.Point.Y < point.Y, startingAbove = isAbove;
         int val = 0;
 
@@ -2516,9 +2501,8 @@ internal sealed class SelfIntersectionUnionClipper
                 break;
             }
 
-            // must have touched or crossed the point.Y horizontal
-            // and this must happen an even number of times
-            // Touching the horizontal.
+            // The scanline must touch or cross point.Y an even number of times.
+            // Handle horizontal touches explicitly.
             if (outputPoint2.Point.Y == point.Y)
             {
                 if (outputPoint2.Point.X == point.X || (outputPoint2.Point.Y == outputPoint2.Prev.Point.Y &&
@@ -2540,7 +2524,7 @@ internal sealed class SelfIntersectionUnionClipper
             {
                 if (outputPoint2.Prev.Point.X < point.X && outputPoint2.Point.X < point.X)
                 {
-                    // Toggle val.
+                    // Toggle parity.
                     val = 1 - val;
                 }
                 else
@@ -2591,8 +2575,7 @@ internal sealed class SelfIntersectionUnionClipper
     /// <returns><see langword="true"/> if the first ring is inside the second.</returns>
     private static bool IsPathInsidePath(OutputPoint outputPoint1, OutputPoint outputPoint2)
     {
-        // we need to make some accommodation for rounding errors
-        // so we won't jump if the first ClipVertex is found outside
+        // Allow for rounding error; don't decide based solely on the first vertex.
         PointInPolygonResult pip = PointInPolygonResult.On;
         OutputPoint outputPoint = outputPoint1;
         do
@@ -2623,8 +2606,7 @@ internal sealed class SelfIntersectionUnionClipper
         }
         while (outputPoint != outputPoint1);
 
-        // result is unclear, so try again using cleaned paths
-        // (#973)
+        // Result is unclear, so try again using cleaned paths (Issue #973).
         return PolygonUtilities.Path2ContainsPath1(BuildCleanContour(outputPoint1), BuildCleanContour(outputPoint2));
     }
 
@@ -2669,21 +2651,21 @@ internal sealed class SelfIntersectionUnionClipper
             op1b.Prev = op2b;
             op2b.Next = op1b;
 
-            // 'join' is really a split
+            // This join may split a single output record.
             if (outputRecord1 == outputRecord2)
             {
                 outputRecord2 = this.CreateOutputRecord();
                 outputRecord2.Points = op1b;
                 FixOutputRecordPoints(outputRecord2);
 
-                // if outputRecord1.Points has moved to outputRecord2 then update outputRecord1.Points.
+                // If outputRecord1.Points moved to outputRecord2, update outputRecord1.Points.
                 if (outputRecord1.Points!.OutputRecord == outputRecord2)
                 {
                     outputRecord1.Points = join.LeftToRight;
                     outputRecord1.Points.OutputRecord = outputRecord1;
                 }
 
-                // #498, #520, #584, D#576, #618
+                // Issue references: #498, #520, #584, #576, #618
                 if (this.buildHierarchy)
                 {
                     if (IsPathInsidePath(outputRecord1.Points, outputRecord2.Points))
@@ -2720,7 +2702,7 @@ internal sealed class SelfIntersectionUnionClipper
                 {
                     SetOutputOwner(outputRecord2, outputRecord1);
 
-                    // #618
+                    // Issue #618.
                     MoveOutputSplits(outputRecord2, outputRecord1);
                 }
                 else
@@ -2741,7 +2723,8 @@ internal sealed class SelfIntersectionUnionClipper
     private static bool ArePointsVeryClose(in Vertex firstPoint, in Vertex secondPoint)
     {
         double tolerance = PolygonUtilities.ClosePointTolerance;
-        return Math.Abs(firstPoint.X - secondPoint.X) < tolerance && Math.Abs(firstPoint.Y - secondPoint.Y) < tolerance;
+        Vertex delta = firstPoint - secondPoint;
+        return Math.Abs(delta.X) < tolerance && Math.Abs(delta.Y) < tolerance;
     }
 
     /// <summary>
@@ -2776,7 +2759,6 @@ internal sealed class SelfIntersectionUnionClipper
         outputPoint.Prev.Next = outputPoint.Next;
         outputPoint.Next!.Prev = outputPoint.Prev;
 
-        // outputPoint == null;
         return result;
     }
 
@@ -2804,7 +2786,7 @@ internal sealed class SelfIntersectionUnionClipper
         OutputPoint? outputPoint2 = startOp;
         while (true)
         {
-            // NB if preserveCollinear == true, then only remove 180 deg. spikes
+            // When preserving collinear, only remove 180-degree spikes.
             if (PolygonUtilities.IsCollinear(outputPoint2!.Prev.Point, outputPoint2.Point, outputPoint2.Next!.Point) &&
                 (PolygonUtilities.PointEquals(outputPoint2.Point, outputPoint2.Prev.Point) || PolygonUtilities.PointEquals(outputPoint2.Point, outputPoint2.Next.Point) || !this.PreserveCollinear ||
                 (PolygonUtilities.Dot(outputPoint2.Prev.Point, outputPoint2.Point, outputPoint2.Next.Point) < 0)))
@@ -2843,8 +2825,7 @@ internal sealed class SelfIntersectionUnionClipper
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void SplitOutputRecord(OutputRecord outputRecord, OutputPoint splitOp)
     {
-        // splitOp.Prev <=> splitOp &&
-        // splitOp.Next <=> splitOp.Next.Next are intersecting
+        // The segments (splitOp.Prev, splitOp) and (splitOp.Next, splitOp.Next.Next) intersect.
         OutputPoint prevOp = splitOp.Prev;
         OutputPoint nextNextOp = splitOp.Next!.Next!;
         outputRecord.Points = prevOp;
@@ -2864,8 +2845,7 @@ internal sealed class SelfIntersectionUnionClipper
         double area2 = PolygonUtilities.SignedArea(intersectionPoint, splitOp.Point, splitOp.Next.Point);
         double absArea2 = Math.Abs(area2);
 
-        // de-link splitOp and splitOp.Next from the path
-        // while inserting the intersection point
+        // Remove the crossing segment and insert the intersection point.
         if (PolygonUtilities.PointEquals(intersectionPoint, prevOp.Point) || PolygonUtilities.PointEquals(intersectionPoint, nextNextOp.Point))
         {
             nextNextOp.Prev = prevOp;
@@ -2880,7 +2860,7 @@ internal sealed class SelfIntersectionUnionClipper
             prevOp.Next = newOp2;
         }
 
-        // nb: area1 is the path's signed area *before* splitting, whereas area2 is
+        // Note: area1 is the path's signed area *before* splitting, whereas area2 is
         // the signed area of the triangle containing splitOp & splitOp.Next.
         // So the only way for these areas to have the same sign is if
         // the split triangle is larger than the path containing prevOp or
@@ -2919,8 +2899,6 @@ internal sealed class SelfIntersectionUnionClipper
             outputRecord.Splits ??= [];
             outputRecord.Splits.Add(newOutputRecord.Index);
         }
-
-        // else { splitOp = null; splitOp.Next = null; }
     }
 
     /// <summary>
@@ -2932,7 +2910,7 @@ internal sealed class SelfIntersectionUnionClipper
         OutputPoint outputPoint2 = outputRecord.Points!;
         if (outputPoint2.Prev == outputPoint2.Next!.Next)
         {
-            // Triangles can't self-intersect.
+            // Triangles cannot self-intersect.
             return;
         }
 
@@ -2950,7 +2928,7 @@ internal sealed class SelfIntersectionUnionClipper
                     outputPoint2.Next.Next!.Point,
                     outputPoint2.Next.Next.Next!.Point))
                 {
-                    // adjacent intersections (ie a micro self-intersection)
+                    // Adjacent intersections (micro self-intersection).
                     outputPoint2 = this.DuplicateOutputPoint(outputPoint2, false);
                     outputPoint2.Point = outputPoint2.Next!.Next!.Next!.Point;
                     outputPoint2 = outputPoint2.Next;
@@ -2970,7 +2948,7 @@ internal sealed class SelfIntersectionUnionClipper
 
                     outputPoint2 = outputRecord.Points;
 
-                    // triangles can't self-intersect
+                    // Triangles cannot self-intersect.
                     if (outputPoint2.Prev == outputPoint2.Next!.Next)
                     {
                         break;
@@ -3068,7 +3046,7 @@ internal sealed class SelfIntersectionUnionClipper
 
         while (currentPoint != outputPoint)
         {
-            Vertex current = new Vertex(currentPoint.Point.X, currentPoint.Point.Y);
+            Vertex current = new(currentPoint.Point.X, currentPoint.Point.Y);
             if (current != lastPoint)
             {
                 lastPoint = current;
@@ -3156,14 +3134,14 @@ internal sealed class SelfIntersectionUnionClipper
     /// <returns><see langword="true"/> if ownership could be resolved.</returns>
     private bool CheckSplitOwner(OutputRecord outputRecord, List<int>? splits)
     {
-        // nb: use indexing (not an iterator) in case 'splits' is modified inside this loop (#1029)
+        // Use indexing because splits can be modified during iteration (Issue #1029).
         for (int i = 0; i < splits!.Count; i++)
         {
             OutputRecord? splitRecord = this.outputRecordPool[splits[i]];
             if (splitRecord.Points == null && splitRecord.Splits != null &&
                 this.CheckSplitOwner(outputRecord, splitRecord.Splits))
             {
-                // #942
+                // Issue #942.
                 return true;
             }
 
@@ -3173,7 +3151,7 @@ internal sealed class SelfIntersectionUnionClipper
                 continue;
             }
 
-            // #599
+            // Issue #599.
             splitRecord.RecursiveSplit = outputRecord;
 
             if (splitRecord.Splits != null && this.CheckSplitOwner(outputRecord, splitRecord.Splits))
@@ -3188,7 +3166,7 @@ internal sealed class SelfIntersectionUnionClipper
                 continue;
             }
 
-            // splitRecord is owned by outputRecord (#957)
+            // splitRecord is owned by outputRecord (Issue #957).
             if (!IsOwnerValid(outputRecord, splitRecord))
             {
                 splitRecord.Owner = outputRecord.Owner;
@@ -3242,9 +3220,8 @@ internal sealed class SelfIntersectionUnionClipper
 
         int i = 0;
 
-        // this.outputRecordPool.Count is not static here because
-        // CheckOutputBounds below can indirectly add additional
-        // OutputRecord (via FixOutputRecordPoints & CleanCollinearEdges)
+        // outputRecordPool.Count may change because CheckOutputBounds can add records
+        // via FixOutputRecordPoints and CleanCollinearEdges.
         while (i < this.outputRecordPool.Count)
         {
             OutputRecord outputRecord = this.outputRecordPool[i++];
@@ -3316,6 +3293,7 @@ internal sealed class SelfIntersectionUnionClipper
                 continue;
             }
 
+            // Depth is the number of owning contours in the chain.
             int depth = 0;
             OutputRecord? owner = outputRecord.Owner;
             while (owner != null && outputRecordIndices.ContainsKey(owner))
@@ -3332,6 +3310,7 @@ internal sealed class SelfIntersectionUnionClipper
             Contour contour = polygon[index];
             if (contour.ParentIndex != null)
             {
+                // Map parent links to hole indices for quick traversal.
                 polygon[contour.ParentIndex.Value].AddHoleIndex(index);
             }
         }
