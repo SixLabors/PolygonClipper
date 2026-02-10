@@ -141,25 +141,19 @@ internal static class PolygonUtilities
         Vertex d1 = a2 - a1;
         Vertex d2 = b2 - b1;
         double det = Vertex.Cross(d2, d1);
-        if (IsAlmostZero(det))
+        if (det == 0)
         {
             intersection = default;
             return false;
         }
 
         double t = Vertex.Cross(a1 - b1, d2) / det;
-        if (t <= 0D || IsAlmostZero(t))
+        intersection = t switch
         {
-            intersection = a1;
-        }
-        else if (t >= 1D || IsAlmostZero(t - 1D))
-        {
-            intersection = a2;
-        }
-        else
-        {
-            intersection = a1 + (t * d1);
-        }
+            <= 0D => a1,
+            >= 1D => a2,
+            _ => a1 + (t * d1)
+        };
 
         return true;
     }
@@ -169,22 +163,14 @@ internal static class PolygonUtilities
     /// </summary>
     public static Vertex ClosestPointOnSegment(in Vertex point, in Vertex seg1, in Vertex seg2)
     {
-        Vertex direction = seg2 - seg1;
-        if (IsAlmostZero(direction.X) && IsAlmostZero(direction.Y))
+        if (seg1 == seg2)
         {
             return seg1;
         }
 
+        Vertex direction = seg2 - seg1;
         double q = Vertex.Dot(point - seg1, direction) / Vertex.Dot(direction, direction);
-        if (q < 0D)
-        {
-            q = 0D;
-        }
-        else if (q > 1D)
-        {
-            q = 1D;
-        }
-
+        Math.Clamp(q, 0, 1);
         return seg1 + (q * direction);
     }
 
@@ -193,18 +179,21 @@ internal static class PolygonUtilities
     /// </summary>
     public static bool SegmentsIntersect(in Vertex a1, in Vertex a2, in Vertex b1, in Vertex b2, bool inclusive = false)
     {
+        // Uses cross-product tests to solve a1 + d1 * t == b1 + d2 * u.
+        // cp is the denominator (cross of directions); cp == 0 means parallel/collinear.
         Vertex d1 = a2 - a1;
         Vertex d2 = b2 - b1;
         double cp = Vertex.Cross(d2, d1);
-        if (IsAlmostZero(cp))
+        if (cp == 0)
         {
             return false;
         }
 
         if (inclusive)
         {
+            // Inclusive mode allows intersections at endpoints.
             double t = Vertex.Cross(a1 - b1, d2);
-            if (IsAlmostZero(t))
+            if (t == 0)
             {
                 return true;
             }
@@ -213,6 +202,7 @@ internal static class PolygonUtilities
             {
                 if (cp < 0D || t > cp)
                 {
+                    // t outside [0, cp] once sign is normalized.
                     return false;
                 }
             }
@@ -222,21 +212,23 @@ internal static class PolygonUtilities
             }
 
             t = Vertex.Cross(a1 - b1, d1);
-            if (IsAlmostZero(t))
+            if (t == 0)
             {
                 return true;
             }
 
             if (t > 0D)
             {
+                // t within bounds for the second segment.
                 return cp > 0D && t <= cp;
             }
 
             return cp < 0D && t >= cp;
         }
 
+        // Exclusive mode requires the intersection to be strictly inside both segments.
         double t2 = Vertex.Cross(a1 - b1, d2);
-        if (IsAlmostZero(t2))
+        if (t2 == 0)
         {
             return false;
         }
@@ -245,6 +237,7 @@ internal static class PolygonUtilities
         {
             if (cp < 0D || t2 >= cp)
             {
+                // Reject if t2 is outside the open interval.
                 return false;
             }
         }
@@ -254,13 +247,14 @@ internal static class PolygonUtilities
         }
 
         t2 = Vertex.Cross(a1 - b1, d1);
-        if (IsAlmostZero(t2))
+        if (t2 == 0)
         {
             return false;
         }
 
         if (t2 > 0D)
         {
+            // Both parameters are inside open intervals.
             return cp > 0D && t2 < cp;
         }
 
@@ -331,7 +325,7 @@ internal static class PolygonUtilities
             return PointInPolygonResult.Outside;
         }
 
-        while (start < len && IsAlmostZero(polygon[start].Y - point.Y))
+        while (start < len && polygon[start].Y == point.Y)
         {
             start++;
         }
@@ -382,10 +376,10 @@ internal static class PolygonUtilities
             Vertex curr = polygon[i];
             Vertex prev = i > 0 ? polygon[i - 1] : polygon[len - 1];
 
-            if (IsAlmostZero(curr.Y - point.Y))
+            if (curr.Y == point.Y)
             {
-                if (IsAlmostZero(curr.X - point.X) ||
-                    (IsAlmostZero(curr.Y - prev.Y) && ((point.X < prev.X) != (point.X < curr.X))))
+                if (curr.X == point.X ||
+                    (curr.Y == prev.Y && ((point.X < prev.X) != (point.X < curr.X))))
                 {
                     return PointInPolygonResult.On;
                 }
@@ -455,7 +449,7 @@ internal static class PolygonUtilities
     /// <summary>
     /// Returns true if the outer contour contains the inner contour.
     /// </summary>
-    public static bool PathContainsPath(Contour inner, Contour outer)
+    private static bool PathContainsPath(Contour inner, Contour outer)
     {
         PointInPolygonResult pip = PointInPolygonResult.On;
         for (int i = 0; i < inner.Count; i++)
@@ -795,7 +789,8 @@ internal static class PolygonUtilities
         }
 
         // Sort exteriors by their minimum vertex so their order is deterministic.
-        externals.Sort((left, right) => LexicographicVertexComparison(contourInfos[left].MinVertex, contourInfos[right].MinVertex));
+        externals.Sort((left, right) =>
+            LexicographicVertexComparison(contourInfos[left].MinVertex, contourInfos[right].MinVertex));
 
         Polygon result = new(count);
         bool[] added = new bool[count];
@@ -805,7 +800,14 @@ internal static class PolygonUtilities
         foreach (int externalIndex in externals)
         {
             // Add the exterior contour first.
-            int externalContourIndex = AddContour(result, contourInfos, externalIndex, depths, parentIndices, added, newIndices);
+            int externalContourIndex = AddContour(
+                result,
+                contourInfos,
+                externalIndex,
+                depths,
+                parentIndices,
+                added,
+                newIndices);
 
             // Collect direct holes of this exterior and order them deterministically.
             List<int> holes = [];
@@ -817,13 +819,22 @@ internal static class PolygonUtilities
                 }
             }
 
-            holes.Sort((left, right) => LexicographicVertexComparison(contourInfos[left].MinVertex, contourInfos[right].MinVertex));
+            holes.Sort((left, right) =>
+                LexicographicVertexComparison(contourInfos[left].MinVertex, contourInfos[right].MinVertex));
 
             // Add holes immediately after their exterior so the contour ordering matches
             // the sweep output (exterior first, then its holes).
             foreach (int holeIndex in holes)
             {
-                int holeContourIndex = AddContour(result, contourInfos, holeIndex, depths, parentIndices, added, newIndices);
+                int holeContourIndex = AddContour(
+                    result,
+                    contourInfos,
+                    holeIndex,
+                    depths,
+                    parentIndices,
+                    added,
+                    newIndices);
+
                 result[externalContourIndex].AddHoleIndex(holeContourIndex);
                 result[holeContourIndex].ParentIndex = externalContourIndex;
             }
@@ -1004,7 +1015,8 @@ internal static class PolygonUtilities
             bool intersects = (current.Y > point.Y) != (previous.Y > point.Y);
             if (intersects)
             {
-                double xIntersection = ((previous.X - current.X) * (point.Y - current.Y) / (previous.Y - current.Y)) + current.X;
+                double xIntersection = ((previous.X - current.X) * (point.Y - current.Y) / (previous.Y - current.Y)) +
+                                       current.X;
                 if (point.X < xIntersection)
                 {
                     inside = !inside;
@@ -1048,7 +1060,8 @@ internal static class PolygonUtilities
             bool intersects = (current.Y > point.Y) != (previous.Y > point.Y);
             if (intersects)
             {
-                double xIntersection = ((previous.X - current.X) * (point.Y - current.Y) / (previous.Y - current.Y)) + current.X;
+                double xIntersection = ((previous.X - current.X) * (point.Y - current.Y) / (previous.Y - current.Y)) +
+                                       current.X;
                 if (point.X < xIntersection)
                 {
                     inside = !inside;

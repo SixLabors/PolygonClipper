@@ -1440,18 +1440,18 @@ internal sealed class SelfIntersectionUnionClipper
         {
             double absDx1 = Math.Abs(edge1.Dx);
             double absDx2 = Math.Abs(edge2.Dx);
+
+            // dx is dX/dY, so large magnitudes mean the edge is nearly horizontal (dY is tiny).
+            // Using TopX with a clamped Y can amplify floating-point error in that case, so we
+            // fall back to closest-point clamping when |dx| > 100 (about 0.57 degrees from horizontal).
+            // This threshold matches the Clipper2 stability heuristic and is scale-independent.
             switch (absDx1 > 100)
             {
                 case true when absDx2 > 100:
                 {
-                    if (absDx1 > absDx2)
-                    {
-                        intersectionPoint = PolygonUtilities.ClosestPointOnSegment(intersectionPoint, edge1.Bottom, edge1.Top);
-                    }
-                    else
-                    {
-                        intersectionPoint = PolygonUtilities.ClosestPointOnSegment(intersectionPoint, edge2.Bottom, edge2.Top);
-                    }
+                    intersectionPoint = absDx1 > absDx2
+                        ? PolygonUtilities.ClosestPointOnSegment(intersectionPoint, edge1.Bottom, edge1.Top)
+                        : PolygonUtilities.ClosestPointOnSegment(intersectionPoint, edge2.Bottom, edge2.Top);
 
                     break;
                 }

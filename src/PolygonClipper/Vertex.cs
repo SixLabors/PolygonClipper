@@ -13,6 +13,18 @@ namespace SixLabors.PolygonClipper;
 public readonly struct Vertex : IEquatable<Vertex>
 {
     /// <summary>
+    /// Gets the X-coordinate of the vertex.
+    /// </summary>
+#pragma warning disable CA1051 // Do not declare visible instance fields
+    public readonly double X;
+
+    /// <summary>
+    /// Gets the Y-coordinate of the vertex.
+    /// </summary>
+    public readonly double Y;
+#pragma warning restore CA1051 // Do not declare visible instance fields
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="Vertex"/> struct.
     /// </summary>
     /// <param name="xy">The X and Y coordinates of the vertex.</param>
@@ -32,16 +44,6 @@ public readonly struct Vertex : IEquatable<Vertex>
         this.X = x;
         this.Y = y;
     }
-
-    /// <summary>
-    /// Gets the X-coordinate of the vertex.
-    /// </summary>
-    public double X { get; }
-
-    /// <summary>
-    /// Gets the Y-coordinate of the vertex.
-    /// </summary>
-    public double Y { get; }
 
     /// <summary>
     /// Adds two vectors together.

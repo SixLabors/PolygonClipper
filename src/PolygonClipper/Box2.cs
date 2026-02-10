@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System;
 using System.Runtime.CompilerServices;
 
 namespace SixLabors.PolygonClipper;
@@ -11,6 +10,18 @@ namespace SixLabors.PolygonClipper;
 /// </summary>
 public readonly struct Box2 : IEquatable<Box2>
 {
+    /// <summary>
+    /// Gets the minimum xy-coordinate.
+    /// </summary>
+#pragma warning disable CA1051 // Do not declare visible instance fields
+    public readonly Vertex Min;
+
+    /// <summary>
+    /// Gets the maximum xy-coordinate.
+    /// </summary>
+    public readonly Vertex Max;
+#pragma warning restore CA1051 // Do not declare visible instance fields
+
     /// <summary>
     /// Initializes a new instance of the <see cref="Box2"/> struct.
     /// </summary>
@@ -38,16 +49,6 @@ public readonly struct Box2 : IEquatable<Box2>
     public static Box2 Invalid { get; } = new(
         new Vertex(double.MaxValue, double.MaxValue),
         new Vertex(-double.MaxValue, -double.MaxValue));
-
-    /// <summary>
-    /// Gets the minimum xy-coordinate.
-    /// </summary>
-    public Vertex Min { get; }
-
-    /// <summary>
-    /// Gets the maximum xy-coordinate.
-    /// </summary>
-    public Vertex Max { get; }
 
     /// <summary>
     /// Compares two <see cref="Box2"/> instances for equality.
