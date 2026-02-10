@@ -2723,8 +2723,8 @@ internal sealed class SelfIntersectionUnionClipper
     private static bool ArePointsVeryClose(in Vertex firstPoint, in Vertex secondPoint)
     {
         double tolerance = PolygonUtilities.ClosePointTolerance;
-        Vertex delta = firstPoint - secondPoint;
-        return Math.Abs(delta.X) < tolerance && Math.Abs(delta.Y) < tolerance;
+        Vertex delta = Vertex.Abs(firstPoint - secondPoint);
+        return delta.X < tolerance && delta.Y < tolerance;
     }
 
     /// <summary>

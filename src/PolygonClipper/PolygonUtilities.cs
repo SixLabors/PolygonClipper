@@ -35,8 +35,10 @@ internal static class PolygonUtilities
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool PointEquals(in Vertex a, in Vertex b)
-        => Math.Abs(a.X - b.X) <= PointEqualityTolerance &&
-           Math.Abs(a.Y - b.Y) <= PointEqualityTolerance;
+    {
+        Vertex delta = Vertex.Abs(a - b);
+        return delta.X <= PointEqualityTolerance && delta.Y <= PointEqualityTolerance;
+    }
 
     /// <summary>
     /// Returns the dot product of the vectors AB and BC.
