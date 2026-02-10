@@ -45,14 +45,14 @@ internal static class PolygonUtilities
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static double Dot(in Vertex a, in Vertex b, in Vertex c)
-        => ((b.X - a.X) * (c.X - b.X)) + ((b.Y - a.Y) * (c.Y - b.Y));
+        => Vertex.Dot(b - a, c - b);
 
     /// <summary>
     /// Returns the cross product of the vectors AB and BC.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static double Cross(in Vertex a, in Vertex b, in Vertex c)
-        => ((b.X - a.X) * (c.Y - b.Y)) - ((b.Y - a.Y) * (c.X - b.X));
+        => Vertex.Cross(b - a, c - b);
 
     /// <summary>
     /// Returns the sign of the cross product of the vectors AB and BC.
@@ -311,7 +311,7 @@ internal static class PolygonUtilities
     /// <summary>
     /// Returns the midpoint of a contour's bounding box.
     /// </summary>
-    public static Vertex GetBoundsMidPoint(Contour path) => GetBounds(path).MidPoint();
+    private static Vertex GetBoundsMidPoint(Contour path) => GetBounds(path).MidPoint();
 
     /// <summary>
     /// Determines whether a point is inside a contour.
@@ -325,7 +325,7 @@ internal static class PolygonUtilities
             return PointInPolygonResult.Outside;
         }
 
-        while (start < len && polygon[start].Y == point.Y)
+        while (start < len && IsAlmostZero(polygon[start].Y - point.Y))
         {
             start++;
         }
@@ -376,10 +376,10 @@ internal static class PolygonUtilities
             Vertex curr = polygon[i];
             Vertex prev = i > 0 ? polygon[i - 1] : polygon[len - 1];
 
-            if (curr.Y == point.Y)
+            if (IsAlmostZero(curr.Y - point.Y))
             {
-                if (curr.X == point.X ||
-                    (curr.Y == prev.Y && ((point.X < prev.X) != (point.X < curr.X))))
+                if (IsAlmostZero(curr.X - point.X) ||
+                    (IsAlmostZero(curr.Y - prev.Y) && ((point.X < prev.X) != (point.X < curr.X))))
                 {
                     return PointInPolygonResult.On;
                 }

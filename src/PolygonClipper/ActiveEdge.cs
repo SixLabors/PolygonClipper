@@ -155,14 +155,12 @@ internal sealed class ActiveEdge
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public double TopX(double currentY)
     {
-        // if (PolygonUtilities.IsAlmostZero(currentY - this.Top.Y) || PolygonUtilities.IsAlmostZero(this.Top.X - this.Bottom.X))
-        if (currentY == this.Top.Y || this.Top.Y == this.Bottom.Y)
+        if (PolygonUtilities.IsAlmostZero(currentY - this.Top.Y) || PolygonUtilities.IsAlmostZero(this.Top.X - this.Bottom.X))
         {
             return this.Top.X;
         }
 
-        // if (PolygonUtilities.IsAlmostZero(currentY - this.Bottom.Y))
-        if (currentY == this.Bottom.Y)
+        if (PolygonUtilities.IsAlmostZero(currentY - this.Bottom.Y))
         {
             return this.Bottom.X;
         }
