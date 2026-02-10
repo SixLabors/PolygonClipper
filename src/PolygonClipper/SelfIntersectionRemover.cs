@@ -130,7 +130,6 @@ internal static class SelfIntersectionRemover
         }
 
         ApplyPositiveFillOrientation(polygon, subject, sourceIndices);
-
         return subject;
     }
 
