@@ -40,7 +40,7 @@ public class Benches
     public Polygon PolygonClipper() => SixLabors.PolygonClipper.PolygonClipper.Union(this.subject, this.clipping);
 
     [Benchmark]
-    public PathsD Clipper2Union()
+    public PolyTreeD Clipper2Union()
     {
         ClipperD clipper = new(ClipperPrecision)
         {
@@ -50,7 +50,7 @@ public class Benches
 
         clipper.AddSubject(this.clipperSubject);
         clipper.AddClip(this.clipperClipping);
-        PathsD solution = [];
+        PolyTreeD solution = [];
         clipper.Execute(ClipType.Union, FillRule.EvenOdd, solution);
         return solution;
     }

@@ -30,39 +30,33 @@ internal sealed class SegmentComparer : IComparer<SweepEvent>, IComparer
             return 1;
         }
 
-        SweepEvent perhapsInversedX, perhapsInversedY;
-        bool inversed;
+        bool inversed = !x.IsBefore(y);
+        SweepEvent perhapsInversedX = inversed ? y : x;
+        SweepEvent perhapsInversedY = inversed ? x : y;
 
-        if (x.IsBefore(y))
-        {
-            perhapsInversedX = x;
-            perhapsInversedY = y;
-            inversed = false;
-        }
-        else
-        {
-            perhapsInversedX = y;
-            perhapsInversedY = x;
-            inversed = true;
-        }
+        Vertex xPoint = perhapsInversedX.Point;
+        Vertex yPoint = perhapsInversedY.Point;
+        Vertex xOtherPoint = perhapsInversedX.OtherEvent.Point;
+        Vertex yOtherPoint = perhapsInversedY.OtherEvent.Point;
 
         // Check if the segments are collinear by comparing their signed areas
-        double area1 = PolygonUtilities.SignedArea(perhapsInversedX.Point, perhapsInversedX.OtherEvent.Point, perhapsInversedY.Point);
-        double area2 = PolygonUtilities.SignedArea(perhapsInversedX.Point, perhapsInversedX.OtherEvent.Point, perhapsInversedY.OtherEvent.Point);
+        double area1 = PolygonUtilities.SignedArea(xPoint, xOtherPoint, yPoint);
+        double area2 = PolygonUtilities.SignedArea(xPoint, xOtherPoint, yOtherPoint);
 
-        if (area1 != 0 || area2 != 0)
+        if (area1 != 0D || area2 != 0D)
         {
             // Segments are not collinear
             // If they share their left endpoint, use the right endpoint to sort
-            if (perhapsInversedX.Point == perhapsInversedY.Point)
+            if (xPoint == yPoint)
             {
-                return LessIf(perhapsInversedX.IsBelow(perhapsInversedY.OtherEvent.Point), inversed);
+                bool isBelow = perhapsInversedX.Left ? area2 > 0D : area2 < 0D;
+                return LessIf(isBelow, inversed);
             }
 
             // Different left endpoints: use the y-coordinate to sort if x-coordinates are the same
-            if (perhapsInversedX.Point.X == perhapsInversedY.Point.X)
+            if (xPoint.X == yPoint.X)
             {
-                return LessIf(perhapsInversedX.Point.Y < perhapsInversedY.Point.Y, inversed);
+                return LessIf(xPoint.Y < yPoint.Y, inversed);
             }
 
             // If `x` and `y` lie on the same side of the reference segment,
@@ -79,8 +73,8 @@ internal sealed class SegmentComparer : IComparer<SweepEvent>, IComparer
             }
 
             // Form segments from the events.
-            Segment seg0 = new(perhapsInversedX.Point, perhapsInversedX.OtherEvent.Point);
-            Segment seg1 = new(perhapsInversedY.Point, perhapsInversedY.OtherEvent.Point);
+            Segment seg0 = new(xPoint, xOtherPoint);
+            Segment seg1 = new(yPoint, yOtherPoint);
 
             // Call the provided intersection method.
             int interResult = PolygonUtilities.FindIntersection(seg0, seg1, out Vertex pi0, out Vertex _);
@@ -108,7 +102,7 @@ internal sealed class SegmentComparer : IComparer<SweepEvent>, IComparer
         if (perhapsInversedX.PolygonType == perhapsInversedY.PolygonType)
         {
             // Both segments belong to the same polygon.
-            if (perhapsInversedX.Point == perhapsInversedY.Point)
+            if (xPoint == yPoint)
             {
                 // When left endpoints are identical, order by contour id.
                 return LessIf(perhapsInversedX.ContourId < perhapsInversedY.ContourId, inversed);

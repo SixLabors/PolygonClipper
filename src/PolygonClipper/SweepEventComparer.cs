@@ -23,21 +23,24 @@ internal sealed class SweepEventComparer : IComparer<SweepEvent>, IComparer
             return 1;
         }
 
+        Vertex xPoint = x.Point;
+        Vertex yPoint = y.Point;
+
         // Compare by x-coordinate
-        if (x.Point.X > y.Point.X)
+        if (xPoint.X > yPoint.X)
         {
             return 1;
         }
 
-        if (x.Point.X < y.Point.X)
+        if (xPoint.X < yPoint.X)
         {
             return -1;
         }
 
         // Compare by y-coordinate when x-coordinates are the same
-        if (x.Point.Y != y.Point.Y)
+        if (xPoint.Y != yPoint.Y)
         {
-            return x.Point.Y > y.Point.Y ? 1 : -1;
+            return xPoint.Y > yPoint.Y ? 1 : -1;
         }
 
         // Compare left vs. right endpoint
@@ -46,15 +49,19 @@ internal sealed class SweepEventComparer : IComparer<SweepEvent>, IComparer
             return x.Left ? 1 : -1;
         }
 
+        Vertex xOtherPoint = x.OtherEvent.Point;
+        Vertex yOtherPoint = y.OtherEvent.Point;
+
         // Compare collinearity using signed area
-        double area = PolygonUtilities.SignedArea(x.Point, x.OtherEvent.Point, y.OtherEvent.Point);
-        if (area != 0)
+        double area = PolygonUtilities.SignedArea(xPoint, xOtherPoint, yOtherPoint);
+        if (area == 0D)
         {
-            return x.IsBelow(y.OtherEvent.Point) ? -1 : 1;
+            // Compare by polygon type: subject polygons have higher priority
+            return x.PolygonType != PolygonType.Subject && y.PolygonType == PolygonType.Subject ? 1 : -1;
         }
 
-        // Compare by polygon type: subject polygons have higher priority
-        return x.PolygonType != PolygonType.Subject && y.PolygonType == PolygonType.Subject ? 1 : -1;
+        bool isBelow = x.Left ? area > 0D : area < 0D;
+        return isBelow ? -1 : 1;
     }
 
     /// <inheritdoc/>

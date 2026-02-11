@@ -37,7 +37,7 @@ public class SelfIntersectionBenches
         => PolygonClipper.RemoveSelfIntersections(this.polygon);
 
     [Benchmark]
-    public PathsD Clipper2Union()
+    public PolyTreeD Clipper2Union()
     {
         // Match Clipper2's single-polygon union with a positive fill rule.
         ClipperD clipper = new(ClipperPrecision)
@@ -47,7 +47,7 @@ public class SelfIntersectionBenches
         };
 
         clipper.AddSubject(this.clipperSubject);
-        PathsD solution = [];
+        PolyTreeD solution = [];
         clipper.Execute(ClipType.Union, this.clipperFillRule, solution);
         return solution;
     }
