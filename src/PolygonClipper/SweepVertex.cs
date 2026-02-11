@@ -16,7 +16,7 @@ internal sealed class SweepVertex
     /// <summary>
     /// Initializes a new instance of the <see cref="SweepVertex"/> class.
     /// </summary>
-    public SweepVertex(Vertex point, VertexFlags flags, SweepVertex? prev)
+    public SweepVertex(Vertex64 point, VertexFlags flags, SweepVertex? prev)
     {
         this.Point = point;
         this.Flags = flags;
@@ -27,7 +27,7 @@ internal sealed class SweepVertex
     /// <summary>
     /// Gets or sets the vertex position.
     /// </summary>
-    public Vertex Point { get; set; }
+    public Vertex64 Point { get; set; }
 
     /// <summary>
     /// Gets or sets the next vertex in the contour.

@@ -1,6 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Collections.Generic;
+
 namespace SixLabors.PolygonClipper;
 
 /// <summary>
@@ -41,12 +43,12 @@ internal sealed class OutputRecord
     /// <summary>
     /// Gets or sets the cached bounds for ownership tests.
     /// </summary>
-    public Box2 Bounds { get; set; }
+    public Box64 Bounds { get; set; }
 
     /// <summary>
     /// Gets or sets the temporary contour used during bounds checks.
     /// </summary>
-    public Contour Path { get; set; } = [];
+    public List<Vertex64> Path { get; set; } = [];
 
     /// <summary>
     /// Gets or sets split indices used to resolve complex self-intersections.
@@ -67,7 +69,7 @@ internal sealed class OutputPoint
     /// <summary>
     /// Initializes a new instance of the <see cref="OutputPoint"/> class.
     /// </summary>
-    public OutputPoint(Vertex point, OutputRecord outputRecord)
+    public OutputPoint(Vertex64 point, OutputRecord outputRecord)
     {
         this.Point = point;
         this.OutputRecord = outputRecord;
@@ -79,7 +81,7 @@ internal sealed class OutputPoint
     /// <summary>
     /// Gets or sets the vertex coordinate.
     /// </summary>
-    public Vertex Point { get; set; }
+    public Vertex64 Point { get; set; }
 
     /// <summary>
     /// Gets or sets the next point in the linked list.

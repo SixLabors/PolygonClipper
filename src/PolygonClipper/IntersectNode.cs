@@ -15,7 +15,7 @@ internal readonly struct IntersectNode
     /// <summary>
     /// Initializes a new instance of the <see cref="IntersectNode"/> struct.
     /// </summary>
-    internal IntersectNode(Vertex point, ActiveEdge edge1, ActiveEdge edge2)
+    internal IntersectNode(Vertex64 point, ActiveEdge edge1, ActiveEdge edge2)
     {
         this.Point = point;
         this.Edge1 = edge1;
@@ -25,7 +25,7 @@ internal readonly struct IntersectNode
     /// <summary>
     /// Gets the intersection point between <see cref="Edge1"/> and <see cref="Edge2"/>.
     /// </summary>
-    public Vertex Point { get; }
+    public Vertex64 Point { get; }
 
     /// <summary>
     /// Gets the first active edge participating in the intersection.

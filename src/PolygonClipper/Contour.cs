@@ -93,11 +93,12 @@ public sealed class Contour : IReadOnlyList<Vertex>
     /// Gets the segment at the specified index of the contour.
     /// </summary>
     /// <param name="index">The index of the segment.</param>
+    /// <param name="context">The fixed-precision context used to quantize vertices.</param>
     /// <returns>The <see cref="Segment"/>.</returns>
-    internal Segment GetSegment(int index)
+    internal Segment GetSegment(int index, FixedPrecisionContext context)
         => (index == this.Count - 1)
-        ? new Segment(this.vertices[^1], this.vertices[0])
-        : new Segment(this.vertices[index], this.vertices[index + 1]);
+        ? new Segment(context.Quantize(this.vertices[^1]), context.Quantize(this.vertices[0]))
+        : new Segment(context.Quantize(this.vertices[index]), context.Quantize(this.vertices[index + 1]));
 
     /// <summary>
     /// Gets the bounding box of the contour.

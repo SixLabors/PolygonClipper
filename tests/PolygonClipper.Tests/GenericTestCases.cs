@@ -65,10 +65,10 @@ public class GenericTestCases
             string mode = feature.Properties["operation"]?.ToString();
             Func<Polygon, Polygon, Polygon> operation = mode switch
             {
-                "union" => PolygonClipper.Union,
-                "intersection" => PolygonClipper.Intersection,
-                "xor" => PolygonClipper.Xor,
-                "diff" => PolygonClipper.Difference,
+                "union" => (a, b) => PolygonClipper.Union(a, b),
+                "intersection" => (a, b) => PolygonClipper.Intersection(a, b),
+                "xor" => (a, b) => PolygonClipper.Xor(a, b),
+                "diff" => (a, b) => PolygonClipper.Difference(a, b),
                 "diff_ba" => (a, b) => PolygonClipper.Difference(b, a),
                 _ => throw new InvalidOperationException($"Invalid mode: {mode}")
             };

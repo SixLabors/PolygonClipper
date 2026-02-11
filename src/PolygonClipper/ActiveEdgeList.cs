@@ -223,7 +223,7 @@ internal sealed class ActiveEdgeList
     /// <param name="topY">The scanline top Y coordinate.</param>
     /// <returns>The head of the sorted list.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ActiveEdge? CopyToSorted(double topY)
+    public ActiveEdge? CopyToSorted(long topY)
     {
         ActiveEdge? edge = this.head;
         ActiveEdge? sortedHead = edge;
@@ -280,7 +280,7 @@ internal sealed class ActiveEdgeList
                 newcomer.NextVertex.Point) >= 0;
         }
 
-        double y = newcomer.Bottom.Y;
+        long y = newcomer.Bottom.Y;
         bool newcomerIsLeft = newcomer.IsLeftBound;
 
         if (resident.Bottom.Y != y || resident.LocalMin.Vertex.Point.Y != y)
@@ -320,6 +320,7 @@ internal sealed class ActiveEdgeList
         edge.Bottom = default;
         edge.Top = default;
         edge.Dx = 0.0;
+        edge.CurrentX = 0;
         edge.WindCount = 0;
         edge.OutputRecord = null;
         edge.PrevInAel = null;

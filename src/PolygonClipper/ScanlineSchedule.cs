@@ -15,7 +15,7 @@ namespace SixLabors.PolygonClipper;
 internal sealed class ScanlineSchedule
 {
     private readonly List<LocalMinima> localMinima;
-    private readonly List<double> scanlines;
+    private readonly List<long> scanlines;
     private int localMinimaIndex;
     private bool isLocalMinimaSorted;
 
@@ -83,7 +83,7 @@ internal sealed class ScanlineSchedule
     /// <param name="y">The scanline Y coordinate.</param>
     /// <returns><see langword="true"/> if a minima exists at this Y.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool HasLocalMinimaAtY(double y)
+    public bool HasLocalMinimaAtY(long y)
         => this.localMinimaIndex < this.localMinima.Count &&
            this.localMinima[this.localMinimaIndex].Vertex.Point.Y == y;
 
@@ -99,7 +99,7 @@ internal sealed class ScanlineSchedule
     /// </summary>
     /// <param name="y">The scanline Y coordinate.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void InsertScanline(double y)
+    public void InsertScanline(long y)
     {
         int index = this.scanlines.BinarySearch(y);
         if (index >= 0)
@@ -117,7 +117,7 @@ internal sealed class ScanlineSchedule
     /// <param name="y">The popped scanline value.</param>
     /// <returns><see langword="true"/> when a scanline was available.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool TryPopScanline(out double y)
+    public bool TryPopScanline(out long y)
     {
         int count = this.scanlines.Count - 1;
         if (count < 0)

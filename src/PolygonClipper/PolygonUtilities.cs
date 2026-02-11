@@ -1,80 +1,94 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace SixLabors.PolygonClipper;
 
 internal static class PolygonUtilities
 {
-    // Sorts vertices by X then Y so we can build deterministic vertex orderings
-    // in trivial/short-circuit polygon results.
-    private static readonly Comparison<Vertex> LexicographicVertexComparison = (left, right)
-        => left.X != right.X
-            ? left.X.CompareTo(right.X)
-            : left.Y.CompareTo(right.Y);
+    private const double DoubleExactIntLimit = 9007199254740992D; // 2^53
+    [ThreadStatic]
+    private static double invScale;
 
-    internal const double FloatingPointTolerance = 1e-12;
-    internal const double CoordinateEpsilon = 1e-6;
-    internal const double PointEqualityTolerance = 0.5 * CoordinateEpsilon;
-    internal const double ClosePointTolerance = 2 * CoordinateEpsilon;
-    internal const double SmallAreaTolerance = CoordinateEpsilon * CoordinateEpsilon;
-    internal const double SmallAreaTolerance2 = 2 * SmallAreaTolerance;
-    internal const double JoinDistanceSquared = 0.25 * SmallAreaTolerance;
+    [ThreadStatic]
+    private static double scale;
 
-    /// <summary>
-    /// Determines whether a value is almost zero.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool IsAlmostZero(double value)
-        => Math.Abs(value) <= FloatingPointTolerance;
-
-    /// <summary>
-    /// Compares two vertices for near-equality.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool PointEquals(in Vertex a, in Vertex b)
+    internal static void SetFloatingScale(double inverseScale)
     {
-        Vertex delta = Vertex.Abs(a - b);
-        return delta.X <= PointEqualityTolerance && delta.Y <= PointEqualityTolerance;
+        invScale = inverseScale;
+        scale = inverseScale == 0D ? 0D : 1D / inverseScale;
     }
 
+    internal static void ClearFloatingScale()
+    {
+        invScale = 0D;
+        scale = 0D;
+    }
+
+    internal static bool UseFloatingScale
+        => invScale != 0D;
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static double ToDouble(long value)
+        => value * invScale;
     /// <summary>
     /// Returns the dot product of the vectors AB and BC.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static double Dot(in Vertex a, in Vertex b, in Vertex c)
-        => Vertex.Dot(b - a, c - b);
+    public static Int128 Dot(in Vertex64 a, in Vertex64 b, in Vertex64 c)
+    {
+        Vertex64 ab = b - a;
+        Vertex64 bc = c - b;
+        return Vertex64.Dot(ab, bc);
+    }
 
     /// <summary>
     /// Returns the cross product of the vectors AB and BC.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static double Cross(in Vertex a, in Vertex b, in Vertex c)
-        => Vertex.Cross(b - a, c - b);
+    public static Int128 Cross(in Vertex64 a, in Vertex64 b, in Vertex64 c)
+        => Vertex64.Cross(b - a, c - b);
 
     /// <summary>
     /// Returns the sign of the cross product of the vectors AB and BC.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static int CrossSign(in Vertex a, in Vertex b, in Vertex c)
+    public static int CrossSign(in Vertex64 a, in Vertex64 b, in Vertex64 c)
     {
-        double cross = Cross(a, b, c);
-        if (IsAlmostZero(cross))
+        if (invScale != 0D)
+        {
+            double ax = a.X * invScale;
+            double ay = a.Y * invScale;
+            double bx = b.X * invScale;
+            double by = b.Y * invScale;
+            double cx = c.X * invScale;
+            double cy = c.Y * invScale;
+            double crossValue = ((bx - ax) * (cy - by)) - ((by - ay) * (cx - bx));
+            if (crossValue == 0D)
+            {
+                return 0;
+            }
+
+            return crossValue > 0D ? 1 : -1;
+        }
+
+        Int128 crossValueInt = Cross(a, b, c);
+        if (crossValueInt == 0)
         {
             return 0;
         }
 
-        return cross > 0 ? 1 : -1;
+        return crossValueInt > 0 ? 1 : -1;
     }
 
     /// <summary>
     /// Returns true when three vertices are collinear.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool IsCollinear(in Vertex a, in Vertex shared, in Vertex b)
-        => IsAlmostZero(Cross(a, shared, b));
+    public static bool IsCollinear(in Vertex64 a, in Vertex64 shared, in Vertex64 b)
+        => CrossSign(a, shared, b) == 0;
 
     /// <summary>
     /// Returns the signed area of a triangle.
@@ -84,13 +98,26 @@ internal static class PolygonUtilities
     /// <param name="p2">The third point.</param>
     /// <returns>The <see cref="double"/> area.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static double SignedArea(in Vertex p0, in Vertex p1, in Vertex p2)
-        => ((p0.X - p2.X) * (p1.Y - p2.Y)) - ((p1.X - p2.X) * (p0.Y - p2.Y));
+    public static double SignedArea(in Vertex64 p0, in Vertex64 p1, in Vertex64 p2)
+    {
+        if (invScale != 0D)
+        {
+            double p0x = p0.X * invScale;
+            double p0y = p0.Y * invScale;
+            double p1x = p1.X * invScale;
+            double p1y = p1.Y * invScale;
+            double p2x = p2.X * invScale;
+            double p2y = p2.Y * invScale;
+            return ((p0x - p2x) * (p1y - p2y)) - ((p1x - p2x) * (p0y - p2y));
+        }
+
+        return (double)Vertex64.Cross(p0 - p2, p1 - p2);
+    }
 
     /// <summary>
     /// Computes the signed area of a contour.
     /// </summary>
-    public static double Area(Contour path)
+    public static double Area(List<Vertex64> path)
     {
         int count = path.Count;
         if (count < 3)
@@ -98,33 +125,56 @@ internal static class PolygonUtilities
             return 0D;
         }
 
-        double area = 0D;
-        Vertex prev = path[count - 1];
+        Int128 area = 0;
+        Vertex64 prev = path[count - 1];
         for (int i = 0; i < count; i++)
         {
-            Vertex current = path[i];
-            area += (prev.Y + current.Y) * (prev.X - current.X);
+            Vertex64 current = path[i];
+            area += (Int128)(prev.Y + current.Y) * (prev.X - current.X);
             prev = current;
         }
 
-        return area * 0.5D;
+        return (double)area * 0.5D;
     }
 
     /// <summary>
     /// Computes the squared perpendicular distance from a point to a line segment.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static double PerpendicularDistanceSquared(in Vertex point, in Vertex line1, in Vertex line2)
+    public static double PerpendicularDistanceSquared(in Vertex64 point, in Vertex64 line1, in Vertex64 line2)
     {
-        Vertex toPoint = point - line1;
-        Vertex direction = line2 - line1;
-        double lengthSquared = Vertex.Dot(direction, direction);
+        if (invScale != 0D)
+        {
+            double px = point.X * invScale;
+            double py = point.Y * invScale;
+            double l1x = line1.X * invScale;
+            double l1y = line1.Y * invScale;
+            double l2x = line2.X * invScale;
+            double l2y = line2.Y * invScale;
+
+            double dx = l2x - l1x;
+            double dy = l2y - l1y;
+            double lenSq = (dx * dx) + (dy * dy);
+            if (lenSq == 0D)
+            {
+                return 0D;
+            }
+
+            double cx = px - l1x;
+            double cy = py - l1y;
+            double crossValue = (cx * dy) - (cy * dx);
+            return (crossValue * crossValue) / lenSq;
+        }
+
+        Vertex64 toPoint = point - line1;
+        Vertex64 direction = line2 - line1;
+        double lengthSquared = (double)Vertex64.Dot(direction, direction);
         if (lengthSquared == 0D)
         {
             return 0D;
         }
 
-        double cross = Vertex.Cross(toPoint, direction);
+        double cross = (double)Vertex64.Cross(toPoint, direction);
         return (cross * cross) / lengthSquared;
     }
 
@@ -132,28 +182,91 @@ internal static class PolygonUtilities
     /// Finds the intersection of two line segments, including endpoints.
     /// </summary>
     public static bool TryGetLineIntersection(
-        in Vertex a1,
-        in Vertex a2,
-        in Vertex b1,
-        in Vertex b2,
-        out Vertex intersection)
+        in Vertex64 a1,
+        in Vertex64 a2,
+        in Vertex64 b1,
+        in Vertex64 b2,
+        out Vertex64 intersection)
     {
-        Vertex d1 = a2 - a1;
-        Vertex d2 = b2 - b1;
-        double det = Vertex.Cross(d2, d1);
+        if (invScale != 0D)
+        {
+            double ax1 = a1.X * invScale;
+            double ay1 = a1.Y * invScale;
+            double ax2 = a2.X * invScale;
+            double ay2 = a2.Y * invScale;
+            double bx1 = b1.X * invScale;
+            double by1 = b1.Y * invScale;
+            double bx2 = b2.X * invScale;
+            double by2 = b2.Y * invScale;
+
+            double d1x = ax2 - ax1;
+            double d1y = ay2 - ay1;
+            double d2x = bx2 - bx1;
+            double d2y = by2 - by1;
+            double detValue = (d2x * d1y) - (d2y * d1x);
+            if (detValue == 0D)
+            {
+                intersection = default;
+                return false;
+            }
+
+            double tValue = ((ax1 - bx1) * d2y - (ay1 - by1) * d2x) / detValue;
+            double ix;
+            double iy;
+            if (tValue <= 0D)
+            {
+                ix = ax1;
+                iy = ay1;
+            }
+            else if (tValue >= 1D)
+            {
+                ix = ax2;
+                iy = ay2;
+            }
+            else
+            {
+                ix = ax1 + (tValue * d1x);
+                iy = ay1 + (tValue * d1y);
+            }
+
+            intersection = new Vertex64(
+                RoundToLong(ix * scale),
+                RoundToLong(iy * scale));
+            return true;
+        }
+
+        Vertex64 d1 = a2 - a1;
+        Vertex64 d2 = b2 - b1;
+        Int128 det = Vertex64.Cross(d2, d1);
         if (det == 0)
         {
             intersection = default;
             return false;
         }
 
-        double t = Vertex.Cross(a1 - b1, d2) / det;
-        intersection = t switch
+        Int128 tNumerator = Vertex64.Cross(a1 - b1, d2);
+        if (det < 0)
         {
-            <= 0D => a1,
-            >= 1D => a2,
-            _ => a1 + (t * d1)
-        };
+            det = -det;
+            tNumerator = -tNumerator;
+        }
+
+        if (tNumerator <= 0)
+        {
+            intersection = a1;
+            return true;
+        }
+
+        if (tNumerator >= det)
+        {
+            intersection = a2;
+            return true;
+        }
+
+        double t = DivideWithScale(tNumerator, det);
+        intersection = new Vertex64(
+            RoundToLong(a1.X + (t * d1.X)),
+            RoundToLong(a1.Y + (t * d1.Y)));
 
         return true;
     }
@@ -161,29 +274,57 @@ internal static class PolygonUtilities
     /// <summary>
     /// Projects a point onto a segment and returns the closest point.
     /// </summary>
-    public static Vertex ClosestPointOnSegment(in Vertex point, in Vertex seg1, in Vertex seg2)
+    public static Vertex64 ClosestPointOnSegment(in Vertex64 point, in Vertex64 seg1, in Vertex64 seg2)
     {
+        if (invScale != 0D)
+        {
+            double px = point.X * invScale;
+            double py = point.Y * invScale;
+            double s1x = seg1.X * invScale;
+            double s1y = seg1.Y * invScale;
+            double s2x = seg2.X * invScale;
+            double s2y = seg2.Y * invScale;
+
+            if (s1x == s2x && s1y == s2y)
+            {
+                return seg1;
+            }
+
+            double dx = s2x - s1x;
+            double dy = s2y - s1y;
+            double qValue = ((px - s1x) * dx + (py - s1y) * dy) / ((dx * dx) + (dy * dy));
+            qValue = Math.Clamp(qValue, 0D, 1D);
+            double ix = s1x + (qValue * dx);
+            double iy = s1y + (qValue * dy);
+            return new Vertex64(
+                RoundToLong(ix * scale),
+                RoundToLong(iy * scale));
+        }
+
         if (seg1 == seg2)
         {
             return seg1;
         }
 
-        Vertex direction = seg2 - seg1;
-        double q = Vertex.Dot(point - seg1, direction) / Vertex.Dot(direction, direction);
+        Vertex64 direction = seg2 - seg1;
+        double lengthSquared = (double)Vertex64.Dot(direction, direction);
+        double q = (double)Vertex64.Dot(point - seg1, direction) / lengthSquared;
         Math.Clamp(q, 0, 1);
-        return seg1 + (q * direction);
+        return new Vertex64(
+            RoundToLong(seg1.X + (q * direction.X)),
+            RoundToLong(seg1.Y + (q * direction.Y)));
     }
 
     /// <summary>
     /// Returns true when two segments intersect.
     /// </summary>
-    public static bool SegmentsIntersect(in Vertex a1, in Vertex a2, in Vertex b1, in Vertex b2, bool inclusive = false)
+    public static bool SegmentsIntersect(in Vertex64 a1, in Vertex64 a2, in Vertex64 b1, in Vertex64 b2, bool inclusive = false)
     {
         // Uses cross-product tests to solve a1 + d1 * t == b1 + d2 * u.
         // cp is the denominator (cross of directions); cp == 0 means parallel/collinear.
-        Vertex d1 = a2 - a1;
-        Vertex d2 = b2 - b1;
-        double cp = Vertex.Cross(d2, d1);
+        Vertex64 d1 = a2 - a1;
+        Vertex64 d2 = b2 - b1;
+        Int128 cp = Vertex64.Cross(d2, d1);
         if (cp == 0)
         {
             return false;
@@ -192,93 +333,93 @@ internal static class PolygonUtilities
         if (inclusive)
         {
             // Inclusive mode allows intersections at endpoints.
-            double t = Vertex.Cross(a1 - b1, d2);
+            Int128 t = Vertex64.Cross(a1 - b1, d2);
             if (t == 0)
             {
                 return true;
             }
 
-            if (t > 0D)
+            if (t > 0)
             {
-                if (cp < 0D || t > cp)
+                if (cp < 0 || t > cp)
                 {
                     // t outside [0, cp] once sign is normalized.
                     return false;
                 }
             }
-            else if (cp > 0D || t < cp)
+            else if (cp > 0 || t < cp)
             {
                 return false;
             }
 
-            t = Vertex.Cross(a1 - b1, d1);
+            t = Vertex64.Cross(a1 - b1, d1);
             if (t == 0)
             {
                 return true;
             }
 
-            if (t > 0D)
+            if (t > 0)
             {
                 // t within bounds for the second segment.
-                return cp > 0D && t <= cp;
+                return cp > 0 && t <= cp;
             }
 
-            return cp < 0D && t >= cp;
+            return cp < 0 && t >= cp;
         }
 
         // Exclusive mode requires the intersection to be strictly inside both segments.
-        double t2 = Vertex.Cross(a1 - b1, d2);
+        Int128 t2 = Vertex64.Cross(a1 - b1, d2);
         if (t2 == 0)
         {
             return false;
         }
 
-        if (t2 > 0D)
+        if (t2 > 0)
         {
-            if (cp < 0D || t2 >= cp)
+            if (cp < 0 || t2 >= cp)
             {
                 // Reject if t2 is outside the open interval.
                 return false;
             }
         }
-        else if (cp > 0D || t2 <= cp)
+        else if (cp > 0 || t2 <= cp)
         {
             return false;
         }
 
-        t2 = Vertex.Cross(a1 - b1, d1);
+        t2 = Vertex64.Cross(a1 - b1, d1);
         if (t2 == 0)
         {
             return false;
         }
 
-        if (t2 > 0D)
+        if (t2 > 0)
         {
             // Both parameters are inside open intervals.
-            return cp > 0D && t2 < cp;
+            return cp > 0 && t2 < cp;
         }
 
-        return cp < 0D && t2 > cp;
+        return cp < 0 && t2 > cp;
     }
 
     /// <summary>
     /// Computes the bounding box of a contour.
     /// </summary>
-    public static Box2 GetBounds(Contour path)
+    public static Box64 GetBounds(List<Vertex64> path)
     {
         if (path.Count == 0)
         {
             return default;
         }
 
-        double minX = double.MaxValue;
-        double minY = double.MaxValue;
-        double maxX = -double.MaxValue;
-        double maxY = -double.MaxValue;
+        long minX = long.MaxValue;
+        long minY = long.MaxValue;
+        long maxX = long.MinValue;
+        long maxY = long.MinValue;
 
         for (int i = 0; i < path.Count; i++)
         {
-            Vertex pt = path[i];
+            Vertex64 pt = path[i];
             if (pt.X < minX)
             {
                 minX = pt.X;
@@ -300,23 +441,23 @@ internal static class PolygonUtilities
             }
         }
 
-        if (Math.Abs(minX - double.MaxValue) < FloatingPointTolerance)
+        if (minX == long.MaxValue)
         {
             return default;
         }
 
-        return new Box2(new Vertex(minX, minY), new Vertex(maxX, maxY));
+        return new Box64(new Vertex64(minX, minY), new Vertex64(maxX, maxY));
     }
 
     /// <summary>
     /// Returns the midpoint of a contour's bounding box.
     /// </summary>
-    private static Vertex GetBoundsMidPoint(Contour path) => GetBounds(path).MidPoint();
+    private static Vertex64 GetBoundsMidPoint(List<Vertex64> path) => GetBounds(path).MidPoint();
 
     /// <summary>
     /// Determines whether a point is inside a contour.
     /// </summary>
-    public static PointInPolygonResult PointInPolygon(in Vertex point, Contour polygon)
+    public static PointInPolygonResult PointInPolygon(in Vertex64 point, List<Vertex64> polygon)
     {
         int len = polygon.Count;
         int start = 0;
@@ -325,7 +466,7 @@ internal static class PolygonUtilities
             return PointInPolygonResult.Outside;
         }
 
-        while (start < len && IsAlmostZero(polygon[start].Y - point.Y))
+        while (start < len && polygon[start].Y == point.Y)
         {
             start++;
         }
@@ -373,13 +514,13 @@ internal static class PolygonUtilities
                 continue;
             }
 
-            Vertex curr = polygon[i];
-            Vertex prev = i > 0 ? polygon[i - 1] : polygon[len - 1];
+            Vertex64 curr = polygon[i];
+            Vertex64 prev = i > 0 ? polygon[i - 1] : polygon[len - 1];
 
-            if (IsAlmostZero(curr.Y - point.Y))
+            if (curr.Y == point.Y)
             {
-                if (IsAlmostZero(curr.X - point.X) ||
-                    (IsAlmostZero(curr.Y - prev.Y) && ((point.X < prev.X) != (point.X < curr.X))))
+                if (curr.X == point.X ||
+                    (curr.Y == prev.Y && ((point.X < prev.X) != (point.X < curr.X))))
                 {
                     return PointInPolygonResult.On;
                 }
@@ -449,7 +590,7 @@ internal static class PolygonUtilities
     /// <summary>
     /// Returns true if the outer contour contains the inner contour.
     /// </summary>
-    private static bool PathContainsPath(Contour inner, Contour outer)
+    private static bool PathContainsPath(List<Vertex64> inner, List<Vertex64> outer)
     {
         PointInPolygonResult pip = PointInPolygonResult.On;
         for (int i = 0; i < inner.Count; i++)
@@ -477,7 +618,7 @@ internal static class PolygonUtilities
             }
         }
 
-        Vertex midpoint = GetBoundsMidPoint(inner);
+        Vertex64 midpoint = GetBoundsMidPoint(inner);
         return PointInPolygon(midpoint, outer) != PointInPolygonResult.Outside;
     }
 
@@ -485,7 +626,7 @@ internal static class PolygonUtilities
     /// Returns true if the outer contour contains the inner contour.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool Path2ContainsPath1(Contour inner, Contour outer) => PathContainsPath(inner, outer);
+    public static bool Path2ContainsPath1(List<Vertex64> inner, List<Vertex64> outer) => PathContainsPath(inner, outer);
 
     /// <summary>
     /// Finds the intersection of two line segments, constraining results to their intersection bounding box.
@@ -500,12 +641,17 @@ internal static class PolygonUtilities
     /// - Returns 1 if the segments intersect at a single point.
     /// - Returns 2 if the segments overlap.
     /// </returns>
-    public static int FindIntersection(in Segment seg0, in Segment seg1, out Vertex pi0, out Vertex pi1)
+    public static int FindIntersection(in Segment seg0, in Segment seg1, out Vertex64 pi0, out Vertex64 pi1)
     {
         pi0 = default;
         pi1 = default;
 
-        if (!TryGetIntersectionBoundingBox(seg0.Source, seg0.Target, seg1.Source, seg1.Target, out Box2? bbox))
+        if (invScale != 0D)
+        {
+            return FindIntersectionFloating(seg0, seg1, out pi0, out pi1);
+        }
+
+        if (!TryGetIntersectionBoundingBox(seg0.Source, seg0.Target, seg1.Source, seg1.Target, out Box64 bbox))
         {
             return 0;
         }
@@ -514,16 +660,229 @@ internal static class PolygonUtilities
 
         if (interResult == 1)
         {
-            pi0 = ConstrainToBoundingBox(pi0, bbox.Value);
+            pi0 = ConstrainToBoundingBox(pi0, bbox);
         }
         else if (interResult == 2)
         {
-            pi0 = ConstrainToBoundingBox(pi0, bbox.Value);
-            pi1 = ConstrainToBoundingBox(pi1, bbox.Value);
+            pi0 = ConstrainToBoundingBox(pi0, bbox);
+            pi1 = ConstrainToBoundingBox(pi1, bbox);
         }
 
         return interResult;
     }
+
+    internal static int FindIntersectionDouble(in Segment seg0, in Segment seg1, out Vertex pi0, out Vertex pi1)
+    {
+        pi0 = default;
+        pi1 = default;
+
+        Vertex a1 = Dequantize(seg0.Source);
+        Vertex a2 = Dequantize(seg0.Target);
+        Vertex b1 = Dequantize(seg1.Source);
+        Vertex b2 = Dequantize(seg1.Target);
+
+        if (!TryGetIntersectionBoundingBoxDouble(a1, a2, b1, b2, out Box2 bbox))
+        {
+            return 0;
+        }
+
+        int interResult = FindIntersectionImplDouble(a1, a2, b1, b2, out pi0, out pi1);
+        if (interResult == 1)
+        {
+            pi0 = ConstrainToBoundingBoxDouble(pi0, bbox);
+        }
+        else if (interResult == 2)
+        {
+            pi0 = ConstrainToBoundingBoxDouble(pi0, bbox);
+            pi1 = ConstrainToBoundingBoxDouble(pi1, bbox);
+        }
+
+        return interResult;
+    }
+
+    internal static int FindIntersectionDouble(
+        in Vertex a1,
+        in Vertex a2,
+        in Vertex b1,
+        in Vertex b2,
+        out Vertex pi0,
+        out Vertex pi1)
+    {
+        pi0 = default;
+        pi1 = default;
+
+        if (!TryGetIntersectionBoundingBoxDouble(a1, a2, b1, b2, out Box2 bbox))
+        {
+            return 0;
+        }
+
+        int interResult = FindIntersectionImplDouble(a1, a2, b1, b2, out pi0, out pi1);
+        if (interResult == 1)
+        {
+            pi0 = ConstrainToBoundingBoxDouble(pi0, bbox);
+        }
+        else if (interResult == 2)
+        {
+            pi0 = ConstrainToBoundingBoxDouble(pi0, bbox);
+            pi1 = ConstrainToBoundingBoxDouble(pi1, bbox);
+        }
+
+        return interResult;
+    }
+
+    private static int FindIntersectionFloating(in Segment seg0, in Segment seg1, out Vertex64 pi0, out Vertex64 pi1)
+    {
+        pi0 = default;
+        pi1 = default;
+
+        Vertex a1 = Dequantize(seg0.Source);
+        Vertex a2 = Dequantize(seg0.Target);
+        Vertex b1 = Dequantize(seg1.Source);
+        Vertex b2 = Dequantize(seg1.Target);
+
+        if (!TryGetIntersectionBoundingBoxDouble(a1, a2, b1, b2, out Box2 bbox))
+        {
+            return 0;
+        }
+
+        int interResult = FindIntersectionImplDouble(a1, a2, b1, b2, out Vertex dpi0, out Vertex dpi1);
+
+        if (interResult == 1)
+        {
+            dpi0 = ConstrainToBoundingBoxDouble(dpi0, bbox);
+        }
+        else if (interResult == 2)
+        {
+            dpi0 = ConstrainToBoundingBoxDouble(dpi0, bbox);
+            dpi1 = ConstrainToBoundingBoxDouble(dpi1, bbox);
+        }
+
+        pi0 = Quantize(dpi0);
+        pi1 = Quantize(dpi1);
+        return interResult;
+    }
+
+    private static int FindIntersectionImplDouble(
+        in Vertex a1,
+        in Vertex a2,
+        in Vertex b1,
+        in Vertex b2,
+        out Vertex pi0,
+        out Vertex pi1)
+    {
+        pi0 = default;
+        pi1 = default;
+
+        Vertex va = a2 - a1;
+        Vertex vb = b2 - b1;
+        Vertex e = b1 - a1;
+
+        double kross = Vertex.Cross(va, vb);
+        double sqrKross = kross * kross;
+        double sqrLenA = Vertex.Dot(va, va);
+
+        if (sqrKross > 0D)
+        {
+            double s = Vertex.Cross(e, vb) / kross;
+            if (s is < 0D or > 1D)
+            {
+                return 0;
+            }
+
+            double t = Vertex.Cross(e, va) / kross;
+            if (t is < 0D or > 1D)
+            {
+                return 0;
+            }
+
+            if (s is 0D or 1D)
+            {
+                pi0 = a1 + (s * va);
+                return 1;
+            }
+
+            if (t is 0D or 1D)
+            {
+                pi0 = b1 + (t * vb);
+                return 1;
+            }
+
+            pi0 = a1 + (s * va);
+            return 1;
+        }
+
+        kross = Vertex.Cross(e, va);
+        sqrKross = kross * kross;
+        if (sqrKross > 0D)
+        {
+            return 0;
+        }
+
+        double sa = Vertex.Dot(va, e) / sqrLenA;
+        double sb = sa + (Vertex.Dot(va, vb) / sqrLenA);
+        double smin = Math.Min(sa, sb);
+        double smax = Math.Max(sa, sb);
+
+        if (smin <= 1D && smax >= 0D)
+        {
+            if (smin == 1D)
+            {
+                pi0 = a1 + (smin * va);
+                return 1;
+            }
+
+            if (smax == 0D)
+            {
+                pi0 = a1 + (smax * va);
+                return 1;
+            }
+
+            pi0 = a1 + (Math.Max(smin, 0D) * va);
+            pi1 = a1 + (Math.Min(smax, 1D) * va);
+            return 2;
+        }
+
+        return 0;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vertex Dequantize(in Vertex64 value)
+        => new(value.X * invScale, value.Y * invScale);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static Vertex64 Quantize(in Vertex value)
+        => new(
+            RoundToLong(value.X * scale),
+            RoundToLong(value.Y * scale));
+
+    private static bool TryGetIntersectionBoundingBoxDouble(
+        in Vertex a1,
+        in Vertex a2,
+        in Vertex b1,
+        in Vertex b2,
+        out Box2 result)
+    {
+        Vertex minA = Vertex.Min(a1, a2);
+        Vertex maxA = Vertex.Max(a1, a2);
+        Vertex minB = Vertex.Min(b1, b2);
+        Vertex maxB = Vertex.Max(b1, b2);
+
+        Vertex interMin = Vertex.Max(minA, minB);
+        Vertex interMax = Vertex.Min(maxA, maxB);
+
+        if (interMin.X <= interMax.X && interMin.Y <= interMax.Y)
+        {
+            result = new Box2(interMin, interMax);
+            return true;
+        }
+
+        result = default;
+        return false;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vertex ConstrainToBoundingBoxDouble(in Vertex p, in Box2 bbox)
+        => Vertex.Min(Vertex.Max(p, bbox.Min), bbox.Max);
 
     /// <summary>
     /// Finds the intersection of two line segments.
@@ -543,89 +902,112 @@ internal static class PolygonUtilities
     /// - Returns 1 if the segments intersect at a single point.
     /// - Returns 2 if the segments overlap.
     /// </returns>
-    private static int FindIntersectionImpl(in Segment seg0, in Segment seg1, out Vertex pi0, out Vertex pi1)
+    private static int FindIntersectionImpl(in Segment seg0, in Segment seg1, out Vertex64 pi0, out Vertex64 pi1)
     {
         pi0 = default;
         pi1 = default;
 
-        Vertex a1 = seg0.Source;
-        Vertex a2 = seg1.Source;
+        Vertex64 a1 = seg0.Source;
+        Vertex64 a2 = seg1.Source;
 
-        Vertex va = seg0.Target - a1;
-        Vertex vb = seg1.Target - a2;
-        Vertex e = a2 - a1;
+        Vertex64 va = seg0.Target - a1;
+        Vertex64 vb = seg1.Target - a2;
+        Vertex64 e = a2 - a1;
 
-        double kross = Vertex.Cross(va, vb);
-        double sqrKross = kross * kross;
-        double sqrLenA = Vertex.Dot(va, va);
+        Int128 kross = Vertex64.Cross(va, vb);
 
-        if (sqrKross > 0)
+        if (kross != 0)
         {
             // Lines of the segments are not parallel
-            double s = Vertex.Cross(e, vb) / kross;
-            if (s is < 0 or > 1)
+            Int128 numS = Vertex64.Cross(e, vb);
+            Int128 numT = Vertex64.Cross(e, va);
+
+            if (kross > 0)
             {
-                return 0;
+                if (numS < 0 || numS > kross || numT < 0 || numT > kross)
+                {
+                    return 0;
+                }
+            }
+            else
+            {
+                if (numS > 0 || numS < kross || numT > 0 || numT < kross)
+                {
+                    return 0;
+                }
             }
 
-            double t = Vertex.Cross(e, va) / kross;
-            if (t is < 0 or > 1)
+            if (numS == 0)
             {
-                return 0;
-            }
-
-            // If s or t is exactly 0 or 1, the intersection is on an endpoint
-            if (s is 0 or 1)
-            {
-                // On an endpoint of line segment a
-                pi0 = MidPoint(a1, s, va);
+                pi0 = a1;
                 return 1;
             }
 
-            if (t is 0 or 1)
+            if (numS == kross)
             {
-                // On an endpoint of line segment b
-                pi0 = MidPoint(a2, t, vb);
+                pi0 = seg0.Target;
                 return 1;
             }
 
-            // Intersection of lines is a point on each segment
-            pi0 = a1 + (s * va);
+            if (numT == 0)
+            {
+                pi0 = a2;
+                return 1;
+            }
+
+            if (numT == kross)
+            {
+                pi0 = seg1.Target;
+                return 1;
+            }
+
+            double s = DivideWithScale(numS, kross);
+            pi0 = MidPoint(a1, s, va);
+
             return 1;
         }
 
         // Lines are parallel; check if they are collinear
-        kross = Vertex.Cross(e, va);
-        sqrKross = kross * kross;
-        if (sqrKross > 0)
+        kross = Vertex64.Cross(e, va);
+        if (kross != 0)
         {
             // Lines of the segments are different
             return 0;
         }
 
-        // Segments are collinear, check for overlap
-        double sa = Vertex.Dot(va, e) / sqrLenA;
-        double sb = sa + (Vertex.Dot(va, vb) / sqrLenA);
-        double smin = Math.Min(sa, sb);
-        double smax = Math.Max(sa, sb);
-
-        if (smin <= 1 && smax >= 0)
+        // Segments are collinear, check for overlap using exact ratios.
+        Int128 denom = Vertex64.Dot(va, va);
+        if (denom == 0)
         {
-            if (smin == 1)
+            return 0;
+        }
+
+        Int128 saNum = Vertex64.Dot(va, e);
+        Int128 sbNum = saNum + Vertex64.Dot(va, vb);
+        Int128 sminNum = saNum < sbNum ? saNum : sbNum;
+        Int128 smaxNum = saNum > sbNum ? saNum : sbNum;
+
+        if (sminNum <= denom && smaxNum >= 0)
+        {
+            if (sminNum == denom)
             {
-                pi0 = MidPoint(a1, smin, va);
+                pi0 = seg0.Target;
                 return 1;
             }
 
-            if (smax == 0)
+            if (smaxNum == 0)
             {
-                pi0 = MidPoint(a1, smax, va);
+                pi0 = a1;
                 return 1;
             }
 
-            pi0 = MidPoint(a1, Math.Max(smin, 0), va);
-            pi1 = MidPoint(a1, Math.Min(smax, 1), va);
-            return 2;
+            Int128 startNum = sminNum < 0 ? 0 : sminNum;
+            Int128 endNum = smaxNum > denom ? denom : smaxNum;
+            double s0 = DivideWithScale(startNum, denom);
+            double s1 = DivideWithScale(endNum, denom);
+            pi0 = MidPoint(a1, s0, va);
+            pi1 = MidPoint(a1, s1, va);
+            return pi0 == pi1 ? 1 : 2;
         }
 
         return 0;
@@ -643,27 +1025,27 @@ internal static class PolygonUtilities
     /// <see langword="true"/> if the segments intersect; otherwise, <see langword="false"/>.
     /// </returns>
     private static bool TryGetIntersectionBoundingBox(
-        in Vertex a1,
-        in Vertex a2,
-        in Vertex b1,
-        in Vertex b2,
-        [NotNullWhen(true)] out Box2? result)
+        in Vertex64 a1,
+        in Vertex64 a2,
+        in Vertex64 b1,
+        in Vertex64 b2,
+        out Box64 result)
     {
-        Vertex minA = Vertex.Min(a1, a2);
-        Vertex maxA = Vertex.Max(a1, a2);
-        Vertex minB = Vertex.Min(b1, b2);
-        Vertex maxB = Vertex.Max(b1, b2);
+        Vertex64 minA = Vertex64.Min(a1, a2);
+        Vertex64 maxA = Vertex64.Max(a1, a2);
+        Vertex64 minB = Vertex64.Min(b1, b2);
+        Vertex64 maxB = Vertex64.Max(b1, b2);
 
-        Vertex interMin = Vertex.Max(minA, minB);
-        Vertex interMax = Vertex.Min(maxA, maxB);
+        Vertex64 interMin = Vertex64.Max(minA, minB);
+        Vertex64 interMax = Vertex64.Min(maxA, maxB);
 
         if (interMin.X <= interMax.X && interMin.Y <= interMax.Y)
         {
-            result = new Box2(interMin, interMax);
+            result = new Box64(interMin, interMax);
             return true;
         }
 
-        result = null;
+        result = default;
         return false;
     }
 
@@ -674,8 +1056,8 @@ internal static class PolygonUtilities
     /// <param name="bbox">The bounding box.</param>
     /// <returns>The constrained point.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static Vertex ConstrainToBoundingBox(in Vertex p, in Box2 bbox)
-        => Vertex.Min(Vertex.Max(p, bbox.Min), bbox.Max);
+    private static Vertex64 ConstrainToBoundingBox(in Vertex64 p, in Box64 bbox)
+        => Vertex64.Min(Vertex64.Max(p, bbox.Min), bbox.Max);
 
     /// <summary>
     /// Computes the point at a given fractional distance along a directed line segment.
@@ -685,564 +1067,73 @@ internal static class PolygonUtilities
     /// <param name="d">The direction vector of the segment.</param>
     /// <returns>The interpolated vertex at the given fractional distance.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Vertex MidPoint(in Vertex p, double s, in Vertex d) => p + (s * d);
+    public static Vertex64 MidPoint(in Vertex64 p, double s, in Vertex64 d)
+        => new(
+            RoundToLong(p.X + (s * d.X)),
+            RoundToLong(p.Y + (s * d.Y)));
 
-    /// <summary>
-    /// Builds a normalized polygon with deterministic contour ordering/vertex ordering.
-    /// Used for trivial/short-circuit operations to match the sweep output ordering.
-    /// </summary>
-    /// <param name="polygon">The polygon to normalize.</param>
-    /// <returns>The normalized polygon.</returns>
-    public static Polygon BuildNormalizedPolygon(Polygon polygon)
-        => BuildNormalizedPolygon([polygon]);
-
-    /// <summary>
-    /// Builds a normalized polygon from the union of subject and clipping polygons.
-    /// Used for trivial/short-circuit operations to match the sweep output ordering.
-    /// </summary>
-    /// <param name="subject">The subject polygon.</param>
-    /// <param name="clipping">The clipping polygon.</param>
-    /// <returns>The normalized polygon.</returns>
-    public static Polygon BuildNormalizedPolygon(Polygon subject, Polygon clipping)
-        => BuildNormalizedPolygon([subject, clipping]);
-
-    /// <summary>
-    /// Builds a normalized polygon from one or more polygons by:
-    /// - normalizing vertex orientation/rotation per contour,
-    /// - computing nesting (parent/child) via containment tests,
-    /// - ordering exterior contours first, then their holes.
-    /// </summary>
-    /// <param name="polygons">The polygons to normalize.</param>
-    /// <returns>The normalized polygon.</returns>
-    private static Polygon BuildNormalizedPolygon(ReadOnlySpan<Polygon> polygons)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static long RoundToLong(double value)
     {
-        // Flatten all contours into a working list so we can normalize and re-parent them
-        // independent of the input polygon ordering.
-        List<ContourInfo> contourInfos = [];
-        for (int i = 0; i < polygons.Length; i++)
+        if (value <= -DoubleExactIntLimit || value >= DoubleExactIntLimit)
         {
-            Polygon polygon = polygons[i];
-            for (int j = 0; j < polygon.Count; j++)
-            {
-                Contour contour = polygon[j];
-                if (contour.Count == 0)
-                {
-                    continue;
-                }
-
-                // Normalize each contour so comparisons across input polygons are deterministic.
-                contourInfos.Add(CreateContourInfo(contour));
-            }
+            return (long)Math.Round((decimal)value, MidpointRounding.AwayFromZero);
         }
 
-        if (contourInfos.Count == 0)
-        {
-            return [];
-        }
-
-        int count = contourInfos.Count;
-        int[] parentIndices = new int[count];
-        int[] depths = new int[count];
-        Array.Fill(parentIndices, -1);
-
-        // Establish containment relationships by finding the smallest-area contour
-        // that contains a test point from each contour.
-        for (int i = 0; i < count; i++)
-        {
-            Vertex testPoint = contourInfos[i].Vertices[0];
-            double smallestContainerArea = double.PositiveInfinity;
-            int parentIndex = -1;
-
-            for (int j = 0; j < count; j++)
-            {
-                if (i == j)
-                {
-                    continue;
-                }
-
-                if (PointInContour(testPoint, contourInfos[j].Vertices))
-                {
-                    double area = contourInfos[j].Area;
-                    if (area < smallestContainerArea)
-                    {
-                        smallestContainerArea = area;
-                        parentIndex = j;
-                    }
-                }
-            }
-
-            parentIndices[i] = parentIndex;
-        }
-
-        // Compute the nesting depth for each contour (0 = exterior, 1 = hole, etc.).
-        // Exteriors are the even-depth contours.
-        List<int> externals = new(count);
-        for (int i = 0; i < count; i++)
-        {
-            int depth = GetDepth(i, parentIndices);
-            depths[i] = depth;
-
-            if ((depth & 1) == 0)
-            {
-                externals.Add(i);
-            }
-        }
-
-        // Sort exteriors by their minimum vertex so their order is deterministic.
-        externals.Sort((left, right) =>
-            LexicographicVertexComparison(contourInfos[left].MinVertex, contourInfos[right].MinVertex));
-
-        Polygon result = new(count);
-        bool[] added = new bool[count];
-        int[] newIndices = new int[count];
-        Array.Fill(newIndices, -1);
-
-        foreach (int externalIndex in externals)
-        {
-            // Add the exterior contour first.
-            int externalContourIndex = AddContour(
-                result,
-                contourInfos,
-                externalIndex,
-                depths,
-                parentIndices,
-                added,
-                newIndices);
-
-            // Collect direct holes of this exterior and order them deterministically.
-            List<int> holes = [];
-            for (int i = 0; i < count; i++)
-            {
-                if (!added[i] && parentIndices[i] == externalIndex && (depths[i] & 1) == 1)
-                {
-                    holes.Add(i);
-                }
-            }
-
-            holes.Sort((left, right) =>
-                LexicographicVertexComparison(contourInfos[left].MinVertex, contourInfos[right].MinVertex));
-
-            // Add holes immediately after their exterior so the contour ordering matches
-            // the sweep output (exterior first, then its holes).
-            foreach (int holeIndex in holes)
-            {
-                int holeContourIndex = AddContour(
-                    result,
-                    contourInfos,
-                    holeIndex,
-                    depths,
-                    parentIndices,
-                    added,
-                    newIndices);
-
-                result[externalContourIndex].AddHoleIndex(holeContourIndex);
-                result[holeContourIndex].ParentIndex = externalContourIndex;
-            }
-        }
-
-        // Any remaining contours (should be none, but safe for malformed input).
-        for (int i = 0; i < count; i++)
-        {
-            if (!added[i])
-            {
-                _ = AddContour(result, contourInfos, i, depths, parentIndices, added, newIndices);
-            }
-        }
-
-        return result;
+        return (long)Math.Round(value, MidpointRounding.AwayFromZero);
     }
 
-    /// <summary>
-    /// Returns true if any segment from <paramref name="subject"/> intersects any segment from
-    /// <paramref name="clipping"/>.
-    /// </summary>
-    /// <param name="subject">The subject polygon.</param>
-    /// <param name="clipping">The clipping polygon.</param>
-    /// <returns>True if any pair of segments intersects.</returns>
-    public static bool PolygonsHaveIntersection(Polygon subject, Polygon clipping)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static double DivideWithScale(Int128 numerator, Int128 denominator)
     {
-        for (int i = 0; i < subject.Count; i++)
+        if (denominator == 0)
         {
-            Contour subjectContour = subject[i];
-            for (int j = 0; j < subjectContour.Count; j++)
-            {
-                Segment subjectSegment = subjectContour.GetSegment(j);
-                if (subjectSegment.IsDegenerate())
-                {
-                    continue;
-                }
-
-                for (int k = 0; k < clipping.Count; k++)
-                {
-                    Contour clippingContour = clipping[k];
-                    for (int l = 0; l < clippingContour.Count; l++)
-                    {
-                        Segment clippingSegment = clippingContour.GetSegment(l);
-                        if (clippingSegment.IsDegenerate())
-                        {
-                            continue;
-                        }
-
-                        if (FindIntersection(subjectSegment, clippingSegment, out _, out _) != 0)
-                        {
-                            return true;
-                        }
-                    }
-                }
-            }
+            return double.NaN;
         }
 
-        return false;
+        UInt128 absNumerator = (UInt128)(numerator < 0 ? -numerator : numerator);
+        UInt128 absDenominator = (UInt128)(denominator < 0 ? -denominator : denominator);
+        int maxBits = Math.Max(GetBitLength(absNumerator), GetBitLength(absDenominator));
+        int shift = maxBits > 53 ? maxBits - 53 : 0;
+
+        if (shift > 0)
+        {
+            numerator >>= shift;
+            denominator >>= shift;
+        }
+
+        return (double)numerator / (double)denominator;
     }
 
-    /// <summary>
-    /// Returns any vertex from the polygon (first vertex of the first non-empty contour).
-    /// </summary>
-    /// <param name="polygon">The polygon to search.</param>
-    /// <param name="vertex">The found vertex, if any.</param>
-    /// <returns>True if a vertex was found.</returns>
-    public static bool TryGetAnyVertex(Polygon polygon, out Vertex vertex)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int GetBitLength(UInt128 value)
     {
-        for (int i = 0; i < polygon.Count; i++)
+        if (value == 0)
         {
-            Contour contour = polygon[i];
-            if (contour.Count > 0)
-            {
-                vertex = contour[0];
-                return true;
-            }
+            return 0;
         }
 
-        vertex = default;
-        return false;
+        ulong high = (ulong)(value >> 64);
+        if (high != 0)
+        {
+            return 64 + BitOperations.Log2(high) + 1;
+        }
+
+        ulong low = (ulong)value;
+        return BitOperations.Log2(low) + 1;
     }
 
-    /// <summary>
-    /// Determines whether a point is inside a polygon, respecting hole information when present.
-    /// </summary>
-    /// <param name="point">The test point.</param>
-    /// <param name="polygon">The polygon to test.</param>
-    /// <returns>True if the point is inside the polygon.</returns>
-    public static bool ContainsPoint(in Vertex point, Polygon polygon)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int GetBitLength(long value)
     {
-        if (polygon.Count == 0)
+        ulong absValue = (ulong)(value < 0 ? -value : value);
+        if (absValue == 0)
         {
-            return false;
+            return 0;
         }
 
-        // Detect whether hole metadata is available to apply external/hole rules.
-        bool hasHoleInfo = false;
-        for (int i = 0; i < polygon.Count; i++)
-        {
-            Contour contour = polygon[i];
-            if (contour.HoleCount > 0 || contour.ParentIndex != null)
-            {
-                hasHoleInfo = true;
-                break;
-            }
-        }
-
-        if (hasHoleInfo)
-        {
-            for (int i = 0; i < polygon.Count; i++)
-            {
-                Contour contour = polygon[i];
-                if (!contour.IsExternal)
-                {
-                    continue;
-                }
-
-                // If the point is inside an exterior ring, ensure it is not inside any hole
-                // that belongs to that exterior.
-                if (PointInContour(point, contour))
-                {
-                    for (int j = 0; j < contour.HoleCount; j++)
-                    {
-                        if (PointInContour(point, polygon[contour.GetHoleIndex(j)]))
-                        {
-                            return false;
-                        }
-                    }
-
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-        // Without hole metadata, use XOR across all contours to infer containment.
-        bool inside = false;
-        for (int i = 0; i < polygon.Count; i++)
-        {
-            if (PointInContour(point, polygon[i]))
-            {
-                inside = !inside;
-            }
-        }
-
-        return inside;
+        return BitOperations.Log2(absValue) + 1;
     }
 
-    /// <summary>
-    /// Ray-casting point-in-polygon test against a list of vertices.
-    /// </summary>
-    private static bool PointInContour(in Vertex point, List<Vertex> vertices)
-    {
-        int count = vertices.Count;
-        if (count < 3)
-        {
-            return false;
-        }
 
-        bool inside = false;
-        Vertex previous = vertices[count - 1];
-
-        for (int i = 0; i < count; i++)
-        {
-            Vertex current = vertices[i];
-            if (current == previous)
-            {
-                previous = current;
-                continue;
-            }
-
-            if (IsPointOnSegment(point, previous, current))
-            {
-                return true;
-            }
-
-            bool intersects = (current.Y > point.Y) != (previous.Y > point.Y);
-            if (intersects)
-            {
-                double xIntersection = ((previous.X - current.X) * (point.Y - current.Y) / (previous.Y - current.Y)) +
-                                       current.X;
-                if (point.X < xIntersection)
-                {
-                    inside = !inside;
-                }
-            }
-
-            previous = current;
-        }
-
-        return inside;
-    }
-
-    /// <summary>
-    /// Ray-casting point-in-polygon test against a contour.
-    /// </summary>
-    private static bool PointInContour(in Vertex point, Contour contour)
-    {
-        int count = contour.Count;
-        if (count < 3)
-        {
-            return false;
-        }
-
-        bool inside = false;
-        Vertex previous = contour[count - 1];
-
-        for (int i = 0; i < count; i++)
-        {
-            Vertex current = contour[i];
-            if (current == previous)
-            {
-                previous = current;
-                continue;
-            }
-
-            if (IsPointOnSegment(point, previous, current))
-            {
-                return true;
-            }
-
-            bool intersects = (current.Y > point.Y) != (previous.Y > point.Y);
-            if (intersects)
-            {
-                double xIntersection = ((previous.X - current.X) * (point.Y - current.Y) / (previous.Y - current.Y)) +
-                                       current.X;
-                if (point.X < xIntersection)
-                {
-                    inside = !inside;
-                }
-            }
-
-            previous = current;
-        }
-
-        return inside;
-    }
-
-    /// <summary>
-    /// Checks whether a point lies exactly on a line segment.
-    /// </summary>
-    private static bool IsPointOnSegment(in Vertex point, in Vertex a, in Vertex b)
-    {
-        if (SignedArea(a, b, point) != 0D)
-        {
-            return false;
-        }
-
-        double minX = Math.Min(a.X, b.X);
-        double maxX = Math.Max(a.X, b.X);
-        double minY = Math.Min(a.Y, b.Y);
-        double maxY = Math.Max(a.Y, b.Y);
-
-        return point.X >= minX && point.X <= maxX && point.Y >= minY && point.Y <= maxY;
-    }
-
-    /// <summary>
-    /// Computes nesting depth by walking parent links.
-    /// </summary>
-    private static int GetDepth(int index, int[] parentIndices)
-    {
-        int depth = 0;
-        int current = parentIndices[index];
-        while (current >= 0)
-        {
-            depth++;
-            current = parentIndices[current];
-        }
-
-        return depth;
-    }
-
-    /// <summary>
-    /// Builds a normalized contour snapshot used for ordering and containment checks.
-    /// </summary>
-    private static ContourInfo CreateContourInfo(Contour contour)
-    {
-        // GeoJSON inputs are typically closed; drop the duplicate closing vertex for normalization,
-        // then re-add it afterward to preserve contour closure.
-        bool isClosed = contour.Count > 1 && contour[0] == contour[^1];
-        int targetCount = isClosed ? contour.Count - 1 : contour.Count;
-        List<Vertex> vertices = new(targetCount);
-        for (int i = 0; i < targetCount; i++)
-        {
-            vertices.Add(contour[i]);
-        }
-
-        // Normalize orientation and rotate so the minimum vertex is first.
-        NormalizeVertices(vertices);
-
-        // Track the minimum vertex for stable ordering.
-        Vertex minVertex = vertices[0];
-        for (int i = 1; i < vertices.Count; i++)
-        {
-            if (LexicographicVertexComparison(vertices[i], minVertex) < 0)
-            {
-                minVertex = vertices[i];
-            }
-        }
-
-        // Area is used to select the smallest containing contour.
-        double area = Math.Abs(GetSignedArea(vertices));
-
-        // Restore closure if needed.
-        if (isClosed)
-        {
-            vertices.Add(vertices[0]);
-        }
-
-        return new ContourInfo(vertices, minVertex, area);
-    }
-
-    /// <summary>
-    /// Normalizes a contour's orientation to counterclockwise and rotates so the minimum vertex
-    /// is the first entry. This gives deterministic vertex ordering.
-    /// </summary>
-    private static void NormalizeVertices(List<Vertex> vertices)
-    {
-        if (vertices.Count < 3)
-        {
-            return;
-        }
-
-        // Ensure counterclockwise orientation.
-        if (GetSignedArea(vertices) < 0)
-        {
-            vertices.Reverse();
-        }
-
-        // Rotate so the minimum vertex is first.
-        int minIndex = 0;
-        Vertex minVertex = vertices[0];
-        for (int i = 1; i < vertices.Count; i++)
-        {
-            if (LexicographicVertexComparison(vertices[i], minVertex) < 0)
-            {
-                minVertex = vertices[i];
-                minIndex = i;
-            }
-        }
-
-        if (minIndex > 0)
-        {
-            List<Vertex> rotated = new(vertices.Count);
-            for (int i = 0; i < vertices.Count; i++)
-            {
-                rotated.Add(vertices[(i + minIndex) % vertices.Count]);
-            }
-
-            vertices.Clear();
-            vertices.AddRange(rotated);
-        }
-    }
-
-    /// <summary>
-    /// Computes the signed area of a polygonal ring.
-    /// </summary>
-    private static double GetSignedArea(List<Vertex> vertices)
-    {
-        double area = 0D;
-        for (int i = 0; i < vertices.Count; i++)
-        {
-            Vertex current = vertices[i];
-            Vertex next = vertices[(i + 1) % vertices.Count];
-            area += Vertex.Cross(current, next);
-        }
-
-        return area;
-    }
-
-    /// <summary>
-    /// Adds a contour to the output polygon and updates new index mappings.
-    /// </summary>
-    private static int AddContour(
-        Polygon polygon,
-        List<ContourInfo> contourInfos,
-        int contourIndex,
-        int[] depths,
-        int[] parentIndices,
-        bool[] added,
-        int[] newIndices)
-    {
-        // Copy normalized vertices into a new contour instance.
-        Contour contour = new();
-        foreach (Vertex vertex in contourInfos[contourIndex].Vertices)
-        {
-            contour.Add(vertex);
-        }
-
-        polygon.Add(contour);
-        added[contourIndex] = true;
-        int newIndex = polygon.Count - 1;
-        newIndices[contourIndex] = newIndex;
-
-        // Store depth and parent references using the new index mapping.
-        contour.Depth = depths[contourIndex];
-        if (depths[contourIndex] % 2 == 1)
-        {
-            int parentIndex = parentIndices[contourIndex];
-            if (parentIndex >= 0 && newIndices[parentIndex] >= 0)
-            {
-                contour.ParentIndex = newIndices[parentIndex];
-            }
-        }
-
-        return newIndex;
-    }
-
-    private sealed record ContourInfo(List<Vertex> Vertices, Vertex MinVertex, double Area);
 }

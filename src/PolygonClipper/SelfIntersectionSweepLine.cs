@@ -23,7 +23,7 @@ internal sealed class SelfIntersectionSweepLine
     private readonly List<HorizontalSegment> horizontalSegments;
     private readonly HorizontalJoinPoolList horizontalJoins;
     private readonly OutputPointPoolList outputPointPool;
-    private double currentScanlineBottomY;
+    private long currentScanlineBottomY;
     private bool buildHierarchy;
     private bool succeeded;
 
@@ -100,14 +100,14 @@ internal sealed class SelfIntersectionSweepLine
         SweepVertex? result = edge.VertexTop;
         if (edge.WindDelta > 0)
         {
-            while (PolygonUtilities.IsAlmostZero(result!.Next!.Point.Y - result.Point.Y))
+            while (result!.Next!.Point.Y == result.Point.Y)
             {
                 result = result.Next;
             }
         }
         else
         {
-            while (PolygonUtilities.IsAlmostZero(result!.Prev!.Point.Y - result.Point.Y))
+            while (result!.Prev!.Point.Y == result.Point.Y)
             {
                 result = result.Prev;
             }
@@ -224,7 +224,7 @@ internal sealed class SelfIntersectionSweepLine
         OutputPoint outputPoint2 = outputPoint;
         do
         {
-            signedArea += Vertex.Cross(outputPoint2.Prev.Point, outputPoint2.Point);
+            signedArea += (double)Vertex64.Cross(outputPoint2.Prev.Point, outputPoint2.Point);
             outputPoint2 = outputPoint2.Next!;
         }
         while (outputPoint2 != outputPoint);
@@ -343,7 +343,7 @@ internal sealed class SelfIntersectionSweepLine
     /// </summary>
     /// <param name="paths">The subject contours to add.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void AddSubject(List<Contour> paths)
+    public void AddSubject(List<List<Vertex64>> paths)
     {
         this.scanlineSchedule.MarkDirty();
         this.AddPathsToVertexList(paths);
@@ -371,10 +371,10 @@ internal sealed class SelfIntersectionSweepLine
     /// Builds circular vertex lists and captures local minima/maxima for the sweep.
     /// </summary>
     /// <param name="paths">The subject contours to process.</param>
-    private void AddPathsToVertexList(List<Contour> paths)
+    private void AddPathsToVertexList(List<List<Vertex64>> paths)
     {
         int totalVertCnt = 0;
-        foreach (Contour path in paths)
+        foreach (List<Vertex64> path in paths)
         {
             totalVertCnt += path.Count;
         }
@@ -382,12 +382,12 @@ internal sealed class SelfIntersectionSweepLine
         // Pre-size the pool to avoid growth during vertex creation.
         this.vertexList.EnsureCapacity(this.vertexList.Count + totalVertCnt);
 
-        foreach (Contour path in paths)
+        foreach (List<Vertex64> path in paths)
         {
             SweepVertex? v0 = null;
             SweepVertex? prevVertex = null;
             SweepVertex? currVertex;
-            foreach (Vertex point in path)
+            foreach (Vertex64 point in path)
             {
                 if (v0 == null)
                 {
@@ -396,7 +396,7 @@ internal sealed class SelfIntersectionSweepLine
                     continue;
                 }
 
-                if (!PolygonUtilities.PointEquals(prevVertex!.Point, point))
+                if (prevVertex!.Point != point)
                 {
                     currVertex = this.vertexList.Add(point, VertexFlags.None, prevVertex);
                     prevVertex.Next = currVertex;
@@ -409,7 +409,7 @@ internal sealed class SelfIntersectionSweepLine
                 continue;
             }
 
-            if (PolygonUtilities.PointEquals(prevVertex.Point, v0.Point))
+            if (prevVertex.Point == v0.Point)
             {
                 prevVertex = prevVertex.Prev;
             }
@@ -423,7 +423,7 @@ internal sealed class SelfIntersectionSweepLine
 
             // Non-degenerate closed ring.
             prevVertex = v0.Prev;
-            while (prevVertex != v0 && PolygonUtilities.IsAlmostZero(prevVertex!.Point.Y - v0.Point.Y))
+            while (prevVertex != v0 && prevVertex!.Point.Y == v0.Point.Y)
             {
                 prevVertex = prevVertex.Prev;
             }
@@ -549,7 +549,7 @@ internal sealed class SelfIntersectionSweepLine
     /// Inserts any local minima that occur at the current scanline into the active list.
     /// </summary>
     /// <param name="botY">The current scanline Y coordinate.</param>
-    private void InsertLocalMinimaIntoActiveList(double botY)
+    private void InsertLocalMinimaIntoActiveList(long botY)
     {
         // Insert all minima on the current scanline.
         // Horizontal minima use the previous vertex as the descending bound.
@@ -655,7 +655,7 @@ internal sealed class SelfIntersectionSweepLine
     /// <param name="isNew">Whether this output is created for a split.</param>
     /// <returns>The created output point.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private OutputPoint AddLocalMinimumOutput(ActiveEdge edge1, ActiveEdge edge2, Vertex point, bool isNew = false)
+    private OutputPoint AddLocalMinimumOutput(ActiveEdge edge1, ActiveEdge edge2, Vertex64 point, bool isNew = false)
     {
         OutputRecord outputRecord = this.CreateOutputRecord();
         edge1.OutputRecord = outputRecord;
@@ -708,7 +708,7 @@ internal sealed class SelfIntersectionSweepLine
     /// <param name="point">The local maximum point.</param>
     /// <returns>The last output point, or <see langword="null"/> when no output remains.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private OutputPoint? AddLocalMaximumOutput(ActiveEdge edge1, ActiveEdge edge2, Vertex point)
+    private OutputPoint? AddLocalMaximumOutput(ActiveEdge edge1, ActiveEdge edge2, Vertex64 point)
     {
         if (IsJoined(edge1))
         {
@@ -824,7 +824,7 @@ internal sealed class SelfIntersectionSweepLine
     /// <param name="point">The point to add.</param>
     /// <returns>The output point that was added or reused.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private OutputPoint AddOutputPoint(ActiveEdge edge, Vertex point)
+    private OutputPoint AddOutputPoint(ActiveEdge edge, Vertex64 point)
     {
         // outputRecord.Points is a circular list; Points is the front point and
         // Points.Next is the back point for this output record.
@@ -835,9 +835,9 @@ internal sealed class SelfIntersectionSweepLine
 
         switch (toFront)
         {
-            case true when PolygonUtilities.PointEquals(point, opFront.Point):
+            case true when point == opFront.Point:
                 return opFront;
-            case false when PolygonUtilities.PointEquals(point, opBack.Point):
+            case false when point == opBack.Point:
                 return opBack;
         }
 
@@ -907,7 +907,7 @@ internal sealed class SelfIntersectionSweepLine
     /// <param name="edge1">The first intersecting edge.</param>
     /// <param name="edge2">The second intersecting edge.</param>
     /// <param name="point">The intersection point.</param>
-    private void IntersectActiveEdges(ActiveEdge edge1, ActiveEdge edge2, Vertex point)
+    private void IntersectActiveEdges(ActiveEdge edge1, ActiveEdge edge2, Vertex64 point)
     {
         if (IsJoined(edge1))
         {
@@ -1013,7 +1013,7 @@ internal sealed class SelfIntersectionSweepLine
     {
         this.fillRule = fillRule;
         this.ResetState();
-        if (!this.scanlineSchedule.TryPopScanline(out double y))
+        if (!this.scanlineSchedule.TryPopScanline(out long y))
         {
             return;
         }
@@ -1083,7 +1083,7 @@ internal sealed class SelfIntersectionSweepLine
     /// </summary>
     /// <param name="topY">The scanbeam top Y coordinate.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ProcessIntersections(double topY)
+    private void ProcessIntersections(long topY)
     {
         if (!this.BuildIntersectionList(topY))
         {
@@ -1107,12 +1107,12 @@ internal sealed class SelfIntersectionSweepLine
     /// <param name="edge2">The second edge.</param>
     /// <param name="topY">The scanbeam top Y coordinate.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void AddIntersectionNode(ActiveEdge edge1, ActiveEdge edge2, double topY)
+    private void AddIntersectionNode(ActiveEdge edge1, ActiveEdge edge2, long topY)
     {
         if (!PolygonUtilities.TryGetLineIntersection(
-            edge1.Bottom, edge1.Top, edge2.Bottom, edge2.Top, out Vertex intersectionPoint))
+            edge1.Bottom, edge1.Top, edge2.Bottom, edge2.Top, out Vertex64 intersectionPoint))
         {
-            intersectionPoint = new Vertex(edge1.CurrentX, topY);
+            intersectionPoint = new Vertex64(edge1.CurrentX, topY);
         }
 
         // Clamp intersections that drift outside the scanbeam due to numeric error.
@@ -1124,7 +1124,7 @@ internal sealed class SelfIntersectionSweepLine
             // dx is dX/dY, so large magnitudes mean the edge is nearly horizontal (dY is tiny).
             // Using TopX with a clamped Y can amplify floating-point error in that case, so we
             // fall back to closest-point clamping when |dx| > 100 (about 0.57 degrees from horizontal).
-            // This threshold matches the Clipper2 stability heuristic and is scale-independent.
+            // This threshold keeps near-horizontal intersections stable without scaling the input.
             switch (absDx1 > 100)
             {
                 case true when absDx2 > 100:
@@ -1147,9 +1147,9 @@ internal sealed class SelfIntersectionSweepLine
                     }
                     else
                     {
-                        double targetY = intersectionPoint.Y < topY ? topY : this.currentScanlineBottomY;
-                        double targetX = absDx1 < absDx2 ? edge1.TopX(targetY) : edge2.TopX(targetY);
-                        intersectionPoint = new Vertex(targetX, targetY);
+                        long targetY = intersectionPoint.Y < topY ? topY : this.currentScanlineBottomY;
+                        long targetX = absDx1 < absDx2 ? edge1.TopX(targetY) : edge2.TopX(targetY);
+                        intersectionPoint = new Vertex64(targetX, targetY);
                     }
 
                     break;
@@ -1202,7 +1202,7 @@ internal sealed class SelfIntersectionSweepLine
     /// </summary>
     /// <param name="topY">The scanbeam top Y coordinate.</param>
     /// <returns><see langword="true"/> if any intersections were found.</returns>
-    private bool BuildIntersectionList(double topY)
+    private bool BuildIntersectionList(long topY)
     {
         if (this.activeEdges.Head?.NextInAel == null)
         {
@@ -1328,8 +1328,8 @@ internal sealed class SelfIntersectionSweepLine
     private static bool ResetHorizontalDirection(
         ActiveEdge horizontalEdge,
         SweepVertex? vertexMax,
-        out double leftX,
-        out double rightX)
+        out long leftX,
+        out long rightX)
     {
         if (horizontalEdge.Bottom.X == horizontalEdge.Top.X)
         {
@@ -1367,7 +1367,7 @@ internal sealed class SelfIntersectionSweepLine
     private static void TrimHorizontal(ActiveEdge horizontalEdge, bool preserveCollinear)
     {
         bool wasTrimmed = false;
-        Vertex point = horizontalEdge.NextVertex.Point;
+        Vertex64 point = horizontalEdge.NextVertex.Point;
 
         while (point.Y == horizontalEdge.Top.Y)
         {
@@ -1437,16 +1437,16 @@ internal sealed class SelfIntersectionSweepLine
       *         /              |        /       |       /                            *
       *******************************************************************************/
     {
-        double y = horizontalEdge.Bottom.Y;
+        long y = horizontalEdge.Bottom.Y;
 
         SweepVertex? vertexMax = GetMaximaVertexAtCurrentY(horizontalEdge);
 
         bool isLeftToRight =
-            ResetHorizontalDirection(horizontalEdge, vertexMax, out double leftX, out double rightX);
+            ResetHorizontalDirection(horizontalEdge, vertexMax, out long leftX, out long rightX);
 
         if (horizontalEdge.IsHot)
         {
-            OutputPoint outputPoint = this.AddOutputPoint(horizontalEdge, new Vertex(horizontalEdge.CurrentX, y));
+            OutputPoint outputPoint = this.AddOutputPoint(horizontalEdge, new Vertex64(horizontalEdge.CurrentX, y));
             this.AddHorizontalSegment(outputPoint);
         }
 
@@ -1490,7 +1490,7 @@ internal sealed class SelfIntersectionSweepLine
 
                 // If this horizontal is a maxima, keep going until its pair is reached;
                 // otherwise check for break conditions.
-                Vertex point;
+                Vertex64 point;
                 if (vertexMax != horizontalEdge.VertexTop)
                 {
                     // Stop once the edge moves beyond the horizontal span.
@@ -1514,7 +1514,7 @@ internal sealed class SelfIntersectionSweepLine
                     }
                 }
 
-                point = new Vertex(edge.CurrentX, y);
+                point = new Vertex64(edge.CurrentX, y);
 
                 if (isLeftToRight)
                 {
@@ -1576,7 +1576,7 @@ internal sealed class SelfIntersectionSweepLine
     /// </summary>
     /// <param name="y">The scanbeam top Y coordinate.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ProcessScanbeamTop(double y)
+    private void ProcessScanbeamTop(long y)
     {
         this.activeEdges.ClearHorizontalQueue();
         ActiveEdge? edge = this.activeEdges.Head;
@@ -1679,7 +1679,7 @@ internal sealed class SelfIntersectionSweepLine
     /// </summary>
     /// <param name="edge">The edge to split.</param>
     /// <param name="point">The split point.</param>
-    private void SplitEdge(ActiveEdge edge, Vertex point)
+    private void SplitEdge(ActiveEdge edge, Vertex64 point)
     {
         if (edge.JoinWith == JoinWith.Right)
         {
@@ -1704,7 +1704,7 @@ internal sealed class SelfIntersectionSweepLine
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void CheckJoinLeft(
         ActiveEdge edge,
-        Vertex point,
+        Vertex64 point,
         bool checkCurrX = false)
     {
         ActiveEdge? prev = edge.PrevInAel;
@@ -1716,7 +1716,7 @@ internal sealed class SelfIntersectionSweepLine
         }
 
         // Reject joins that are too close to extrema (Issue #490).
-        if ((point.Y < edge.Top.Y + PolygonUtilities.ClosePointTolerance || point.Y < prev.Top.Y + PolygonUtilities.ClosePointTolerance) &&
+        if ((point.Y < edge.Top.Y + 2 || point.Y < prev.Top.Y + 2) &&
             ((edge.Bottom.Y > point.Y) || (prev.Bottom.Y > point.Y)))
         {
             // Issue #490.
@@ -1725,12 +1725,12 @@ internal sealed class SelfIntersectionSweepLine
 
         if (checkCurrX)
         {
-            if (PolygonUtilities.PerpendicularDistanceSquared(point, prev.Bottom, prev.Top) > PolygonUtilities.JoinDistanceSquared)
+            if (PolygonUtilities.PerpendicularDistanceSquared(point, prev.Bottom, prev.Top) > 0.25D)
             {
                 return;
             }
         }
-        else if (!PolygonUtilities.IsAlmostZero(edge.CurrentX - prev.CurrentX))
+        else if (edge.CurrentX != prev.CurrentX)
         {
             return;
         }
@@ -1766,7 +1766,7 @@ internal sealed class SelfIntersectionSweepLine
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void CheckJoinRight(
         ActiveEdge edge,
-        Vertex point,
+        Vertex64 point,
         bool checkCurrX = false)
     {
         ActiveEdge? next = edge.NextInAel;
@@ -1778,7 +1778,7 @@ internal sealed class SelfIntersectionSweepLine
         }
 
         // Reject joins that are too close to extrema (Issue #490).
-        if ((point.Y < edge.Top.Y + PolygonUtilities.ClosePointTolerance || point.Y < next.Top.Y + PolygonUtilities.ClosePointTolerance) &&
+        if ((point.Y < edge.Top.Y + 2 || point.Y < next.Top.Y + 2) &&
             ((edge.Bottom.Y > point.Y) || (next.Bottom.Y > point.Y)))
         {
             // Issue #490.
@@ -1787,12 +1787,12 @@ internal sealed class SelfIntersectionSweepLine
 
         if (checkCurrX)
         {
-            if (PolygonUtilities.PerpendicularDistanceSquared(point, next.Bottom, next.Top) > PolygonUtilities.JoinDistanceSquared)
+            if (PolygonUtilities.PerpendicularDistanceSquared(point, next.Bottom, next.Top) > 0.25D)
             {
                 return;
             }
         }
-        else if (!PolygonUtilities.IsAlmostZero(edge.CurrentX - next.CurrentX))
+        else if (edge.CurrentX != next.CurrentX)
         {
             return;
         }
@@ -1845,7 +1845,7 @@ internal sealed class SelfIntersectionSweepLine
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool SetHorizontalSegmentHeadingForward(HorizontalSegment horizontalSegment, OutputPoint prevPoint, OutputPoint nextPoint)
     {
-        if (PolygonUtilities.IsAlmostZero(prevPoint.Point.X - nextPoint.Point.X))
+        if (prevPoint.Point.X == nextPoint.Point.X)
         {
             return false;
         }
@@ -1876,7 +1876,7 @@ internal sealed class SelfIntersectionSweepLine
         OutputPoint outputPoint = horizontalSegment.LeftPoint!;
         OutputRecord outputRecord = ResolveOutputRecord(outputPoint.OutputRecord)!;
         bool outputRecordHasEdges = outputRecord.FrontEdge != null;
-        double currentY = outputPoint.Point.Y;
+        long currentY = outputPoint.Point.Y;
         OutputPoint prevPoint = outputPoint, nextPoint = outputPoint;
         if (outputRecordHasEdges)
         {
@@ -2011,7 +2011,7 @@ internal sealed class SelfIntersectionSweepLine
                     continue;
                 }
 
-                double currentY = segment1.LeftPoint.Point.Y;
+                long currentY = segment1.LeftPoint.Point.Y;
                 if (segment1.LeftToRight)
                 {
                     while (segment1.LeftPoint.Next!.Point.Y == currentY &&
@@ -2058,15 +2058,15 @@ internal sealed class SelfIntersectionSweepLine
     /// <param name="outputPoint">A point on the output ring.</param>
     /// <returns>A contour with redundant points removed.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static Contour BuildCleanContour(OutputPoint outputPoint)
+    private static List<Vertex64> BuildCleanContour(OutputPoint outputPoint)
     {
-        Contour result = [];
+        List<Vertex64> result = [];
         OutputPoint outputPoint2 = outputPoint;
         while (outputPoint2.Next != outputPoint &&
-            ((PolygonUtilities.IsAlmostZero(outputPoint2.Point.X - outputPoint2.Next!.Point.X) &&
-              PolygonUtilities.IsAlmostZero(outputPoint2.Point.X - outputPoint2.Prev.Point.X)) ||
-             (PolygonUtilities.IsAlmostZero(outputPoint2.Point.Y - outputPoint2.Next.Point.Y) &&
-              PolygonUtilities.IsAlmostZero(outputPoint2.Point.Y - outputPoint2.Prev.Point.Y))))
+            ((outputPoint2.Point.X == outputPoint2.Next!.Point.X &&
+              outputPoint2.Point.X == outputPoint2.Prev.Point.X) ||
+             (outputPoint2.Point.Y == outputPoint2.Next.Point.Y &&
+              outputPoint2.Point.Y == outputPoint2.Prev.Point.Y)))
         {
             outputPoint2 = outputPoint2.Next;
         }
@@ -2076,10 +2076,8 @@ internal sealed class SelfIntersectionSweepLine
         outputPoint2 = outputPoint2.Next;
         while (outputPoint2 != outputPoint)
         {
-            if ((!PolygonUtilities.IsAlmostZero(outputPoint2.Point.X - outputPoint2.Next!.Point.X) ||
-                 !PolygonUtilities.IsAlmostZero(outputPoint2.Point.X - prevOp.Point.X)) &&
-                (!PolygonUtilities.IsAlmostZero(outputPoint2.Point.Y - outputPoint2.Next.Point.Y) ||
-                 !PolygonUtilities.IsAlmostZero(outputPoint2.Point.Y - prevOp.Point.Y)))
+            if ((outputPoint2.Point.X != outputPoint2.Next!.Point.X || outputPoint2.Point.X != prevOp.Point.X) &&
+                (outputPoint2.Point.Y != outputPoint2.Next.Point.Y || outputPoint2.Point.Y != prevOp.Point.Y))
             {
                 result.Add(outputPoint2.Point);
                 prevOp = outputPoint2;
@@ -2097,7 +2095,7 @@ internal sealed class SelfIntersectionSweepLine
     /// <param name="point">The point to test.</param>
     /// <param name="outputPoint">A point on the polygon ring.</param>
     /// <returns>The point-in-polygon classification.</returns>
-    private static PointInPolygonResult PointInOutputPolygon(Vertex point, OutputPoint outputPoint)
+    private static PointInPolygonResult PointInOutputPolygon(Vertex64 point, OutputPoint outputPoint)
     {
         if (outputPoint == outputPoint.Next || outputPoint.Prev == outputPoint.Next)
         {
@@ -2374,13 +2372,13 @@ internal sealed class SelfIntersectionSweepLine
         /// <returns>A comparison result for sorting.</returns>
         public readonly int Compare(IntersectNode a, IntersectNode b)
         {
-            Vertex delta = a.Point - b.Point;
-            if (!PolygonUtilities.IsAlmostZero(delta.Y))
+            Vertex64 delta = a.Point - b.Point;
+            if (delta.Y != 0)
             {
                 return delta.Y > 0 ? -1 : 1;
             }
 
-            if (PolygonUtilities.IsAlmostZero(delta.X))
+            if (delta.X == 0)
             {
                 return 0;
             }

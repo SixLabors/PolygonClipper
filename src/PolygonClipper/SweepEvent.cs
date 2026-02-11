@@ -21,13 +21,14 @@ internal sealed class SweepEvent
     /// <param name="polygonType">The polygon type to which the segment belongs.</param>
     /// <param name="edgeType">The type of the edge. Default is <see cref="EdgeType.Normal"/>.</param>
     public SweepEvent(
-        Vertex point,
+        Vertex64 point,
         bool left,
         SweepEvent otherEvent,
         PolygonType polygonType = PolygonType.Subject,
         EdgeType edgeType = EdgeType.Normal)
     {
         this.Point = point;
+        this.PointDouble = new Vertex(point.X, point.Y);
         this.Left = left;
         this.OtherEvent = otherEvent;
         this.PolygonType = polygonType;
@@ -42,9 +43,10 @@ internal sealed class SweepEvent
     /// <param name="point">The point associated with the event.</param>
     /// <param name="left">Whether the point is the left endpoint of the segment.</param>
     /// <param name="polygonType">The polygon type to which the segment belongs.</param>
-    public SweepEvent(Vertex point, bool left, PolygonType polygonType = PolygonType.Subject)
+    public SweepEvent(Vertex64 point, bool left, PolygonType polygonType = PolygonType.Subject)
     {
         this.Point = point;
+        this.PointDouble = new Vertex(point.X, point.Y);
         this.Left = left;
         this.PolygonType = polygonType;
         this.EdgeType = EdgeType.Normal;
@@ -58,9 +60,10 @@ internal sealed class SweepEvent
     /// <param name="point">The point associated with the event.</param>
     /// <param name="left">Whether the point is the left endpoint of the segment.</param>
     /// <param name="contourId">The ID of the contour to which the event belongs.</param>
-    public SweepEvent(Vertex point, bool left, int contourId)
+    public SweepEvent(Vertex64 point, bool left, int contourId)
     {
         this.Point = point;
+        this.PointDouble = new Vertex(point.X, point.Y);
         this.Left = left;
         this.ContourId = contourId;
         this.PolygonType = PolygonType.Subject;
@@ -72,7 +75,12 @@ internal sealed class SweepEvent
     /// <summary>
     /// Gets the point associated with the event.
     /// </summary>
-    public Vertex Point { get; }
+    public Vertex64 Point { get; }
+
+    /// <summary>
+    /// Gets or sets the double-precision point associated with the event.
+    /// </summary>
+    public Vertex PointDouble { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether the point is the
@@ -107,12 +115,12 @@ internal sealed class SweepEvent
     /// <summary>
     /// Gets or sets the directed segment source point.
     /// </summary>
-    public Vertex SegmentSource { get; set; }
+    public Vertex64 SegmentSource { get; set; }
 
     /// <summary>
     /// Gets or sets the directed segment target point.
     /// </summary>
-    public Vertex SegmentTarget { get; set; }
+    public Vertex64 SegmentTarget { get; set; }
 
     /// <summary>
     /// Gets index of the polygon to which the associated segment belongs to;
@@ -187,10 +195,10 @@ internal sealed class SweepEvent
     /// <see langword="true"/> if the line segment is below the point; otherwise <see langword="false"/>.
     /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool IsBelow(in Vertex p)
+    public bool IsBelow(in Vertex64 p)
         => this.Left
-        ? PolygonUtilities.SignedArea(this.Point, this.OtherEvent.Point, p) > 0D
-        : PolygonUtilities.SignedArea(this.OtherEvent.Point, this.Point, p) > 0D;
+        ? PolygonUtilities.CrossSign(this.Point, this.OtherEvent.Point, p) > 0
+        : PolygonUtilities.CrossSign(this.OtherEvent.Point, this.Point, p) > 0;
 
     /// <summary>
     /// Is the line segment (point, otherEvent->point) above point p.
@@ -200,7 +208,7 @@ internal sealed class SweepEvent
     /// <see langword="true"/> if the line segment is above the point; otherwise <see langword="false"/>.
     /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool IsAbove(in Vertex p) => !this.IsBelow(p);
+    public bool IsAbove(in Vertex64 p) => !this.IsBelow(p);
 
     /// <summary>
     /// Is the line segment (point, otherEvent->point) a vertical line segment.
@@ -209,7 +217,15 @@ internal sealed class SweepEvent
     /// <see langword="true"/> if the line segment is vertical; otherwise <see langword="false"/>.
     /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool IsVertical() => this.Point.X == this.OtherEvent.Point.X;
+    public bool IsVertical()
+    {
+        if (PolygonUtilities.UseFloatingScale)
+        {
+            return this.PointDouble.X == this.OtherEvent.PointDouble.X;
+        }
+
+        return this.Point.X == this.OtherEvent.Point.X;
+    }
 
     /// <summary>
     /// Determines if this sweep event comes before another sweep event.
@@ -221,13 +237,21 @@ internal sealed class SweepEvent
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsBefore(SweepEvent other)
     {
-        // Compare by x-coordinate first
+        if (PolygonUtilities.UseFloatingScale)
+        {
+            if (this.PointDouble.X != other.PointDouble.X)
+            {
+                return this.PointDouble.X < other.PointDouble.X;
+            }
+
+            return this.PointDouble.Y < other.PointDouble.Y;
+        }
+
         if (this.Point.X != other.Point.X)
         {
             return this.Point.X < other.Point.X;
         }
 
-        // If x-coordinates are equal, compare by y-coordinate
         return this.Point.Y < other.Point.Y;
     }
 

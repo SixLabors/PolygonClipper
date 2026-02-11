@@ -36,6 +36,7 @@ public class PolygonClipper
     private readonly Polygon subject;
     private readonly Polygon clipping;
     private readonly BooleanOperation operation;
+    private readonly ClipperOptions? options;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PolygonClipper"/> class.
@@ -43,11 +44,12 @@ public class PolygonClipper
     /// <param name="subject">The subject polygon.</param>
     /// <param name="clip">The clipping polygon.</param>
     /// <param name="operation">The operation type.</param>
-    public PolygonClipper(Polygon subject, Polygon clip, BooleanOperation operation)
+    public PolygonClipper(Polygon subject, Polygon clip, BooleanOperation operation, ClipperOptions? options = null)
     {
         this.subject = subject;
         this.clipping = clip;
         this.operation = operation;
+        this.options = options;
     }
 
     /// <summary>
@@ -56,9 +58,9 @@ public class PolygonClipper
     /// <param name="subject">The subject polygon.</param>
     /// <param name="clip">The clipping polygon.</param>
     /// <returns>A new <see cref="Polygon"/> representing the intersection of the two polygons.</returns>
-    public static Polygon Intersection(Polygon subject, Polygon clip)
+    public static Polygon Intersection(Polygon subject, Polygon clip, ClipperOptions? options = null)
     {
-        PolygonClipper clipper = new(subject, clip, BooleanOperation.Intersection);
+        PolygonClipper clipper = new(subject, clip, BooleanOperation.Intersection, options);
         return clipper.Run();
     }
 
@@ -68,9 +70,9 @@ public class PolygonClipper
     /// <param name="subject">The subject polygon.</param>
     /// <param name="clip">The clipping polygon.</param>
     /// <returns>A new <see cref="Polygon"/> representing the union of the two polygons.</returns>
-    public static Polygon Union(Polygon subject, Polygon clip)
+    public static Polygon Union(Polygon subject, Polygon clip, ClipperOptions? options = null)
     {
-        PolygonClipper clipper = new(subject, clip, BooleanOperation.Union);
+        PolygonClipper clipper = new(subject, clip, BooleanOperation.Union, options);
         return clipper.Run();
     }
 
@@ -81,9 +83,9 @@ public class PolygonClipper
     /// <param name="subject">The subject polygon.</param>
     /// <param name="clip">The clipping polygon.</param>
     /// <returns>A new <see cref="Polygon"/> representing the difference between the two polygons.</returns>
-    public static Polygon Difference(Polygon subject, Polygon clip)
+    public static Polygon Difference(Polygon subject, Polygon clip, ClipperOptions? options = null)
     {
-        PolygonClipper clipper = new(subject, clip, BooleanOperation.Difference);
+        PolygonClipper clipper = new(subject, clip, BooleanOperation.Difference, options);
         return clipper.Run();
     }
 
@@ -94,9 +96,9 @@ public class PolygonClipper
     /// <param name="subject">The subject polygon.</param>
     /// <param name="clip">The clipping polygon.</param>
     /// <returns>A new <see cref="Polygon"/> representing the symmetric difference of the two polygons.</returns>
-    public static Polygon Xor(Polygon subject, Polygon clip)
+    public static Polygon Xor(Polygon subject, Polygon clip, ClipperOptions? options = null)
     {
-        PolygonClipper clipper = new(subject, clip, BooleanOperation.Xor);
+        PolygonClipper clipper = new(subject, clip, BooleanOperation.Xor, options);
         return clipper.Run();
     }
 
@@ -107,8 +109,8 @@ public class PolygonClipper
     /// </summary>
     /// <param name="polygon">The polygon to process.</param>
     /// <returns>A new <see cref="Polygon"/> without self-intersections.</returns>
-    public static Polygon RemoveSelfIntersections(Polygon polygon)
-        => SelfIntersectionRemover.Process(polygon);
+    public static Polygon RemoveSelfIntersections(Polygon polygon, ClipperOptions? options = null)
+        => SelfIntersectionRemover.Process(polygon, options);
 
     /// <summary>
     /// Executes the boolean operation using the sweep line algorithm.
@@ -116,17 +118,8 @@ public class PolygonClipper
     /// <returns>The resulting <see cref="Polygon"/>.</returns>
     public Polygon Run()
     {
-        Polygon subject = this.subject;
-        Polygon clipping = this.clipping;
-        BooleanOperation operation = this.operation;
-
-        // Check for trivial cases that can be resolved without sweeping
-        if (TryTrivialOperationForEmptyPolygons(subject, clipping, operation, out Polygon? result))
-        {
-            return result;
-        }
-
-        return this.RunCore();
+        FixedPrecisionContext context = FixedPrecisionContext.Create(this.options, [this.subject, this.clipping]);
+        return this.RunCore(context);
     }
 
     /// <summary>
@@ -135,163 +128,190 @@ public class PolygonClipper
     /// the full sweep to process all segments.
     /// </summary>
     /// <returns>The resulting <see cref="Polygon"/>.</returns>
-    private Polygon RunCore()
+    private Polygon RunCore(FixedPrecisionContext context)
     {
-        Polygon subject = this.subject;
-        Polygon clipping = this.clipping;
-        BooleanOperation operation = this.operation;
-
-        // Process all segments in the subject polygon
-        Vertex min = new(double.PositiveInfinity);
-        Vertex max = new(double.NegativeInfinity);
-
-        // Estimate the total number of sweep events.
-        // Each segment contributes two events (left/right endpoints),
-        // and subdivision during intersection may increase the count,
-        // so we conservatively double the total vertex count.
-        int subjectVertexCount = subject.VertexCount;
-        int clippingVertexCount = clipping.VertexCount;
-        int eventCount = (subjectVertexCount + clippingVertexCount) * 2;
-
-        SweepEventComparer comparer = new();
-        List<SweepEvent> unorderedEventQueue = new(eventCount);
-        int contourId = 0;
-
-        for (int i = 0; i < subject.Count; i++)
+        PolygonUtilities.SetFloatingScale(context.InvScale);
+        try
         {
-            Contour contour = subject[i];
-            contourId++;
-            for (int j = 0; j < contour.Count - 1; j++)
-            {
-                ProcessSegment(
-                    contourId,
-                    contour.GetSegment(j),
-                    PolygonType.Subject,
-                    unorderedEventQueue,
-                    comparer,
-                    ref min,
-                    ref max);
-            }
-        }
+            Polygon subject = this.subject;
+            Polygon clipping = this.clipping;
+            BooleanOperation operation = this.operation;
 
-        Box2 subjectBB = new(min, max);
-
-        // Process all segments in the clipping polygon
-        min = new Vertex(double.PositiveInfinity);
-        max = new Vertex(double.NegativeInfinity);
-        for (int i = 0; i < clipping.Count; i++)
-        {
-            Contour contour = clipping[i];
-
-            for (int j = 0; j < contour.Count - 1; j++)
-            {
-                ProcessSegment(
-                    contourId,
-                    contour.GetSegment(j),
-                    PolygonType.Clipping,
-                    unorderedEventQueue,
-                    comparer,
-                    ref min,
-                    ref max);
-            }
-        }
-
-        Box2 clippingBB = new(min, max);
-
-        // Only perform bounding box and disjoint checks when not doing self-intersection removal
-        if (clipping.Count > 0)
-        {
-            if (TryTrivialOperationForNonOverlappingBoundingBoxes(subject, clipping, subjectBB, clippingBB, operation, out Polygon? result))
+            if (TryTrivialOperationForEmptyPolygons(subject, clipping, operation, out Polygon? result))
             {
                 return result;
             }
 
-            if (TryTrivialOperationForDisjointPolygons(subject, clipping, operation, out result))
+            GetBoundsAndVertexCount(subject, context, out Box64 subjectBounds, out int subjectVertexCount);
+            GetBoundsAndVertexCount(clipping, context, out Box64 clippingBounds, out int clippingVertexCount);
+
+            if (clippingVertexCount > 0)
             {
-                return result;
-            }
-        }
-
-        // Sweep line algorithm: process events in the priority queue
-        StablePriorityQueue<SweepEvent, SweepEventComparer> eventQueue = new(comparer, unorderedEventQueue);
-        List<SweepEvent> sortedEvents = new(eventCount);
-
-        // Heuristic capacity for the sweep line status structure.
-        // At any given point during the sweep, only a subset of segments
-        // are active, so we preallocate half the subject's vertex count
-        // to reduce resizing without overcommitting memory.
-        StatusLine statusLine = new(subjectVertexCount >> 1);
-        double subjectMaxX = subjectBB.Max.X;
-        double minMaxX = Vertex.Min(subjectBB.Max, clippingBB.Max).X;
-
-        SweepEvent? prevEvent;
-        SweepEvent? nextEvent;
-        Span<SweepEvent> workspace = new SweepEvent[4];
-        while (eventQueue.Count > 0)
-        {
-            SweepEvent sweepEvent = eventQueue.Dequeue();
-            sortedEvents.Add(sweepEvent);
-
-            // Optimization: skip further processing if intersection is impossible
-            if ((operation == BooleanOperation.Intersection && sweepEvent.Point.X > minMaxX) ||
-                (operation == BooleanOperation.Difference && sweepEvent.Point.X > subjectMaxX))
-            {
-                return ConnectEdges(sortedEvents, comparer);
-            }
-
-            if (sweepEvent.Left)
-            {
-                // Insert the event into the status line and get neighbors
-                int it = sweepEvent.PosSL = statusLine.Add(sweepEvent);
-                prevEvent = statusLine.Prev(it);
-                nextEvent = statusLine.Next(it);
-
-                // Compute fields for the current event
-                ComputeFields(sweepEvent, prevEvent, operation);
-
-                // Check intersection with the next neighbor
-                if (nextEvent != null)
+                Box2 subjectBoundingBox = subject.GetBoundingBox();
+                Box2 clippingBoundingBox = clipping.GetBoundingBox();
+                if (TryTrivialOperationForNonOverlappingBoundingBoxes(
+                    subject,
+                    clipping,
+                    subjectBoundingBox,
+                    clippingBoundingBox,
+                    operation,
+                    out result))
                 {
+                    return result;
+                }
+            }
+
+            int eventCount = (subjectVertexCount + clippingVertexCount) * 2;
+
+            SweepEventComparer comparer = new();
+            List<SweepEvent> unorderedEventQueue = new(eventCount);
+            int contourId = 0;
+
+            for (int i = 0; i < subject.Count; i++)
+            {
+                Contour contour = subject[i];
+                int count = contour.Count;
+                int segmentCount = GetSegmentCount(contour, context);
+                if (segmentCount == 0)
+                {
+                    continue;
+                }
+
+                contourId++;
+                for (int j = 0; j < segmentCount; j++)
+                {
+                    int nextIndex = j + 1;
+                    if (nextIndex == count)
+                    {
+                        nextIndex = 0;
+                    }
+
+                    ProcessSegment(
+                        contourId,
+                        contour[j],
+                        contour[nextIndex],
+                        PolygonType.Subject,
+                        unorderedEventQueue,
+                        comparer,
+                        context);
+                }
+            }
+
+            for (int i = 0; i < clipping.Count; i++)
+            {
+                Contour contour = clipping[i];
+                int count = contour.Count;
+                int segmentCount = GetSegmentCount(contour, context);
+                if (segmentCount == 0)
+                {
+                    continue;
+                }
+
+                contourId++;
+                for (int j = 0; j < segmentCount; j++)
+                {
+                    int nextIndex = j + 1;
+                    if (nextIndex == count)
+                    {
+                        nextIndex = 0;
+                    }
+
+                    ProcessSegment(
+                        contourId,
+                        contour[j],
+                        contour[nextIndex],
+                        PolygonType.Clipping,
+                        unorderedEventQueue,
+                        comparer,
+                        context);
+                }
+            }
+
+            // Sweep line algorithm: process events in the priority queue
+            StablePriorityQueue<SweepEvent, SweepEventComparer> eventQueue = new(comparer, unorderedEventQueue);
+            List<SweepEvent> sortedEvents = new(eventCount);
+
+            // Heuristic capacity for the sweep line status structure.
+            // At any given point during the sweep, only a subset of segments
+            // are active, so we preallocate half the subject's vertex count
+            // to reduce resizing without overcommitting memory.
+            StatusLine statusLine = new(subjectVertexCount >> 1);
+            long subjectMaxX = subjectBounds.Max.X;
+            long minMaxX = Math.Min(subjectBounds.Max.X, clippingBounds.Max.X);
+
+            SweepEvent? prevEvent;
+            SweepEvent? nextEvent;
+            Span<SweepEvent> workspace = new SweepEvent[4];
+            while (eventQueue.Count > 0)
+            {
+                SweepEvent sweepEvent = eventQueue.Dequeue();
+                sortedEvents.Add(sweepEvent);
+
+                // Optimization: skip further processing if intersection is impossible
+                if ((operation == BooleanOperation.Intersection && sweepEvent.Point.X > minMaxX) ||
+                    (operation == BooleanOperation.Difference && sweepEvent.Point.X > subjectMaxX))
+                {
+                    return ConnectEdges(sortedEvents, comparer, context);
+                }
+
+                if (sweepEvent.Left)
+                {
+                    // Insert the event into the status line and get neighbors
+                    int it = sweepEvent.PosSL = statusLine.Add(sweepEvent);
+                    prevEvent = statusLine.Prev(it);
+                    nextEvent = statusLine.Next(it);
+
+                    // Compute fields for the current event
+                    ComputeFields(sweepEvent, prevEvent, operation);
+
                     // Check intersection with the next neighbor
-                    if (PossibleIntersection(sweepEvent, nextEvent, eventQueue, workspace) == 2)
+                    if (nextEvent != null)
                     {
-                        ComputeFields(sweepEvent, prevEvent, operation);
-                        ComputeFields(nextEvent, sweepEvent, operation);
+                        // Check intersection with the next neighbor
+                        if (PossibleIntersection(sweepEvent, nextEvent, eventQueue, workspace, context) == 2)
+                        {
+                            ComputeFields(sweepEvent, prevEvent, operation);
+                            ComputeFields(nextEvent, sweepEvent, operation);
+                        }
                     }
-                }
 
-                // Check intersection with the previous neighbor
-                if (prevEvent != null)
-                {
                     // Check intersection with the previous neighbor
-                    if (PossibleIntersection(prevEvent, sweepEvent, eventQueue, workspace) == 2)
+                    if (prevEvent != null)
                     {
-                        SweepEvent? prevPrevEvent = statusLine.Prev(prevEvent.PosSL);
-                        ComputeFields(prevEvent, prevPrevEvent, operation);
-                        ComputeFields(sweepEvent, prevEvent, operation);
+                        // Check intersection with the previous neighbor
+                        if (PossibleIntersection(prevEvent, sweepEvent, eventQueue, workspace, context) == 2)
+                        {
+                            SweepEvent? prevPrevEvent = statusLine.Prev(prevEvent.PosSL);
+                            ComputeFields(prevEvent, prevPrevEvent, operation);
+                            ComputeFields(sweepEvent, prevEvent, operation);
+                        }
                     }
                 }
-            }
-            else
-            {
-                // Remove the event from the status line
-                sweepEvent = sweepEvent.OtherEvent;
-                int it = sweepEvent.PosSL;
-                prevEvent = statusLine.Prev(it);
-                nextEvent = statusLine.Next(it);
-
-                // Check intersection between neighbors
-                if (prevEvent != null && nextEvent != null)
+                else
                 {
-                    _ = PossibleIntersection(prevEvent, nextEvent, eventQueue, workspace);
+                    // Remove the event from the status line
+                    sweepEvent = sweepEvent.OtherEvent;
+                    int it = sweepEvent.PosSL;
+                    prevEvent = statusLine.Prev(it);
+                    nextEvent = statusLine.Next(it);
+
+                    // Check intersection between neighbors
+                    if (prevEvent != null && nextEvent != null)
+                    {
+                        _ = PossibleIntersection(prevEvent, nextEvent, eventQueue, workspace, context);
+                    }
+
+                    statusLine.RemoveAt(it);
                 }
-
-                statusLine.RemoveAt(it);
             }
-        }
 
-        // Connect edges after processing all events
-        return ConnectEdges(sortedEvents, comparer);
+            // Connect edges after processing all events
+            return ConnectEdges(sortedEvents, comparer, context);
+        }
+        finally
+        {
+            PolygonUtilities.ClearFloatingScale();
+        }
     }
 
     /// <summary>
@@ -324,63 +344,17 @@ public class PolygonClipper
 
             if (operation == BooleanOperation.Difference)
             {
-                result = PolygonUtilities.BuildNormalizedPolygon(subject);
+                result = BuildNormalizedPolygon(subject);
                 return true;
             }
 
             if (operation is BooleanOperation.Union or BooleanOperation.Xor)
             {
                 result = subject.Count == 0
-                    ? PolygonUtilities.BuildNormalizedPolygon(clipping)
-                    : PolygonUtilities.BuildNormalizedPolygon(subject);
+                    ? BuildNormalizedPolygon(clipping)
+                    : BuildNormalizedPolygon(subject);
                 return true;
             }
-        }
-
-        return false;
-    }
-
-    private static bool TryTrivialOperationForDisjointPolygons(
-        Polygon subject,
-        Polygon clipping,
-        BooleanOperation operation,
-        [NotNullWhen(true)] out Polygon? result)
-    {
-        result = null;
-
-        if (PolygonUtilities.PolygonsHaveIntersection(subject, clipping))
-        {
-            return false;
-        }
-
-        if (PolygonUtilities.TryGetAnyVertex(subject, out Vertex subjectPoint) &&
-            PolygonUtilities.ContainsPoint(subjectPoint, clipping))
-        {
-            return false;
-        }
-
-        if (PolygonUtilities.TryGetAnyVertex(clipping, out Vertex clippingPoint) &&
-            PolygonUtilities.ContainsPoint(clippingPoint, subject))
-        {
-            return false;
-        }
-
-        if (operation == BooleanOperation.Intersection)
-        {
-            result = [];
-            return true;
-        }
-
-        if (operation == BooleanOperation.Difference)
-        {
-            result = PolygonUtilities.BuildNormalizedPolygon(subject);
-            return true;
-        }
-
-        if (operation is BooleanOperation.Union or BooleanOperation.Xor)
-        {
-            result = PolygonUtilities.BuildNormalizedPolygon(subject, clipping);
-            return true;
         }
 
         return false;
@@ -422,18 +396,551 @@ public class PolygonClipper
             // The bounding boxes do not overlap
             if (operation == BooleanOperation.Difference)
             {
-                result = PolygonUtilities.BuildNormalizedPolygon(subject);
+                result = BuildNormalizedPolygon(subject);
                 return true;
             }
 
             if (operation is BooleanOperation.Union or BooleanOperation.Xor)
             {
-                result = PolygonUtilities.BuildNormalizedPolygon(subject, clipping);
+                result = BuildNormalizedPolygon(subject, clipping);
                 return true;
             }
         }
 
         return false;
+    }
+
+    private static void GetBoundsAndVertexCount(
+        Polygon polygon,
+        FixedPrecisionContext context,
+        out Box64 bounds,
+        out int vertexCount)
+    {
+        vertexCount = 0;
+
+        long minX = long.MaxValue;
+        long minY = long.MaxValue;
+        long maxX = long.MinValue;
+        long maxY = long.MinValue;
+
+        for (int i = 0; i < polygon.Count; i++)
+        {
+            Contour contour = polygon[i];
+            int count = contour.Count;
+            if (count == 0)
+            {
+                continue;
+            }
+
+            vertexCount += count;
+
+            for (int j = 0; j < count; j++)
+            {
+                Vertex64 point = context.Quantize(contour[j]);
+                if (point.X < minX)
+                {
+                    minX = point.X;
+                }
+
+                if (point.X > maxX)
+                {
+                    maxX = point.X;
+                }
+
+                if (point.Y < minY)
+                {
+                    minY = point.Y;
+                }
+
+                if (point.Y > maxY)
+                {
+                    maxY = point.Y;
+                }
+            }
+        }
+
+        bounds = minX == long.MaxValue
+            ? default
+            : new Box64(new Vertex64(minX, minY), new Vertex64(maxX, maxY));
+    }
+
+    private static int GetSegmentCount(Contour contour, FixedPrecisionContext context)
+    {
+        int count = contour.Count;
+        if (count < 3)
+        {
+            return 0;
+        }
+
+        Vertex64 first = context.Quantize(contour[0]);
+        Vertex64 last = context.Quantize(contour[^1]);
+        return first == last ? count - 1 : count;
+    }
+
+    private static Polygon BuildNormalizedPolygon(Polygon polygon)
+        => BuildNormalizedPolygon([polygon]);
+
+    private static Polygon BuildNormalizedPolygon(Polygon subject, Polygon clipping)
+        => BuildNormalizedPolygon([subject, clipping]);
+
+    private static Polygon BuildNormalizedPolygon(ReadOnlySpan<Polygon> polygons)
+    {
+        List<ContourInfoDouble> contourInfos = [];
+        for (int i = 0; i < polygons.Length; i++)
+        {
+            Polygon polygon = polygons[i];
+            for (int j = 0; j < polygon.Count; j++)
+            {
+                Contour contour = polygon[j];
+                if (contour.Count == 0)
+                {
+                    continue;
+                }
+
+                contourInfos.Add(CreateContourInfo(contour));
+            }
+        }
+
+        if (contourInfos.Count == 0)
+        {
+            return [];
+        }
+
+        int count = contourInfos.Count;
+        int[] parentIndices = new int[count];
+        int[] depths = new int[count];
+        Array.Fill(parentIndices, -1);
+
+        for (int i = 0; i < count; i++)
+        {
+            Vertex testPoint = contourInfos[i].Vertices[0];
+            double smallestContainerArea = double.PositiveInfinity;
+            int parentIndex = -1;
+
+            for (int j = 0; j < count; j++)
+            {
+                if (i == j)
+                {
+                    continue;
+                }
+
+                if (PointInContour(testPoint, contourInfos[j].Vertices))
+                {
+                    double area = contourInfos[j].Area;
+                    if (area < smallestContainerArea)
+                    {
+                        smallestContainerArea = area;
+                        parentIndex = j;
+                    }
+                }
+            }
+
+            parentIndices[i] = parentIndex;
+        }
+
+        List<int> externals = new(count);
+        for (int i = 0; i < count; i++)
+        {
+            int depth = GetDepth(i, parentIndices);
+            depths[i] = depth;
+
+            if ((depth & 1) == 0)
+            {
+                externals.Add(i);
+            }
+        }
+
+        externals.Sort((left, right) =>
+            CompareVertices(contourInfos[left].MinVertex, contourInfos[right].MinVertex));
+
+        Polygon result = new(count);
+        bool[] added = new bool[count];
+        int[] newIndices = new int[count];
+        Array.Fill(newIndices, -1);
+
+        foreach (int externalIndex in externals)
+        {
+            int externalContourIndex = AddContour(
+                result,
+                contourInfos,
+                externalIndex,
+                depths,
+                parentIndices,
+                added,
+                newIndices);
+
+            List<int> holes = [];
+            for (int i = 0; i < count; i++)
+            {
+                if (!added[i] && parentIndices[i] == externalIndex && (depths[i] & 1) == 1)
+                {
+                    holes.Add(i);
+                }
+            }
+
+            holes.Sort((left, right) =>
+                CompareVertices(contourInfos[left].MinVertex, contourInfos[right].MinVertex));
+
+            foreach (int holeIndex in holes)
+            {
+                int holeContourIndex = AddContour(
+                    result,
+                    contourInfos,
+                    holeIndex,
+                    depths,
+                    parentIndices,
+                    added,
+                    newIndices);
+
+                result[externalContourIndex].AddHoleIndex(holeContourIndex);
+                result[holeContourIndex].ParentIndex = externalContourIndex;
+            }
+        }
+
+        for (int i = 0; i < count; i++)
+        {
+            if (!added[i])
+            {
+                _ = AddContour(result, contourInfos, i, depths, parentIndices, added, newIndices);
+            }
+        }
+
+        return result;
+    }
+
+    private static int CompareVertices(in Vertex left, in Vertex right)
+        => left.X != right.X
+            ? left.X.CompareTo(right.X)
+            : left.Y.CompareTo(right.Y);
+
+    private static int GetDepth(int index, int[] parentIndices)
+    {
+        int depth = 0;
+        int current = parentIndices[index];
+        while (current >= 0)
+        {
+            depth++;
+            current = parentIndices[current];
+        }
+
+        return depth;
+    }
+
+    private static ContourInfoDouble CreateContourInfo(Contour contour)
+    {
+        bool isClosed = contour.Count > 1 && contour[0] == contour[^1];
+        int targetCount = isClosed ? contour.Count - 1 : contour.Count;
+        List<Vertex> vertices = new(targetCount);
+        for (int i = 0; i < targetCount; i++)
+        {
+            vertices.Add(contour[i]);
+        }
+
+        NormalizeVertices(vertices);
+
+        Vertex minVertex = vertices[0];
+        for (int i = 1; i < vertices.Count; i++)
+        {
+            if (CompareVertices(vertices[i], minVertex) < 0)
+            {
+                minVertex = vertices[i];
+            }
+        }
+
+        double area = Math.Abs(GetSignedArea(vertices));
+
+        if (isClosed)
+        {
+            vertices.Add(vertices[0]);
+        }
+
+        return new ContourInfoDouble(vertices, minVertex, area);
+    }
+
+    private static void NormalizeVertices(List<Vertex> vertices)
+    {
+        if (vertices.Count < 3)
+        {
+            return;
+        }
+
+        if (GetSignedArea(vertices) < 0)
+        {
+            vertices.Reverse();
+        }
+
+        int minIndex = 0;
+        Vertex minVertex = vertices[0];
+        for (int i = 1; i < vertices.Count; i++)
+        {
+            if (CompareVertices(vertices[i], minVertex) < 0)
+            {
+                minVertex = vertices[i];
+                minIndex = i;
+            }
+        }
+
+        if (minIndex > 0)
+        {
+            List<Vertex> rotated = new(vertices.Count);
+            for (int i = 0; i < vertices.Count; i++)
+            {
+                rotated.Add(vertices[(i + minIndex) % vertices.Count]);
+            }
+
+            vertices.Clear();
+            vertices.AddRange(rotated);
+        }
+    }
+
+    private static double GetSignedArea(List<Vertex> vertices)
+    {
+        double area = 0;
+        for (int i = 0; i < vertices.Count; i++)
+        {
+            Vertex current = vertices[i];
+            Vertex next = vertices[(i + 1) % vertices.Count];
+            area += Vertex.Cross(current, next);
+        }
+
+        return area;
+    }
+
+    private static bool PointInContour(in Vertex point, List<Vertex> vertices)
+    {
+        int count = vertices.Count;
+        if (count < 3)
+        {
+            return false;
+        }
+
+        bool inside = false;
+        Vertex previous = vertices[count - 1];
+
+        for (int i = 0; i < count; i++)
+        {
+            Vertex current = vertices[i];
+            if (current == previous)
+            {
+                previous = current;
+                continue;
+            }
+
+            if (IsPointOnSegment(point, previous, current))
+            {
+                return true;
+            }
+
+            bool intersects = (current.Y > point.Y) != (previous.Y > point.Y);
+            if (intersects)
+            {
+                double xIntersection = (((previous.X - current.X) * (point.Y - current.Y)) / (previous.Y - current.Y)) +
+                                       current.X;
+                if (point.X < xIntersection)
+                {
+                    inside = !inside;
+                }
+            }
+
+            previous = current;
+        }
+
+        return inside;
+    }
+
+    private static bool PointInContour(in Vertex point, Contour contour)
+    {
+        int count = contour.Count;
+        if (count < 3)
+        {
+            return false;
+        }
+
+        bool inside = false;
+        Vertex previous = contour[count - 1];
+
+        for (int i = 0; i < count; i++)
+        {
+            Vertex current = contour[i];
+            if (current == previous)
+            {
+                previous = current;
+                continue;
+            }
+
+            if (IsPointOnSegment(point, previous, current))
+            {
+                return true;
+            }
+
+            bool intersects = (current.Y > point.Y) != (previous.Y > point.Y);
+            if (intersects)
+            {
+                double xIntersection = ((previous.X - current.X) * (point.Y - current.Y) / (previous.Y - current.Y)) +
+                                       current.X;
+                if (point.X < xIntersection)
+                {
+                    inside = !inside;
+                }
+            }
+
+            previous = current;
+        }
+
+        return inside;
+    }
+
+    private static bool IsPointOnSegment(in Vertex point, in Vertex a, in Vertex b)
+    {
+        if (Vertex.Cross(b - a, point - a) != 0)
+        {
+            return false;
+        }
+
+        double minX = Math.Min(a.X, b.X);
+        double maxX = Math.Max(a.X, b.X);
+        double minY = Math.Min(a.Y, b.Y);
+        double maxY = Math.Max(a.Y, b.Y);
+
+        return point.X >= minX && point.X <= maxX && point.Y >= minY && point.Y <= maxY;
+    }
+
+    private static bool SegmentsIntersect(
+        in Vertex a1,
+        in Vertex a2,
+        in Vertex b1,
+        in Vertex b2,
+        bool inclusive = false)
+    {
+        // Uses cross-product tests to solve a1 + d1 * t == b1 + d2 * u.
+        // cp is the denominator (cross of directions); cp == 0 means parallel/collinear.
+        Vertex d1 = a2 - a1;
+        Vertex d2 = b2 - b1;
+        double cp = Vertex.Cross(d2, d1);
+        if (cp == 0)
+        {
+            if (Vertex.Cross(b1 - a1, d1) != 0)
+            {
+                return false;
+            }
+
+            double aMinX = Math.Min(a1.X, a2.X);
+            double aMaxX = Math.Max(a1.X, a2.X);
+            double bMinX = Math.Min(b1.X, b2.X);
+            double bMaxX = Math.Max(b1.X, b2.X);
+            double aMinY = Math.Min(a1.Y, a2.Y);
+            double aMaxY = Math.Max(a1.Y, a2.Y);
+            double bMinY = Math.Min(b1.Y, b2.Y);
+            double bMaxY = Math.Max(b1.Y, b2.Y);
+
+            return aMaxX >= bMinX && bMaxX >= aMinX &&
+                   aMaxY >= bMinY && bMaxY >= aMinY;
+        }
+
+        if (inclusive)
+        {
+            // Inclusive mode allows intersections at endpoints.
+            double t = Vertex.Cross(a1 - b1, d2);
+            if (t == 0)
+            {
+                return true;
+            }
+
+            if (t > 0)
+            {
+                if (cp < 0 || t > cp)
+                {
+                    // t outside [0, cp] once sign is normalized.
+                    return false;
+                }
+            }
+            else if (cp > 0 || t < cp)
+            {
+                return false;
+            }
+
+            t = Vertex.Cross(a1 - b1, d1);
+            if (t == 0)
+            {
+                return true;
+            }
+
+            if (t > 0)
+            {
+                // t within bounds for the second segment.
+                return cp > 0 && t <= cp;
+            }
+
+            return cp < 0 && t >= cp;
+        }
+
+        // Exclusive mode requires the intersection to be strictly inside both segments.
+        double t2 = Vertex.Cross(a1 - b1, d2);
+        if (t2 == 0)
+        {
+            return false;
+        }
+
+        if (t2 > 0)
+        {
+            if (cp < 0 || t2 >= cp)
+            {
+                // Reject if t2 is outside the open interval.
+                return false;
+            }
+        }
+        else if (cp > 0 || t2 <= cp)
+        {
+            return false;
+        }
+
+        t2 = Vertex.Cross(a1 - b1, d1);
+        if (t2 == 0)
+        {
+            return false;
+        }
+
+        if (t2 > 0)
+        {
+            // Both parameters are inside open intervals.
+            return cp > 0 && t2 < cp;
+        }
+
+        return cp < 0 && t2 > cp;
+    }
+
+    private static int AddContour(
+        Polygon polygon,
+        List<ContourInfoDouble> contourInfos,
+        int contourIndex,
+        int[] depths,
+        int[] parentIndices,
+        bool[] added,
+        int[] newIndices)
+    {
+        List<Vertex> vertices = contourInfos[contourIndex].Vertices;
+        Contour contour = new(vertices.Count);
+        for (int i = 0; i < vertices.Count; i++)
+        {
+            contour.Add(vertices[i]);
+        }
+
+        polygon.Add(contour);
+        added[contourIndex] = true;
+        int newIndex = polygon.Count - 1;
+        newIndices[contourIndex] = newIndex;
+
+        contour.Depth = depths[contourIndex];
+        if (depths[contourIndex] % 2 == 1)
+        {
+            int parentIndex = parentIndices[contourIndex];
+            if (parentIndex >= 0 && newIndices[parentIndex] >= 0)
+            {
+                contour.ParentIndex = newIndices[parentIndex];
+            }
+        }
+
+        return newIndex;
     }
 
     /// <summary>
@@ -444,28 +951,30 @@ public class PolygonClipper
     /// <param name="pt">The polygon type to which the segment belongs.</param>
     /// <param name="eventQueue">The unordered event queue to add the generated events to.</param>
     /// <param name="comparer">The comparer used to determine the order of sweep events in the queue.</param>
-    /// <param name="min">The minimum vertex of the bounding box.</param>
-    /// <param name="max">The maximum vertex of the bounding box.</param>
     private static void ProcessSegment(
         int contourId,
-        Segment s,
+        in Vertex start,
+        in Vertex end,
         PolygonType pt,
         List<SweepEvent> eventQueue,
         SweepEventComparer comparer,
-        ref Vertex min,
-        ref Vertex max)
+        FixedPrecisionContext context)
     {
-        if (s.Source == s.Target)
+        Vertex64 source = context.Quantize(start);
+        Vertex64 target = context.Quantize(end);
+        if (source == target)
         {
             // Skip degenerate zero-length segments.
             return;
         }
 
         // Create sweep events for the endpoints of the segment
-        SweepEvent e1 = new(s.Source, true, pt);
-        SweepEvent e2 = new(s.Target, true, e1, pt);
+        SweepEvent e1 = new(source, true, pt);
+        SweepEvent e2 = new(target, true, e1, pt);
         e1.OtherEvent = e2;
         e1.ContourId = e2.ContourId = contourId;
+        e1.PointDouble = start;
+        e2.PointDouble = end;
 
         // Determine which endpoint is the left endpoint
         if (comparer.Compare(e1, e2) < 0)
@@ -476,9 +985,6 @@ public class PolygonClipper
         {
             e1.Left = false;
         }
-
-        min = Vertex.Min(min, s.Min);
-        max = Vertex.Max(max, s.Max);
 
         // Add the events to the event queue
         eventQueue.Add(e1);
@@ -498,6 +1004,7 @@ public class PolygonClipper
         {
             le.InOut = false;
             le.OtherInOut = true;
+            le.PrevInResult = null;
         }
         else if (le.PolygonType == prev.PolygonType)
         {
@@ -633,7 +1140,8 @@ public class PolygonClipper
         SweepEvent le1,
         SweepEvent le2,
         StablePriorityQueue<SweepEvent, SweepEventComparer> eventQueue,
-        Span<SweepEvent> workspace)
+        Span<SweepEvent> workspace,
+        FixedPrecisionContext context)
     {
         if (le1.OtherEvent == null || le2.OtherEvent == null)
         {
@@ -642,11 +1150,32 @@ public class PolygonClipper
         }
 
         // Point intersections
-        int nIntersections = PolygonUtilities.FindIntersection(
-            le1.GetSegment(),
-            le2.GetSegment(),
-            out Vertex ip1,
-            out Vertex _); // Currently unused but could be used to detect collinear overlapping segments
+        bool useFloating = PolygonUtilities.UseFloatingScale;
+        int nIntersections;
+        Vertex64 ip1Fixed = default;
+        Vertex ip1Double = default;
+        if (useFloating)
+        {
+            nIntersections = PolygonUtilities.FindIntersectionDouble(
+                le1.PointDouble,
+                le1.OtherEvent.PointDouble,
+                le2.PointDouble,
+                le2.OtherEvent.PointDouble,
+                out ip1Double,
+                out Vertex _);
+            if (nIntersections != 0)
+            {
+                ip1Fixed = context.Quantize(ip1Double);
+            }
+        }
+        else
+        {
+            nIntersections = PolygonUtilities.FindIntersection(
+                le1.GetSegment(),
+                le2.GetSegment(),
+                out ip1Fixed,
+                out Vertex64 _); // Currently unused but could be used to detect collinear overlapping segments
+        }
 
         if (nIntersections == 0)
         {
@@ -655,11 +1184,19 @@ public class PolygonClipper
         }
 
         // Ignore intersection if it occurs at the exact left or right endpoint of both segments
-        if (nIntersections == 1 &&
-            (le1.Point == le2.Point || le1.OtherEvent.Point == le2.OtherEvent.Point))
+        if (nIntersections == 1)
         {
-            // Line segments intersect at an endpoint of both line segments
-            return 0;
+            bool leftMatch = useFloating
+                ? le1.PointDouble == le2.PointDouble
+                : le1.Point == le2.Point;
+            bool rightMatch = useFloating
+                ? le1.OtherEvent.PointDouble == le2.OtherEvent.PointDouble
+                : le1.OtherEvent.Point == le2.OtherEvent.Point;
+            if (leftMatch || rightMatch)
+            {
+                // Line segments intersect at an endpoint of both line segments.
+                return 0;
+            }
         }
 
         // If segments overlap and belong to the same polygon, ignore them
@@ -672,30 +1209,54 @@ public class PolygonClipper
         SweepEventComparer comparer = eventQueue.Comparer;
         if (nIntersections == 1)
         {
-            // If the intersection point is not an endpoint of le1 segment.
-            if (le1.Point != ip1 && le1.OtherEvent.Point != ip1)
+            if (useFloating)
             {
-                DivideSegment(le1, ip1, eventQueue, comparer);
-            }
+                // If the intersection point is not an endpoint of le1 segment.
+                if (le1.PointDouble != ip1Double && le1.OtherEvent.PointDouble != ip1Double)
+                {
+                    DivideSegment(le1, ip1Fixed, ip1Double, eventQueue, comparer, context);
+                }
 
-            // If the intersection point is not an endpoint of le2 segment.
-            if (le2.Point != ip1 && le2.OtherEvent.Point != ip1)
+                // If the intersection point is not an endpoint of le2 segment.
+                if (le2.PointDouble != ip1Double && le2.OtherEvent.PointDouble != ip1Double)
+                {
+                    DivideSegment(le2, ip1Fixed, ip1Double, eventQueue, comparer, context);
+                }
+            }
+            else
             {
-                DivideSegment(le2, ip1, eventQueue, comparer);
+                // If the intersection point is not an endpoint of le1 segment.
+                if (le1.Point != ip1Fixed && le1.OtherEvent.Point != ip1Fixed)
+                {
+                    DivideSegment(le1, ip1Fixed, new Vertex(ip1Fixed.X, ip1Fixed.Y), eventQueue, comparer, context);
+                }
+
+                // If the intersection point is not an endpoint of le2 segment.
+                if (le2.Point != ip1Fixed && le2.OtherEvent.Point != ip1Fixed)
+                {
+                    DivideSegment(le2, ip1Fixed, new Vertex(ip1Fixed.X, ip1Fixed.Y), eventQueue, comparer, context);
+                }
             }
 
             return 1;
         }
 
         // The line segments associated with le1 and le2 overlap.
-        bool leftCoincide = le1.Point == le2.Point;
-        bool rightCoincide = le1.OtherEvent.Point == le2.OtherEvent.Point;
+        bool leftCoincide = useFloating
+            ? le1.PointDouble == le2.PointDouble
+            : le1.Point == le2.Point;
+        bool rightCoincide = useFloating
+            ? le1.OtherEvent.PointDouble == le2.OtherEvent.PointDouble
+            : le1.OtherEvent.Point == le2.OtherEvent.Point;
 
         // Populate the events.
         // The working buffer has a length of 4, which is sufficient to hold the events
         // for the two segments and their associated other events.
         // Events are assigned in a specific order to avoid overwriting shared references.
         ref SweepEvent wRef = ref MemoryMarshal.GetReference(workspace);
+        SweepEvent splitEvent;
+        Vertex64 splitPoint;
+        Vertex splitPointDouble;
         if (!leftCoincide)
         {
             if (comparer.Compare(le1, le2) > 0)
@@ -746,7 +1307,10 @@ public class PolygonClipper
 
             if (leftCoincide && !rightCoincide)
             {
-                DivideSegment(Unsafe.Add(ref wRef, 1u).OtherEvent, Unsafe.Add(ref wRef, 0u).Point, eventQueue, comparer);
+                splitEvent = Unsafe.Add(ref wRef, 0u);
+                splitPoint = useFloating ? context.Quantize(splitEvent.PointDouble) : splitEvent.Point;
+                splitPointDouble = useFloating ? splitEvent.PointDouble : new Vertex(splitPoint.X, splitPoint.Y);
+                DivideSegment(Unsafe.Add(ref wRef, 1u).OtherEvent, splitPoint, splitPointDouble, eventQueue, comparer, context);
             }
 
             return 2;
@@ -755,7 +1319,10 @@ public class PolygonClipper
         if (rightCoincide)
         {
             // Since leftCoincide is false, the first two workspace slots contain distinct left events.
-            DivideSegment(Unsafe.Add(ref wRef, 0u), Unsafe.Add(ref wRef, 1u).Point, eventQueue, comparer);
+            splitEvent = Unsafe.Add(ref wRef, 1u);
+            splitPoint = useFloating ? context.Quantize(splitEvent.PointDouble) : splitEvent.Point;
+            splitPointDouble = useFloating ? splitEvent.PointDouble : new Vertex(splitPoint.X, splitPoint.Y);
+            DivideSegment(Unsafe.Add(ref wRef, 0u), splitPoint, splitPointDouble, eventQueue, comparer, context);
             return 3;
         }
 
@@ -763,14 +1330,28 @@ public class PolygonClipper
         // At this point: workspace[0,1] = sorted left events, workspace[2,3] = sorted right events.
         if (Unsafe.Add(ref wRef, 0u) != Unsafe.Add(ref wRef, 3u).OtherEvent)
         {
-            DivideSegment(Unsafe.Add(ref wRef, 0u), Unsafe.Add(ref wRef, 1u).Point, eventQueue, comparer);
-            DivideSegment(Unsafe.Add(ref wRef, 1u), Unsafe.Add(ref wRef, 2u).Point, eventQueue, comparer);
+            splitEvent = Unsafe.Add(ref wRef, 1u);
+            splitPoint = useFloating ? context.Quantize(splitEvent.PointDouble) : splitEvent.Point;
+            splitPointDouble = useFloating ? splitEvent.PointDouble : new Vertex(splitPoint.X, splitPoint.Y);
+            DivideSegment(Unsafe.Add(ref wRef, 0u), splitPoint, splitPointDouble, eventQueue, comparer, context);
+
+            splitEvent = Unsafe.Add(ref wRef, 2u);
+            splitPoint = useFloating ? context.Quantize(splitEvent.PointDouble) : splitEvent.Point;
+            splitPointDouble = useFloating ? splitEvent.PointDouble : new Vertex(splitPoint.X, splitPoint.Y);
+            DivideSegment(Unsafe.Add(ref wRef, 1u), splitPoint, splitPointDouble, eventQueue, comparer, context);
             return 3;
         }
 
         // One segment fully contains the other
-        DivideSegment(Unsafe.Add(ref wRef, 0u), Unsafe.Add(ref wRef, 1u).Point, eventQueue, comparer);
-        DivideSegment(Unsafe.Add(ref wRef, 3u).OtherEvent, Unsafe.Add(ref wRef, 2u).Point, eventQueue, comparer);
+        splitEvent = Unsafe.Add(ref wRef, 1u);
+        splitPoint = useFloating ? context.Quantize(splitEvent.PointDouble) : splitEvent.Point;
+        splitPointDouble = useFloating ? splitEvent.PointDouble : new Vertex(splitPoint.X, splitPoint.Y);
+        DivideSegment(Unsafe.Add(ref wRef, 0u), splitPoint, splitPointDouble, eventQueue, comparer, context);
+
+        splitEvent = Unsafe.Add(ref wRef, 2u);
+        splitPoint = useFloating ? context.Quantize(splitEvent.PointDouble) : splitEvent.Point;
+        splitPointDouble = useFloating ? splitEvent.PointDouble : new Vertex(splitPoint.X, splitPoint.Y);
+        DivideSegment(Unsafe.Add(ref wRef, 3u).OtherEvent, splitPoint, splitPointDouble, eventQueue, comparer, context);
         return 3;
     }
 
@@ -783,9 +1364,11 @@ public class PolygonClipper
     /// <param name="comparer">The comparer used to sort the events.</param>
     private static void DivideSegment(
         SweepEvent le,
-        Vertex p,
+        Vertex64 p,
+        Vertex pDouble,
         StablePriorityQueue<SweepEvent, SweepEventComparer> eventQueue,
-        SweepEventComparer comparer)
+        SweepEventComparer comparer,
+        FixedPrecisionContext context)
     {
         if (le.OtherEvent == null)
         {
@@ -803,27 +1386,27 @@ public class PolygonClipper
         //     se_l is before r, and l is before re.
         //
         // Since the intersection point computation is bounded to the interval [se_l.x, re.x]
-        // it is impossible for r/l to fall outside the interval. This leaves the corner cases:
+        // it is impossible for r/l to fall outside the interval. This leaves the corner case:
         //
-        //  1. r.x == se_l.x and r.y < se_l.y: This corresponds to the case where the first
-        //     sub-segment becomes a perfectly vertical line. The problem is that vertical
-        //     segments always have to be processed from bottom to top consistency. The
-        //     theoretically correct event order would be r first (bottom), se_l later (top).
-        //     However, se_l is the event just being processed, so there is no (easy) way of
-        //     processing r before se_l. The easiest solution to the problem is to avoid it,
-        //     by incrementing inter.x by one ULP.
-        //  2. l.x == re.x and l.y > re.y: This corresponds to the case where the second
-        //     sub-segment becomes a perfectly vertical line, and because of the bottom-to-top
-        //     convention for vertical segment, the order of l and re must be swapped.
-        //     In this case swapping is not a problem, because both events are in the future.
+        //  l.x == re.x and l.y > re.y: This corresponds to the case where the second
+        //  sub-segment becomes a perfectly vertical line, and because of the bottom-to-top
+        //  convention for vertical segment, the order of l and re must be swapped.
+        //  In this case swapping is not a problem, because both events are in the future.
         //
         // See also: https://github.com/21re/rust-geo-booleanop/pull/11
 
-        // Prevent from corner case 1
-        if (p.X == le.Point.X && p.Y < le.Point.Y)
+        if (PolygonUtilities.UseFloatingScale)
         {
-            // The files are different in the two reference repositories but both fail.
-            p = new Vertex(p.X.NextAfter(double.PositiveInfinity), p.Y);
+            if (pDouble.X == le.PointDouble.X && pDouble.Y < le.PointDouble.Y)
+            {
+                pDouble = new Vertex(pDouble.X.NextAfter(double.PositiveInfinity), pDouble.Y);
+                p = context.Quantize(pDouble);
+            }
+        }
+        else if (p.X == le.Point.X && p.Y < le.Point.Y)
+        {
+            p = new Vertex64(p.X + 1, p.Y);
+            pDouble = new Vertex(p.X, p.Y);
         }
 
         // Create the right event for the left segment (new right endpoint)
@@ -831,6 +1414,9 @@ public class PolygonClipper
 
         // Create the left event for the right segment (new left endpoint)
         SweepEvent l = new(p, true, re, le.PolygonType);
+
+        r.PointDouble = pDouble;
+        l.PointDouble = pDouble;
 
         // Assign the same contour ID to maintain connectivity
         r.ContourId = l.ContourId = le.ContourId;
@@ -859,7 +1445,7 @@ public class PolygonClipper
     /// <param name="sortedEvents">The sorted list of sweep events.</param>
     /// <param name="comparer">The comparer used to sort the events.</param>
     /// <returns>The resulting <see cref="Polygon"/>.</returns>
-    private static Polygon ConnectEdges(List<SweepEvent> sortedEvents, SweepEventComparer comparer)
+    private static Polygon ConnectEdges(List<SweepEvent> sortedEvents, SweepEventComparer comparer, FixedPrecisionContext context)
     {
         // Copy the events in the result polygon to resultEvents list
         List<SweepEvent> resultEvents = new(sortedEvents.Count);
@@ -913,6 +1499,7 @@ public class PolygonClipper
 
         ReadOnlySpan<int> iterationMap = PrecomputeIterationOrder(resultEvents);
 
+        bool useFloating = PolygonUtilities.UseFloatingScale;
         Polygon result = [];
         Span<bool> processed = new bool[resultEvents.Count];
         for (int i = 0; i < resultEvents.Count; i++)
@@ -926,8 +1513,11 @@ public class PolygonClipper
             Contour contour = InitializeContourFromContext(resultEvents[i], result, contourId);
 
             int pos = i;
-            Vertex initial = resultEvents[i].Point;
-            contour.Add(initial);
+            Vertex64 initial = resultEvents[i].Point;
+            Vertex lastPointDouble = resultEvents[i].PointDouble;
+            Vertex initialDouble = lastPointDouble;
+            Vertex64 lastPoint = initial;
+            contour.Add(context.Dequantize(initial));
 
             // Main loop to process the contour
             do
@@ -937,14 +1527,21 @@ public class PolygonClipper
 
                 MarkProcessed(resultEvents[pos], processed, pos, contourId);
 
-                contour.Add(resultEvents[pos].Point);
+                lastPoint = resultEvents[pos].Point;
+                lastPointDouble = resultEvents[pos].PointDouble;
+                contour.Add(context.Dequantize(lastPoint));
                 pos = NextPos(pos, processed, iterationMap, out bool found);
                 if (!found)
                 {
                     break;
                 }
             }
-            while (resultEvents[pos].Point != initial);
+            while (useFloating ? resultEvents[pos].PointDouble != initialDouble : resultEvents[pos].Point != initial);
+
+            if (useFloating ? lastPointDouble != initialDouble : lastPoint != initial)
+            {
+                contour.Add(context.Dequantize(initial));
+            }
 
             result.Add(contour);
         }
@@ -974,15 +1571,18 @@ public class PolygonClipper
     private static ReadOnlySpan<int> PrecomputeIterationOrder(List<SweepEvent> data)
     {
         Span<int> map = new int[data.Count];
+        bool useFloating = PolygonUtilities.UseFloatingScale;
 
         int i = 0;
         while (i < data.Count)
         {
             SweepEvent xRef = data[i];
+            Vertex64 xPoint = xRef.Point;
+            Vertex xPointDouble = xRef.PointDouble;
 
             // Find index range of R events
             int rFrom = i;
-            while (i < data.Count && xRef.Point == data[i].Point && !data[i].Left)
+            while (i < data.Count && PointsEqual(xPoint, xPointDouble, data[i], useFloating) && !data[i].Left)
             {
                 i++;
             }
@@ -991,7 +1591,7 @@ public class PolygonClipper
 
             // Find index range of L events
             int lFrom = i;
-            while (i < data.Count && xRef.Point == data[i].Point)
+            while (i < data.Count && PointsEqual(xPoint, xPointDouble, data[i], useFloating))
             {
                 if (!data[i].Left)
                 {
@@ -1052,6 +1652,9 @@ public class PolygonClipper
         }
 
         return map;
+
+        static bool PointsEqual(in Vertex64 fixedPoint, in Vertex pointDouble, SweepEvent sweepEvent, bool useFloating)
+            => useFloating ? sweepEvent.PointDouble == pointDouble : sweepEvent.Point == fixedPoint;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -1159,4 +1762,6 @@ public class PolygonClipper
             }
         }
     }
+
+    private sealed record ContourInfoDouble(List<Vertex> Vertices, Vertex MinVertex, double Area);
 }

@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System;
 using System.Runtime.CompilerServices;
 
 namespace SixLabors.PolygonClipper;
@@ -17,17 +18,17 @@ internal sealed class ActiveEdge
     /// <summary>
     /// Gets or sets the lower endpoint of the edge in scanline order.
     /// </summary>
-    public Vertex Bottom { get; set; }
+    public Vertex64 Bottom { get; set; }
 
     /// <summary>
     /// Gets or sets the upper endpoint of the edge in scanline order.
     /// </summary>
-    public Vertex Top { get; set; }
+    public Vertex64 Top { get; set; }
 
     /// <summary>
     /// Gets or sets the X coordinate where the edge intersects the current scanline.
     /// </summary>
-    public double CurrentX { get; set; }
+    public long CurrentX { get; set; }
 
     /// <summary>
     /// Gets or sets the delta-X per delta-Y for the edge (its scanline slope).
@@ -102,7 +103,7 @@ internal sealed class ActiveEdge
     /// <summary>
     /// Gets a value indicating whether the edge is horizontal within tolerance.
     /// </summary>
-    public bool IsHorizontal => PolygonUtilities.IsAlmostZero(this.Top.Y - this.Bottom.Y);
+    public bool IsHorizontal => this.Top.Y == this.Bottom.Y;
 
     /// <summary>
     /// Gets a value indicating whether a horizontal edge is heading right.
@@ -153,19 +154,19 @@ internal sealed class ActiveEdge
     /// Calculates the X coordinate where this edge intersects the scanline at <paramref name="currentY" />.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public double TopX(double currentY)
+    public long TopX(long currentY)
     {
-        if (PolygonUtilities.IsAlmostZero(currentY - this.Top.Y) || PolygonUtilities.IsAlmostZero(this.Top.X - this.Bottom.X))
+        if (currentY == this.Top.Y || this.Top.X == this.Bottom.X)
         {
             return this.Top.X;
         }
 
-        if (PolygonUtilities.IsAlmostZero(currentY - this.Bottom.Y))
+        if (currentY == this.Bottom.Y)
         {
             return this.Bottom.X;
         }
 
-        return this.Bottom.X + (this.Dx * (currentY - this.Bottom.Y));
+        return this.Bottom.X + (long)Math.Round(this.Dx * (currentY - this.Bottom.Y), MidpointRounding.ToEven);
     }
 
     /// <summary>
@@ -177,7 +178,7 @@ internal sealed class ActiveEdge
     /// <summary>
     /// Computes delta-X per delta-Y, returning infinities for horizontal edges.
     /// </summary>
-    private static double GetDx(Vertex pt1, Vertex pt2)
+    private static double GetDx(Vertex64 pt1, Vertex64 pt2)
     {
         double dy = pt2.Y - pt1.Y;
         if (dy != 0)
