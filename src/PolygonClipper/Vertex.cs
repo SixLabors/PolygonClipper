@@ -237,9 +237,11 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <inheritdoc/>
     public override string ToString() => $"Vertex [ X={this.X}, Y={this.Y} ]";
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Vector128<double> AsVector128Unsafe(in Vertex value)
         => Unsafe.BitCast<Vertex, Vector128<double>>(value);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Vertex AsVertexUnsafe(Vector128<double> value)
         => Unsafe.BitCast<Vector128<double>, Vertex>(value);
 }

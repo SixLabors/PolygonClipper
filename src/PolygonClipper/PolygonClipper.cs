@@ -9,22 +9,20 @@ using System.Runtime.InteropServices;
 namespace SixLabors.PolygonClipper;
 
 /// <summary>
-/// Implements a robust algorithm for performing boolean operations on polygons.
+/// Performs boolean operations on polygons.
 /// </summary>
 /// <remarks>
 /// <para>
-/// This class implements the algorithm described in the paper
+/// This implementation follows the algorithm described in
 /// "A Simple Algorithm for Boolean Operations on Polygons" by Francisco Martínez,
-/// Carlos Ogayar, Juan R. Jiménez, and Antonio J. Rueda. The algorithm is designed
-/// to handle boolean operations such as intersection, union, difference, and XOR
-/// between two polygons efficiently and robustly.
+/// Carlos Ogayar, Juan R. Jiménez, and Antonio J. Rueda.
+/// It supports intersection, union, difference, and symmetric difference (XOR).
 /// </para>
 /// <para>
-/// The algorithm uses a sweep line approach combined with an event queue to process
-/// polygon segments, ensuring robust handling of special cases, including overlapping edges,
-/// trivial operations (e.g., non-overlapping polygons), and edge intersections.
+/// It uses a sweep-line with an event queue to process segment intersections and robustly
+/// handles special cases, including overlapping edges and trivial non-overlapping inputs.
 /// </para>
-/// <para>The main workflow is divided into the following stages:</para>
+/// <para>The high-level workflow has three stages:</para>
 /// <list type="number">
 /// <item><description>Preprocessing: Handles trivial operations and prepares segments for processing.</description></item>
 /// <item><description>Sweeping: Processes events using a priority queue, handling segment insertions and removals.</description></item>
@@ -40,9 +38,9 @@ public class PolygonClipper
     /// <summary>
     /// Initializes a new instance of the <see cref="PolygonClipper"/> class.
     /// </summary>
-    /// <param name="subject">The subject polygon.</param>
-    /// <param name="clip">The clipping polygon.</param>
-    /// <param name="operation">The operation type.</param>
+    /// <param name="subject">The polygon used as the left-hand operand.</param>
+    /// <param name="clip">The polygon used as the right-hand operand.</param>
+    /// <param name="operation">The boolean operation to execute.</param>
     public PolygonClipper(Polygon subject, Polygon clip, BooleanOperation operation)
     {
         this.subject = subject;
@@ -51,11 +49,11 @@ public class PolygonClipper
     }
 
     /// <summary>
-    /// Computes the intersection of two polygons. The resulting polygon contains the regions that are common to both input polygons.
+    /// Computes the intersection of two polygons.
     /// </summary>
-    /// <param name="subject">The subject polygon.</param>
-    /// <param name="clip">The clipping polygon.</param>
-    /// <returns>A new <see cref="Polygon"/> representing the intersection of the two polygons.</returns>
+    /// <param name="subject">The polygon used as the left-hand operand.</param>
+    /// <param name="clip">The polygon used as the right-hand operand.</param>
+    /// <returns>A polygon containing regions common to both inputs.</returns>
     public static Polygon Intersection(Polygon subject, Polygon clip)
     {
         PolygonClipper clipper = new(subject, clip, BooleanOperation.Intersection);
@@ -63,11 +61,11 @@ public class PolygonClipper
     }
 
     /// <summary>
-    /// Computes the union of two polygons. The resulting polygon contains the combined regions of the two input polygons.
+    /// Computes the union of two polygons.
     /// </summary>
-    /// <param name="subject">The subject polygon.</param>
-    /// <param name="clip">The clipping polygon.</param>
-    /// <returns>A new <see cref="Polygon"/> representing the union of the two polygons.</returns>
+    /// <param name="subject">The polygon used as the left-hand operand.</param>
+    /// <param name="clip">The polygon used as the right-hand operand.</param>
+    /// <returns>A polygon containing regions from either input.</returns>
     public static Polygon Union(Polygon subject, Polygon clip)
     {
         PolygonClipper clipper = new(subject, clip, BooleanOperation.Union);
@@ -75,12 +73,11 @@ public class PolygonClipper
     }
 
     /// <summary>
-    /// Computes the difference of two polygons. The resulting polygon contains the regions of the subject polygon
-    /// that are not shared with the clipping polygon.
+    /// Computes the difference of two polygons (<paramref name="subject"/> minus <paramref name="clip"/>).
     /// </summary>
-    /// <param name="subject">The subject polygon.</param>
-    /// <param name="clip">The clipping polygon.</param>
-    /// <returns>A new <see cref="Polygon"/> representing the difference between the two polygons.</returns>
+    /// <param name="subject">The polygon used as the left-hand operand.</param>
+    /// <param name="clip">The polygon used as the right-hand operand.</param>
+    /// <returns>A polygon containing regions from <paramref name="subject"/> not covered by <paramref name="clip"/>.</returns>
     public static Polygon Difference(Polygon subject, Polygon clip)
     {
         PolygonClipper clipper = new(subject, clip, BooleanOperation.Difference);
@@ -88,12 +85,11 @@ public class PolygonClipper
     }
 
     /// <summary>
-    /// Computes the symmetric difference (XOR) of two polygons. The resulting polygon contains the regions that belong
-    /// to either one of the input polygons but not to their intersection.
+    /// Computes the symmetric difference (XOR) of two polygons.
     /// </summary>
-    /// <param name="subject">The subject polygon.</param>
-    /// <param name="clip">The clipping polygon.</param>
-    /// <returns>A new <see cref="Polygon"/> representing the symmetric difference of the two polygons.</returns>
+    /// <param name="subject">The polygon used as the left-hand operand.</param>
+    /// <param name="clip">The polygon used as the right-hand operand.</param>
+    /// <returns>A polygon containing regions that belong to exactly one input.</returns>
     public static Polygon Xor(Polygon subject, Polygon clip)
     {
         PolygonClipper clipper = new(subject, clip, BooleanOperation.Xor);
@@ -105,18 +101,17 @@ public class PolygonClipper
     /// </summary>
     /// <param name="polygon">The polygon to process.</param>
     /// <param name="fillRule">
-    /// Optional fill rule to determine which regions are considered filled.
-    /// When <see langword="null"/>, contour orientation is normalized and effective positive/negative fill
-    /// is inferred from the outer winding.
+    /// Optional fill rule that determines which regions are considered filled after splitting intersections.
+    /// When <see langword="null"/>, the effective positive/negative winding rule is inferred from contour orientation.
     /// </param>
-    /// <returns>A new <see cref="Polygon"/> without self-intersections.</returns>
+    /// <returns>A new polygon with self-intersections resolved.</returns>
     public static Polygon RemoveSelfIntersections(Polygon polygon, FillRule? fillRule = null)
         => SelfIntersectionRemover.Process(polygon, fillRule);
 
     /// <summary>
-    /// Executes the boolean operation using the sweep line algorithm.
+    /// Executes the configured boolean operation for the current subject and clipping polygons.
     /// </summary>
-    /// <returns>The resulting <see cref="Polygon"/>.</returns>
+    /// <returns>The operation result.</returns>
     public Polygon Run()
     {
         // Compute bounding boxes for optimization steps 1 and 2
