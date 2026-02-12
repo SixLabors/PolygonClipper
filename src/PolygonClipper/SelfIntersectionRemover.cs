@@ -159,7 +159,7 @@ internal static class SelfIntersectionRemover
         return lowest;
     }
 
-    private static int GetDepth(int index, int[] parentIndices)
+    private static int GetDepth(int index, ReadOnlySpan<int> parentIndices)
     {
         int depth = 0;
         int current = parentIndices[index];
@@ -191,14 +191,22 @@ internal static class SelfIntersectionRemover
 
     private static double GetSignedArea(List<Vertex64> contour)
     {
-        Int128 area = 0;
-        for (int i = 0; i < contour.Count; i++)
+        int count = contour.Count;
+        if (count == 0)
         {
-            Vertex64 current = contour[i];
-            Vertex64 next = contour[(i + 1) % contour.Count];
-            area += Vertex64.Cross(current, next);
+            return 0D;
         }
 
+        Int128 area = 0;
+        Vertex64 current = contour[0];
+        for (int i = 1; i < count; i++)
+        {
+            Vertex64 next = contour[i];
+            area += Vertex64.Cross(current, next);
+            current = next;
+        }
+
+        area += Vertex64.Cross(current, contour[0]);
         return (double)area * 0.5D;
     }
 
@@ -399,10 +407,15 @@ internal static class SelfIntersectionRemover
             return null;
         }
 
-        int[] parentIndices = new int[count];
-        Array.Fill(parentIndices, -1);
+        using Buffer<int> parentIndicesBuffer = new(count);
+        Span<int> parentIndices = parentIndicesBuffer.GetSpan();
+        parentIndices.Fill(-1);
+
+        using Buffer<double> signedAreasBuffer = new(count);
+        Span<double> signedAreas = signedAreasBuffer.GetSpan();
 
         bool hasHierarchy = false;
+        bool hasSignedAreas = false;
         for (int i = 0; i < count; i++)
         {
             Contour contour = source[sourceIndices[i]];
@@ -417,8 +430,11 @@ internal static class SelfIntersectionRemover
 
         if (hasHierarchy)
         {
-            int[] sourceToSubject = new int[source.Count];
-            Array.Fill(sourceToSubject, -1);
+            int sourceCount = source.Count;
+            using Buffer<int> sourceToSubjectBuffer = new(sourceCount);
+            Span<int> sourceToSubject = sourceToSubjectBuffer.GetSpan();
+            sourceToSubject.Fill(-1);
+
             for (int i = 0; i < sourceIndices.Count; i++)
             {
                 sourceToSubject[sourceIndices[i]] = i;
@@ -428,20 +444,25 @@ internal static class SelfIntersectionRemover
             {
                 int sourceIndex = sourceIndices[i];
                 int parentIndex = source[sourceIndex].ParentIndex ?? -1;
-                parentIndices[i] = parentIndex >= 0 && parentIndex < sourceToSubject.Length
+                parentIndices[i] = parentIndex >= 0 && parentIndex < sourceCount
                     ? sourceToSubject[parentIndex]
                     : -1;
             }
         }
         else
         {
-            Box64[] bounds = new Box64[count];
-            double[] absAreas = new double[count];
+            using Buffer<Box64> boundsBuffer = new(count);
+            Span<Box64> bounds = boundsBuffer.GetSpan();
+            using Buffer<double> absAreasBuffer = new(count);
+            Span<double> absAreas = absAreasBuffer.GetSpan();
+
             for (int i = 0; i < count; i++)
             {
                 List<Vertex64> contour = subject[i];
                 bounds[i] = FixedPolygonUtilities.GetBounds(contour);
-                absAreas[i] = Math.Abs(GetSignedArea(contour));
+                double signedArea = GetSignedArea(contour);
+                signedAreas[i] = signedArea;
+                absAreas[i] = Math.Abs(signedArea);
 
                 if (HasSelfIntersection(contour))
                 {
@@ -461,6 +482,8 @@ internal static class SelfIntersectionRemover
                     }
                 }
             }
+
+            hasSignedAreas = true;
 
             for (int i = 0; i < count; i++)
             {
@@ -508,7 +531,8 @@ internal static class SelfIntersectionRemover
 
             int depth = GetDepth(i, parentIndices);
             bool shouldBeCounterClockwise = (depth & 1) == 0;
-            bool isCounterClockwise = GetSignedArea(contour) >= 0D;
+            double signedArea = hasSignedAreas ? signedAreas[i] : GetSignedArea(contour);
+            bool isCounterClockwise = signedArea >= 0D;
             if (isCounterClockwise != shouldBeCounterClockwise)
             {
                 reverseFlags[i] = true;
