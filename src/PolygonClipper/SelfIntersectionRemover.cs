@@ -51,9 +51,8 @@ internal static class SelfIntersectionRemover
             return [];
         }
 
-        FixedPrecisionContext context = FixedPrecisionContext.Create(options, [polygon]);
         bool hasExplicitFillRule = options?.FillRuleOverride is FillRule;
-        List<List<Vertex64>> subject = BuildSubjectPaths(polygon, context, !hasExplicitFillRule);
+        List<List<Vertex>> subject = BuildSubjectPaths(polygon, !hasExplicitFillRule);
         FillRule effectiveFillRule = options?.FillRuleOverride ?? FillRule.Positive;
         bool reverseSolution = false;
 
@@ -66,7 +65,7 @@ internal static class SelfIntersectionRemover
             effectiveFillRule = reverseSolution ? FillRule.Negative : FillRule.Positive;
         }
 
-        return UnionWithClipper(subject, effectiveFillRule, context, polygon.Count, reverseSolution);
+        return UnionWithClipper(subject, effectiveFillRule, polygon.Count, reverseSolution);
     }
 
     /// <summary>
@@ -74,21 +73,20 @@ internal static class SelfIntersectionRemover
     /// </summary>
     /// <param name="subject">The quantized subject contours to union.</param>
     /// <param name="fillRule">The fill rule used to resolve inside/outside.</param>
-    /// <param name="context">The fixed-precision context.</param>
     /// <param name="resultCapacity">The initial contour capacity for the output polygon.</param>
     /// <param name="reverseSolution">Whether output contour orientation should be reversed.</param>
     /// <returns>A polygon containing the unioned contours.</returns>
     private static Polygon UnionWithClipper(
-        List<List<Vertex64>> subject,
+        List<List<Vertex>> subject,
         FillRule fillRule,
-        FixedPrecisionContext context,
         int resultCapacity,
         bool reverseSolution)
     {
-        OutputBuilder builder = new();
-        builder.SetContext(context);
-        builder.PreserveCollinear = false;
-        builder.ReverseSolution = reverseSolution;
+        OutputBuilder builder = new()
+        {
+            PreserveCollinear = false,
+            ReverseSolution = reverseSolution
+        };
         builder.AddSubject(subject);
 
         Polygon result = new(resultCapacity);
@@ -102,7 +100,7 @@ internal static class SelfIntersectionRemover
     /// <param name="paths">The paths to examine.</param>
     /// <param name="lowestPathIdx">The index of the path containing the lowest point.</param>
     /// <param name="isNegativeArea">True when the lowest path has negative area.</param>
-    private static void GetLowestPathInfo(List<List<Vertex64>> paths, out int lowestPathIdx, out bool isNegativeArea)
+    private static void GetLowestPathInfo(List<List<Vertex>> paths, out int lowestPathIdx, out bool isNegativeArea)
     {
         lowestPathIdx = -1;
         isNegativeArea = false;
@@ -112,17 +110,17 @@ internal static class SelfIntersectionRemover
             return;
         }
 
-        Vertex64 lowestPoint = default;
+        Vertex lowestPoint = default;
         bool hasPoint = false;
         for (int i = 0; i < paths.Count; i++)
         {
-            List<Vertex64> path = paths[i];
+            List<Vertex> path = paths[i];
             if (path.Count == 0)
             {
                 continue;
             }
 
-            Vertex64 candidate = GetLowestPoint(path);
+            Vertex candidate = GetLowestPoint(path);
             if (!hasPoint || candidate.Y > lowestPoint.Y || (candidate.Y == lowestPoint.Y && candidate.X < lowestPoint.X))
             {
                 lowestPoint = candidate;
@@ -137,7 +135,7 @@ internal static class SelfIntersectionRemover
         }
     }
 
-    private static Vertex64 GetLowestPoint(List<Vertex64> path)
+    private static Vertex GetLowestPoint(List<Vertex> path)
     {
         int count = path.Count;
         int lastIndex = count - 1;
@@ -146,10 +144,10 @@ internal static class SelfIntersectionRemover
             lastIndex = count - 2;
         }
 
-        Vertex64 lowest = path[0];
+        Vertex lowest = path[0];
         for (int i = 1; i <= lastIndex; i++)
         {
-            Vertex64 candidate = path[i];
+            Vertex candidate = path[i];
             if (candidate.Y > lowest.Y || (candidate.Y == lowest.Y && candidate.X < lowest.X))
             {
                 lowest = candidate;
@@ -173,14 +171,14 @@ internal static class SelfIntersectionRemover
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static Vertex64 GetContourTestPoint(List<Vertex64> contour)
+    private static Vertex GetContourTestPoint(List<Vertex> contour)
     {
         if (contour.Count == 0)
         {
             return default;
         }
 
-        Vertex64 first = contour[0];
+        Vertex first = contour[0];
         if (contour.Count > 1 && first == contour[^1])
         {
             return contour[1];
@@ -189,7 +187,7 @@ internal static class SelfIntersectionRemover
         return first;
     }
 
-    private static double GetSignedArea(List<Vertex64> contour)
+    private static double GetSignedArea(List<Vertex> contour)
     {
         int count = contour.Count;
         if (count == 0)
@@ -197,20 +195,20 @@ internal static class SelfIntersectionRemover
             return 0D;
         }
 
-        Int128 area = 0;
-        Vertex64 current = contour[0];
+        double area = 0;
+        Vertex current = contour[0];
         for (int i = 1; i < count; i++)
         {
-            Vertex64 next = contour[i];
-            area += Vertex64.Cross(current, next);
+            Vertex next = contour[i];
+            area += Vertex.Cross(current, next);
             current = next;
         }
 
-        area += Vertex64.Cross(current, contour[0]);
-        return (double)area * 0.5D;
+        area += Vertex.Cross(current, contour[0]);
+        return area * 0.5D;
     }
 
-    private static bool HasSelfIntersection(List<Vertex64> contour)
+    private static bool HasSelfIntersection(List<Vertex> contour)
     {
         int vertexCount = contour.Count - 1;
         if (vertexCount < 4)
@@ -220,8 +218,8 @@ internal static class SelfIntersectionRemover
 
         for (int i = 0; i < vertexCount; i++)
         {
-            Vertex64 segA1 = contour[i];
-            Vertex64 segA2 = contour[i + 1];
+            Vertex segA1 = contour[i];
+            Vertex segA2 = contour[i + 1];
             if (segA1 == segA2)
             {
                 continue;
@@ -234,16 +232,16 @@ internal static class SelfIntersectionRemover
                     continue;
                 }
 
-                Vertex64 segB1 = contour[j];
-                Vertex64 segB2 = contour[j + 1];
+                Vertex segB1 = contour[j];
+                Vertex segB2 = contour[j + 1];
                 if (segB1 == segB2)
                 {
                     continue;
                 }
 
-                if (FixedPolygonUtilities.SegmentsIntersect(segA1, segA2, segB1, segB2, true) ||
-                    (FixedPolygonUtilities.IsCollinear(segA1, segA2, segB1) &&
-                     FixedPolygonUtilities.IsCollinear(segA1, segA2, segB2) &&
+                if (PolygonUtilities.SegmentsIntersect(segA1, segA2, segB1, segB2, true) ||
+                    (PolygonUtilities.IsCollinear(segA1, segA2, segB1) &&
+                     PolygonUtilities.IsCollinear(segA1, segA2, segB2) &&
                      SegmentsOverlap(segA1, segA2, segB1, segB2)))
                 {
                     return true;
@@ -255,10 +253,10 @@ internal static class SelfIntersectionRemover
     }
 
     private static bool ContoursIntersect(
-        List<Vertex64> left,
-        List<Vertex64> right,
-        in Box64 leftBounds,
-        in Box64 rightBounds)
+        List<Vertex> left,
+        List<Vertex> right,
+        in Box2 leftBounds,
+        in Box2 rightBounds)
     {
         if (!leftBounds.Intersects(rightBounds))
         {
@@ -269,8 +267,8 @@ internal static class SelfIntersectionRemover
         int rightCount = right.Count - 1;
         for (int i = 0; i < leftCount; i++)
         {
-            Vertex64 leftSeg1 = left[i];
-            Vertex64 leftSeg2 = left[i + 1];
+            Vertex leftSeg1 = left[i];
+            Vertex leftSeg2 = left[i + 1];
             if (leftSeg1 == leftSeg2)
             {
                 continue;
@@ -278,16 +276,16 @@ internal static class SelfIntersectionRemover
 
             for (int j = 0; j < rightCount; j++)
             {
-                Vertex64 rightSeg1 = right[j];
-                Vertex64 rightSeg2 = right[j + 1];
+                Vertex rightSeg1 = right[j];
+                Vertex rightSeg2 = right[j + 1];
                 if (rightSeg1 == rightSeg2)
                 {
                     continue;
                 }
 
-                if (FixedPolygonUtilities.SegmentsIntersect(leftSeg1, leftSeg2, rightSeg1, rightSeg2, true) ||
-                    (FixedPolygonUtilities.IsCollinear(leftSeg1, leftSeg2, rightSeg1) &&
-                     FixedPolygonUtilities.IsCollinear(leftSeg1, leftSeg2, rightSeg2) &&
+                if (PolygonUtilities.SegmentsIntersect(leftSeg1, leftSeg2, rightSeg1, rightSeg2, true) ||
+                    (PolygonUtilities.IsCollinear(leftSeg1, leftSeg2, rightSeg1) &&
+                     PolygonUtilities.IsCollinear(leftSeg1, leftSeg2, rightSeg2) &&
                      SegmentsOverlap(leftSeg1, leftSeg2, rightSeg1, rightSeg2)))
                 {
                     return true;
@@ -299,16 +297,17 @@ internal static class SelfIntersectionRemover
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool SegmentsOverlap(in Vertex64 a1, in Vertex64 a2, in Vertex64 b1, in Vertex64 b2)
+    private static bool SegmentsOverlap(in Vertex a1, in Vertex a2, in Vertex b1, in Vertex b2)
     {
-        long minAx = Math.Min(a1.X, a2.X);
-        long maxAx = Math.Max(a1.X, a2.X);
-        long minAy = Math.Min(a1.Y, a2.Y);
-        long maxAy = Math.Max(a1.Y, a2.Y);
-        long minBx = Math.Min(b1.X, b2.X);
-        long maxBx = Math.Max(b1.X, b2.X);
-        long minBy = Math.Min(b1.Y, b2.Y);
-        long maxBy = Math.Max(b1.Y, b2.Y);
+        // TODO: Vector Min/Max may be the most efficient way to do this.
+        double minAx = Math.Min(a1.X, a2.X);
+        double maxAx = Math.Max(a1.X, a2.X);
+        double minAy = Math.Min(a1.Y, a2.Y);
+        double maxAy = Math.Max(a1.Y, a2.Y);
+        double minBx = Math.Min(b1.X, b2.X);
+        double maxBx = Math.Max(b1.X, b2.X);
+        double minBy = Math.Min(b1.Y, b2.Y);
+        double maxBy = Math.Max(b1.Y, b2.Y);
 
         return maxAx >= minBx && maxBx >= minAx && maxAy >= minBy && maxBy >= minAy;
     }
@@ -317,17 +316,13 @@ internal static class SelfIntersectionRemover
     /// Builds subject paths from a polygon.
     /// </summary>
     /// <param name="polygon">The polygon to convert.</param>
-    /// <param name="context">The fixed-precision context.</param>
     /// <param name="normalizeForPositiveFill">
     /// Whether to normalize contour orientation for positive fill semantics.
     /// </param>
     /// <returns>A list of fixed-precision vertex paths ready for clipping.</returns>
-    private static List<List<Vertex64>> BuildSubjectPaths(
-        Polygon polygon,
-        FixedPrecisionContext context,
-        bool normalizeForPositiveFill)
+    private static List<List<Vertex>> BuildSubjectPaths(Polygon polygon, bool normalizeForPositiveFill)
     {
-        List<List<Vertex64>> subject = new(polygon.Count);
+        List<List<Vertex>> subject = new(polygon.Count);
         List<int> sourceIndices = normalizeForPositiveFill ? new List<int>(polygon.Count) : [];
         for (int i = 0; i < polygon.Count; i++)
         {
@@ -339,9 +334,9 @@ internal static class SelfIntersectionRemover
 
             bool isClosed = contour.Count > 1 && contour[0] == contour[^1];
             int capacity = contour.Count + (isClosed ? 0 : 1);
-            List<Vertex64> path = new(capacity);
+            List<Vertex> path = new(capacity);
 
-            CopyContourVertices(contour, isClosed, path, context);
+            CopyContourVertices(contour, isClosed, path);
             subject.Add(path);
 
             if (normalizeForPositiveFill)
@@ -358,16 +353,11 @@ internal static class SelfIntersectionRemover
         return subject;
     }
 
-    private static void CopyContourVertices(
-        Contour source,
-        bool isClosed,
-        List<Vertex64> destination,
-        FixedPrecisionContext context)
+    private static void CopyContourVertices(Contour source, bool isClosed, List<Vertex> destination)
     {
         for (int i = 0; i < source.Count; i++)
         {
-            Vertex vertex = source[i];
-            destination.Add(context.Quantize(vertex));
+            destination.Add(source[i]);
         }
 
         if (!isClosed && destination.Count > 1 && destination[^1] != destination[0])
@@ -378,7 +368,7 @@ internal static class SelfIntersectionRemover
 
     private static void ApplyPositiveFillOrientation(
         Polygon source,
-        List<List<Vertex64>> subject,
+        List<List<Vertex>> subject,
         List<int> sourceIndices)
     {
         bool[]? reverseFlags = BuildPositiveFillReversalFlags(source, subject, sourceIndices);
@@ -398,7 +388,7 @@ internal static class SelfIntersectionRemover
 
     private static bool[]? BuildPositiveFillReversalFlags(
         Polygon source,
-        List<List<Vertex64>> subject,
+        List<List<Vertex>> subject,
         List<int> sourceIndices)
     {
         int count = subject.Count;
@@ -451,15 +441,15 @@ internal static class SelfIntersectionRemover
         }
         else
         {
-            using Buffer<Box64> boundsBuffer = new(count);
-            Span<Box64> bounds = boundsBuffer.GetSpan();
+            using Buffer<Box2> boundsBuffer = new(count);
+            Span<Box2> bounds = boundsBuffer.GetSpan();
             using Buffer<double> absAreasBuffer = new(count);
             Span<double> absAreas = absAreasBuffer.GetSpan();
 
             for (int i = 0; i < count; i++)
             {
-                List<Vertex64> contour = subject[i];
-                bounds[i] = FixedPolygonUtilities.GetBounds(contour);
+                List<Vertex> contour = subject[i];
+                bounds[i] = PolygonUtilities.GetBounds(contour);
                 double signedArea = GetSignedArea(contour);
                 signedAreas[i] = signedArea;
                 absAreas[i] = Math.Abs(signedArea);
@@ -487,13 +477,13 @@ internal static class SelfIntersectionRemover
 
             for (int i = 0; i < count; i++)
             {
-                List<Vertex64> contour = subject[i];
+                List<Vertex> contour = subject[i];
                 if (contour.Count == 0)
                 {
                     continue;
                 }
 
-                Vertex64 testPoint = GetContourTestPoint(contour);
+                Vertex testPoint = GetContourTestPoint(contour);
                 double smallestArea = double.PositiveInfinity;
                 int parentIndex = -1;
                 for (int j = 0; j < count; j++)
@@ -503,7 +493,7 @@ internal static class SelfIntersectionRemover
                         continue;
                     }
 
-                    if (FixedPolygonUtilities.PointInPolygon(testPoint, subject[j]) != PointInPolygonResult.Inside)
+                    if (PolygonUtilities.PointInPolygon(testPoint, subject[j]) != PointInPolygonResult.Inside)
                     {
                         continue;
                     }
@@ -523,7 +513,7 @@ internal static class SelfIntersectionRemover
         bool needsReversal = false;
         for (int i = 0; i < count; i++)
         {
-            List<Vertex64> contour = subject[i];
+            List<Vertex> contour = subject[i];
             if (contour.Count == 0)
             {
                 continue;
@@ -547,7 +537,6 @@ internal static class SelfIntersectionRemover
     {
         private readonly SelfIntersectionSweepLine sweepLine;
         private bool buildHierarchy;
-        private FixedPrecisionContext context;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="OutputBuilder"/> class.
@@ -574,16 +563,10 @@ internal static class SelfIntersectionRemover
         public void Clear() => this.sweepLine.Clear();
 
         /// <summary>
-        /// Sets the fixed-precision context used to dequantize output vertices.
-        /// </summary>
-        /// <param name="context">The fixed-precision context.</param>
-        public void SetContext(FixedPrecisionContext context) => this.context = context;
-
-        /// <summary>
         /// Adds subject contours to the sweep-line clipper.
         /// </summary>
         /// <param name="paths">The subject contours to add.</param>
-        public void AddSubject(List<List<Vertex64>> paths) => this.sweepLine.AddSubject(paths);
+        public void AddSubject(List<List<Vertex>> paths) => this.sweepLine.AddSubject(paths);
 
         /// <summary>
         /// Determines whether two points are within a tight tolerance.
@@ -592,9 +575,9 @@ internal static class SelfIntersectionRemover
         /// <param name="secondPoint">The second point.</param>
         /// <returns><see langword="true"/> if the points are nearly coincident.</returns>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static bool ArePointsVeryClose(in Vertex64 firstPoint, in Vertex64 secondPoint)
+        private static bool ArePointsVeryClose(in Vertex firstPoint, in Vertex secondPoint)
         {
-            Vertex64 delta = Vertex64.Abs(firstPoint - secondPoint);
+            Vertex delta = Vertex.Abs(firstPoint - secondPoint);
             return delta.X < 2 && delta.Y < 2;
         }
 
@@ -699,9 +682,9 @@ internal static class SelfIntersectionRemover
             while (true)
             {
                 // When preserving collinear, only remove 180-degree spikes.
-                if (FixedPolygonUtilities.IsCollinear(outputPoint2!.Prev.Point, outputPoint2.Point, outputPoint2.Next!.Point) &&
+                if (PolygonUtilities.IsCollinear(outputPoint2!.Prev.Point, outputPoint2.Point, outputPoint2.Next!.Point) &&
                     (outputPoint2.Point == outputPoint2.Prev.Point || outputPoint2.Point == outputPoint2.Next.Point || !this.PreserveCollinear ||
-                    (FixedPolygonUtilities.Dot(outputPoint2.Prev.Point, outputPoint2.Point, outputPoint2.Next.Point) < 0)))
+                    (PolygonUtilities.Dot(outputPoint2.Prev.Point, outputPoint2.Point, outputPoint2.Next.Point) < 0)))
                 {
                     if (outputPoint2 == outputRecord.Points)
                     {
@@ -742,8 +725,8 @@ internal static class SelfIntersectionRemover
             OutputPoint nextNextOp = splitOp.Next!.Next!;
             outputRecord.Points = prevOp;
 
-            FixedPolygonUtilities.TryGetLineIntersection(
-                prevOp.Point, splitOp.Point, splitOp.Next.Point, nextNextOp.Point, out Vertex64 intersectionPoint);
+            PolygonUtilities.TryGetLineIntersection(
+                prevOp.Point, splitOp.Point, splitOp.Next.Point, nextNextOp.Point, out Vertex intersectionPoint);
 
             double area1 = SelfIntersectionSweepLine.ComputeSignedArea(prevOp);
             double absArea1 = Math.Abs(area1);
@@ -814,10 +797,10 @@ internal static class SelfIntersectionRemover
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static double AreaTriangle(in Vertex64 pt1, in Vertex64 pt2, in Vertex64 pt3)
-            => ((double)(pt3.Y + pt1.Y) * (pt3.X - pt1.X)) +
-               ((double)(pt1.Y + pt2.Y) * (pt1.X - pt2.X)) +
-               ((double)(pt2.Y + pt3.Y) * (pt2.X - pt3.X));
+        private static double AreaTriangle(in Vertex pt1, in Vertex pt2, in Vertex pt3)
+            => ((pt3.Y + pt1.Y) * (pt3.X - pt1.X)) +
+               ((pt1.Y + pt2.Y) * (pt1.X - pt2.X)) +
+               ((pt2.Y + pt3.Y) * (pt2.X - pt3.X));
 
         /// <summary>
         /// Resolves self-intersections within an output record.
@@ -834,13 +817,13 @@ internal static class SelfIntersectionRemover
 
             while (true)
             {
-                if (FixedPolygonUtilities.SegmentsIntersect(
+                if (PolygonUtilities.SegmentsIntersect(
                     outputPoint2!.Prev.Point,
                     outputPoint2.Point,
                     outputPoint2.Next!.Point,
                     outputPoint2.Next.Next!.Point))
                 {
-                    if (FixedPolygonUtilities.SegmentsIntersect(
+                    if (PolygonUtilities.SegmentsIntersect(
                         outputPoint2.Prev.Point,
                         outputPoint2.Point,
                         outputPoint2.Next.Next!.Point,
@@ -891,7 +874,7 @@ internal static class SelfIntersectionRemover
         /// <param name="reverse">Whether to reverse point order.</param>
         /// <param name="path">The destination contour.</param>
         /// <returns><see langword="true"/> if a valid path was built.</returns>
-        private static bool BuildPath(OutputPoint? outputPoint, bool reverse, List<Vertex64> path)
+        private static bool BuildPath(OutputPoint? outputPoint, bool reverse, List<Vertex> path)
         {
             if (outputPoint == null || outputPoint.Next == outputPoint || outputPoint.Next == outputPoint.Prev)
             {
@@ -900,7 +883,7 @@ internal static class SelfIntersectionRemover
 
             path.Clear();
 
-            Vertex64 lastPoint;
+            Vertex lastPoint;
             OutputPoint currentPoint;
             if (reverse)
             {
@@ -937,7 +920,7 @@ internal static class SelfIntersectionRemover
         /// <param name="reverse">Whether to reverse point order.</param>
         /// <param name="contour">The destination contour.</param>
         /// <returns><see langword="true"/> if a valid contour was built.</returns>
-        private bool BuildContour(OutputPoint? outputPoint, bool reverse, Contour contour)
+        private static bool BuildContour(OutputPoint? outputPoint, bool reverse, Contour contour)
         {
             if (outputPoint == null || outputPoint.Next == outputPoint || outputPoint.Next == outputPoint.Prev)
             {
@@ -946,7 +929,7 @@ internal static class SelfIntersectionRemover
 
             contour.Clear();
 
-            Vertex64 lastPoint;
+            Vertex lastPoint;
             OutputPoint currentPoint;
             if (reverse)
             {
@@ -960,15 +943,15 @@ internal static class SelfIntersectionRemover
                 currentPoint = outputPoint.Next!;
             }
 
-            contour.Add(this.context.Dequantize(lastPoint));
+            contour.Add(lastPoint);
 
             while (currentPoint != outputPoint)
             {
-                Vertex64 current = currentPoint.Point;
+                Vertex current = currentPoint.Point;
                 if (current != lastPoint)
                 {
                     lastPoint = current;
-                    contour.Add(this.context.Dequantize(lastPoint));
+                    contour.Add(lastPoint);
                 }
 
                 currentPoint = reverse ? currentPoint.Prev : currentPoint.Next!;
@@ -1011,7 +994,7 @@ internal static class SelfIntersectionRemover
                     : 0;
                 Contour contour = estimatedCapacity > 0 ? new Contour(estimatedCapacity) : [];
                 this.CleanCollinearEdges(outputRecord);
-                if (this.BuildContour(outputRecord.Points, this.ReverseSolution, contour))
+                if (BuildContour(outputRecord.Points, this.ReverseSolution, contour))
                 {
                     solution.Add(contour);
                 }
@@ -1052,7 +1035,7 @@ internal static class SelfIntersectionRemover
                 return false;
             }
 
-            outputRecord.Bounds = FixedPolygonUtilities.GetBounds(outputRecord.Path);
+            outputRecord.Bounds = PolygonUtilities.GetBounds(outputRecord.Path);
             return true;
         }
 
@@ -1180,7 +1163,7 @@ internal static class SelfIntersectionRemover
                     ? outputRecord.OutputPointCount + 1
                     : 0;
                 Contour contour = estimatedCapacity > 0 ? new Contour(estimatedCapacity) : [];
-                if (!this.BuildContour(outputRecord.Points, this.ReverseSolution, contour))
+                if (!BuildContour(outputRecord.Points, this.ReverseSolution, contour))
                 {
                     continue;
                 }

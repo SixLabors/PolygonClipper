@@ -2,7 +2,6 @@
 // Licensed under the Six Labors Split License.
 
 using System.Collections;
-using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 
@@ -17,7 +16,7 @@ internal sealed class VertexPoolList : PooledList<SweepVertex>
     /// Adds or reuses a clip vertex initialized with the given data.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public SweepVertex Add(Vertex64 point, VertexFlags flags, SweepVertex? prev)
+    public SweepVertex Add(Vertex point, VertexFlags flags, SweepVertex? prev)
     {
         this.TryGrow();
         SweepVertex poolVertex = this.Items[this.Size];
@@ -49,7 +48,7 @@ internal sealed class OutputPointPoolList : PooledList<OutputPoint>
     /// Adds or reuses an output point and increments the owning record count.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public OutputPoint Add(Vertex64 pt, OutputRecord outputRecord)
+    public OutputPoint Add(Vertex pt, OutputRecord outputRecord)
     {
         this.TryGrow();
         OutputPoint pooledPoint = this.Items[this.Size];
@@ -78,7 +77,7 @@ internal sealed class OutputPointPoolList : PooledList<OutputPoint>
 /// </summary>
 internal sealed class OutputRecordPoolList : PooledList<OutputRecord>
 {
-    private static readonly List<Vertex64> Tombstone = [];
+    private static readonly List<Vertex> Tombstone = [];
 
     /// <summary>
     /// Adds or reuses an output record with cleared state.

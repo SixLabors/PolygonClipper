@@ -222,7 +222,7 @@ internal sealed class ActiveEdgeList
     /// <param name="topY">The scanline top Y coordinate.</param>
     /// <returns>The head of the sorted list.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public ActiveEdge? CopyToSorted(long topY)
+    public ActiveEdge? CopyToSorted(double topY)
     {
         ActiveEdge? edge = this.Head;
         ActiveEdge? sortedHead = edge;
@@ -247,7 +247,7 @@ internal sealed class ActiveEdgeList
     /// </summary>
     /// <param name="resident">The current resident edge.</param>
     /// <param name="newcomer">The incoming edge to compare.</param>
-    /// <returns><see langword="true"/> if the newcomer belongs after the resident.</returns>
+    /// <returns><see langword="true"/> if the newcomer bedoubles after the resident.</returns>
     public static bool IsValidActiveEdgeOrder(ActiveEdge resident, ActiveEdge newcomer)
     {
         if (newcomer.CurrentX != resident.CurrentX)
@@ -256,7 +256,7 @@ internal sealed class ActiveEdgeList
         }
 
         // Compare turning direction: resident.Top -> newcomer.Bottom -> newcomer.Top.
-        int d = FixedPolygonUtilities.CrossSign(resident.Top, newcomer.Bottom, newcomer.Top);
+        int d = PolygonUtilities.CrossSign(resident.Top, newcomer.Bottom, newcomer.Top);
         if (d != 0)
         {
             return d < 0;
@@ -265,7 +265,7 @@ internal sealed class ActiveEdgeList
         // For collinear bounds, use the next turn to order them.
         if (!resident.IsMaxima && (resident.Top.Y > newcomer.Top.Y))
         {
-            return FixedPolygonUtilities.CrossSign(
+            return PolygonUtilities.CrossSign(
                 newcomer.Bottom,
                 resident.Top,
                 resident.NextVertex.Point) <= 0;
@@ -273,13 +273,13 @@ internal sealed class ActiveEdgeList
 
         if (!newcomer.IsMaxima && (newcomer.Top.Y > resident.Top.Y))
         {
-            return FixedPolygonUtilities.CrossSign(
+            return PolygonUtilities.CrossSign(
                 newcomer.Bottom,
                 newcomer.Top,
                 newcomer.NextVertex.Point) >= 0;
         }
 
-        long y = newcomer.Bottom.Y;
+        double y = newcomer.Bottom.Y;
         bool newcomerIsLeft = newcomer.IsLeftBound;
 
         if (resident.Bottom.Y != y || resident.LocalMin.Vertex.Point.Y != y)
@@ -293,7 +293,7 @@ internal sealed class ActiveEdgeList
             return newcomerIsLeft;
         }
 
-        if (FixedPolygonUtilities.IsCollinear(
+        if (PolygonUtilities.IsCollinear(
             resident.PrevPrevVertex.Point,
             resident.Bottom,
             resident.Top))
@@ -302,7 +302,7 @@ internal sealed class ActiveEdgeList
         }
 
         // Use the alternate bound turn to break the tie.
-        return (FixedPolygonUtilities.CrossSign(
+        return (PolygonUtilities.CrossSign(
             resident.PrevPrevVertex.Point,
             newcomer.Bottom,
             newcomer.PrevPrevVertex.Point) > 0) == newcomerIsLeft;

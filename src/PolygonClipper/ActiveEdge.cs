@@ -18,17 +18,17 @@ internal sealed class ActiveEdge
     /// <summary>
     /// The lower endpoint of the edge in scanline order.
     /// </summary>
-    public Vertex64 Bottom;
+    public Vertex Bottom;
 
     /// <summary>
     /// The upper endpoint of the edge in scanline order.
     /// </summary>
-    public Vertex64 Top;
+    public Vertex Top;
 
     /// <summary>
     /// The X coordinate where the edge intersects the current scanline.
     /// </summary>
-    public long CurrentX;
+    public double CurrentX;
 
     /// <summary>
     /// The delta-X per delta-Y for the edge (its scanline slope).
@@ -157,7 +157,7 @@ internal sealed class ActiveEdge
     // This method sits on the hottest path in large self-intersection workloads.
     // AggressiveOptimization consistently improves codegen here versus tiered defaults.
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public static long TopX(ActiveEdge edge, long currentY)
+    public static double TopX(ActiveEdge edge, double currentY)
     {
         if (currentY == edge.Top.Y || edge.Top.X == edge.Bottom.X)
         {
@@ -169,7 +169,7 @@ internal sealed class ActiveEdge
             return edge.Bottom.X;
         }
 
-        return edge.Bottom.X + (long)Math.Round(edge.Dx * (currentY - edge.Bottom.Y), MidpointRounding.ToEven);
+        return edge.Bottom.X + (edge.Dx * (currentY - edge.Bottom.Y));
     }
 
     /// <summary>
@@ -181,7 +181,7 @@ internal sealed class ActiveEdge
     /// <summary>
     /// Computes delta-X per delta-Y, returning infinities for horizontal edges.
     /// </summary>
-    private static double GetDx(Vertex64 pt1, Vertex64 pt2)
+    private static double GetDx(Vertex pt1, Vertex pt2)
     {
         double dy = pt2.Y - pt1.Y;
         if (dy != 0)

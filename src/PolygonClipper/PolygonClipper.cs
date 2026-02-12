@@ -1004,7 +1004,7 @@ public class PolygonClipper
     /// <returns>The initialized <see cref="Contour"/>.</returns>
     private static Contour InitializeContourFromContext(SweepEvent sweepEvent, Polygon polygon, int contourId)
     {
-        Contour contour = new();
+        Contour contour = [];
 
         // Check if there is a "previous in result" event
         if (sweepEvent.PrevInResult != null)
