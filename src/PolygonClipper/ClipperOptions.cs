@@ -30,9 +30,16 @@ public enum ClipperScaleMode
 public sealed class ClipperOptions
 {
     /// <summary>
-    /// Gets the default options (auto scale with 16 decimal places).
+    /// Gets the default options (auto scale with 6 decimal places).
     /// </summary>
     public static ClipperOptions Default { get; } = new();
+
+    /// <summary>
+    /// Gets or sets an optional fill rule override for self-intersection removal.
+    /// When <see langword="null"/>, contour orientation is normalized by nesting depth
+    /// and the effective positive/negative fill rule is inferred from the outer winding.
+    /// </summary>
+    public FillRule? FillRuleOverride { get; set; }
 
     /// <summary>
     /// Gets or sets the scaling mode used for fixed precision.
@@ -43,7 +50,7 @@ public sealed class ClipperOptions
     /// Gets or sets the number of decimal places to retain when <see cref="ScaleMode"/> is
     /// <see cref="ClipperScaleMode.FixedPrecision"/>.
     /// </summary>
-    public int Precision { get; set; } = 16;
+    public int Precision { get; set; } = 6;
 
     /// <summary>
     /// Gets or sets the fixed scaling factor used when <see cref="ScaleMode"/> is

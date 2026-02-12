@@ -1148,7 +1148,7 @@ internal sealed class SelfIntersectionSweepLine
                     else
                     {
                         long targetY = intersectionPoint.Y < topY ? topY : this.currentScanlineBottomY;
-                        long targetX = absDx1 < absDx2 ? edge1.TopX(targetY) : edge2.TopX(targetY);
+                        long targetX = absDx1 < absDx2 ? ActiveEdge.TopX(edge1, targetY) : ActiveEdge.TopX(edge2, targetY);
                         intersectionPoint = new Vertex64(targetX, targetY);
                     }
 
@@ -1506,8 +1506,8 @@ internal sealed class SelfIntersectionSweepLine
 
                         // At the horizontal end, stop only when the outslope overtakes the edge
                         // (greater when heading right, smaller when heading left).
-                        if ((isLeftToRight && (edge.TopX(point.Y) >= point.X)) ||
-                                (!isLeftToRight && (edge.TopX(point.Y) <= point.X)))
+                        if ((isLeftToRight && (ActiveEdge.TopX(edge, point.Y) >= point.X)) ||
+                                (!isLeftToRight && (ActiveEdge.TopX(edge, point.Y) <= point.X)))
                         {
                             break;
                         }
@@ -1611,7 +1611,7 @@ internal sealed class SelfIntersectionSweepLine
             // Edge continues through the scanbeam.
             else
             {
-                edge.CurrentX = edge.TopX(y);
+                edge.CurrentX = ActiveEdge.TopX(edge, y);
             }
 
             edge = edge.NextInAel;
@@ -2370,20 +2370,22 @@ internal sealed class SelfIntersectionSweepLine
         /// <param name="a">The first node.</param>
         /// <param name="b">The second node.</param>
         /// <returns>A comparison result for sorting.</returns>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public readonly int Compare(IntersectNode a, IntersectNode b)
         {
-            Vertex64 delta = a.Point - b.Point;
-            if (delta.Y != 0)
+            long deltaY = a.Point.Y - b.Point.Y;
+            if (deltaY != 0)
             {
-                return delta.Y > 0 ? -1 : 1;
+                return deltaY > 0 ? -1 : 1;
             }
 
-            if (delta.X == 0)
+            long deltaX = a.Point.X - b.Point.X;
+            if (deltaX == 0)
             {
                 return 0;
             }
 
-            return delta.X < 0 ? -1 : 1;
+            return deltaX < 0 ? -1 : 1;
         }
     }
 }

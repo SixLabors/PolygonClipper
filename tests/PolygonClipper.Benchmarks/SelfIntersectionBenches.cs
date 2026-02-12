@@ -15,7 +15,7 @@ public class SelfIntersectionBenches
 {
     private Polygon polygon = null!;
     private PathsD clipperSubject = null!;
-    private FillRule clipperFillRule;
+    private Clipper2Lib.FillRule clipperFillRule;
     private bool clipperReverseSolution;
     private const int ClipperPrecision = 6;
 
@@ -29,7 +29,7 @@ public class SelfIntersectionBenches
         this.clipperSubject = BuildClipperSubject(this.polygon);
         GetLowestPathInfo(this.clipperSubject, out int lowestPathIdx, out bool isNegArea);
         this.clipperReverseSolution = lowestPathIdx >= 0 && isNegArea;
-        this.clipperFillRule = this.clipperReverseSolution ? FillRule.Negative : FillRule.Positive;
+        this.clipperFillRule = this.clipperReverseSolution ? Clipper2Lib.FillRule.Negative : Clipper2Lib.FillRule.Positive;
     }
 
     [Benchmark]

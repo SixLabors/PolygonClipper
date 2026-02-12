@@ -221,7 +221,7 @@ internal sealed class ActiveEdgeList
     /// </summary>
     /// <param name="topY">The scanline top Y coordinate.</param>
     /// <returns>The head of the sorted list.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public ActiveEdge? CopyToSorted(long topY)
     {
         ActiveEdge? edge = this.Head;
@@ -233,7 +233,7 @@ internal sealed class ActiveEdgeList
             edge.Jump = edge.NextInSel;
 
             // Joined edges can be split later during intersection processing.
-            edge.CurrentX = edge.TopX(topY);
+            edge.CurrentX = ActiveEdge.TopX(edge, topY);
 
             // Defer any Y updates; intersection tests use original bounds.
             edge = edge.NextInAel;

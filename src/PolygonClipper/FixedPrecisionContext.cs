@@ -54,29 +54,24 @@ internal readonly struct FixedPrecisionContext
         ClipperOptions resolved = options ?? ClipperOptions.Default;
         GetCoordinateStats(
             polygons,
-            resolved.ScaleMode == ClipperScaleMode.Auto,
+            false,
             out double minX,
             out double minY,
             out double maxX,
             out double maxY,
             out double minDelta);
-        Vertex origin = new((minX + maxX) * 0.5D, (minY + maxY) * 0.5D);
+
+        // Clipper2 scales directly from world coordinates without recentering.
+        // Keep origin at zero so quantization matches Clipper2's integer lattice.
+        Vertex origin = default;
         double maxAbsCoord = Math.Max(
-            Math.Max(Math.Abs(minX - origin.X), Math.Abs(maxX - origin.X)),
-            Math.Max(Math.Abs(minY - origin.Y), Math.Abs(maxY - origin.Y)));
+            Math.Max(Math.Abs(minX), Math.Abs(maxX)),
+            Math.Max(Math.Abs(minY), Math.Abs(maxY)));
         double scale;
 
         if (resolved.ScaleMode == ClipperScaleMode.Auto)
         {
             double desiredScale = GetPrecisionScale(resolved.Precision);
-            if (minDelta > 0D)
-            {
-                double minDeltaScale = 1D / minDelta;
-                if (minDeltaScale > desiredScale)
-                {
-                    desiredScale = minDeltaScale;
-                }
-            }
 
             double maxScale = maxAbsCoord > 0D
                 ? (MaxCoordDouble - 1D) / maxAbsCoord
@@ -154,6 +149,9 @@ internal readonly struct FixedPrecisionContext
                         continue;
                     }
 
+                    // TODO:
+                    // We can get the underlying list as a span and cast it as Vector128<double>
+                    // Then find the min/max using SIMD.
                     for (int k = 0; k < count; k++)
                     {
                         Vertex vertex = contour[k];
@@ -323,14 +321,16 @@ internal readonly struct FixedPrecisionContext
         return minDelta;
     }
 
-    [MethodImpl(MethodImplOptions.NoInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static long CheckCast(double value)
     {
-        if (value is > MaxCoordDouble or < -MaxCoordDouble)
-        {
-            throw new ArgumentOutOfRangeException(nameof(value), "Fixed-precision coordinate is out of range.");
-        }
-
+        // TODO: Replace with debug guard.
+        // #if Debug
+        //          if (value is > MaxCoordDouble or < -MaxCoordDouble)
+        //         {
+        //             throw new ArgumentOutOfRangeException(nameof(value), "Fixed-precision coordinate is out of range.");
+        //         }
+        // #endif
         return (long)Math.Round(value, MidpointRounding.AwayFromZero);
     }
 }

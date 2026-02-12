@@ -66,6 +66,33 @@ internal sealed class OutputRecord
 /// </summary>
 internal sealed class OutputPoint
 {
+#pragma warning disable SA1401 // Hot output ring traversal uses fields to avoid accessor overhead.
+    /// <summary>
+    /// The vertex coordinate.
+    /// </summary>
+    public Vertex64 Point;
+
+    /// <summary>
+    /// The next point in the linked list.
+    /// </summary>
+    public OutputPoint? Next;
+
+    /// <summary>
+    /// The previous point in the linked list.
+    /// </summary>
+    public OutputPoint Prev;
+
+    /// <summary>
+    /// The owning output record.
+    /// </summary>
+    public OutputRecord OutputRecord;
+
+    /// <summary>
+    /// The horizontal segment reference used for joins.
+    /// </summary>
+    public HorizontalSegment? HorizontalSegment;
+#pragma warning restore SA1401
+
     /// <summary>
     /// Initializes a new instance of the <see cref="OutputPoint"/> class.
     /// </summary>
@@ -77,31 +104,6 @@ internal sealed class OutputPoint
         this.Prev = this;
         this.HorizontalSegment = null;
     }
-
-    /// <summary>
-    /// Gets or sets the vertex coordinate.
-    /// </summary>
-    public Vertex64 Point { get; set; }
-
-    /// <summary>
-    /// Gets or sets the next point in the linked list.
-    /// </summary>
-    public OutputPoint? Next { get; set; }
-
-    /// <summary>
-    /// Gets or sets the previous point in the linked list.
-    /// </summary>
-    public OutputPoint Prev { get; set; }
-
-    /// <summary>
-    /// Gets or sets the owning output record.
-    /// </summary>
-    public OutputRecord OutputRecord { get; set; }
-
-    /// <summary>
-    /// Gets or sets the horizontal segment reference used for joins.
-    /// </summary>
-    public HorizontalSegment? HorizontalSegment { get; set; }
 }
 
 /// <summary>

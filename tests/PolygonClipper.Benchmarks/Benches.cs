@@ -51,7 +51,7 @@ public class Benches
         clipper.AddSubject(this.clipperSubject);
         clipper.AddClip(this.clipperClipping);
         PolyTreeD solution = [];
-        clipper.Execute(ClipType.Union, FillRule.EvenOdd, solution);
+        clipper.Execute(ClipType.Union, Clipper2Lib.FillRule.EvenOdd, solution);
         return solution;
     }
 

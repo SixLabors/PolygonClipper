@@ -13,6 +13,28 @@ namespace SixLabors.PolygonClipper;
 /// </remarks>
 internal sealed class SweepVertex
 {
+#pragma warning disable SA1401 // Hot sweep vertex state uses fields to avoid accessor overhead.
+    /// <summary>
+    /// The vertex position.
+    /// </summary>
+    public Vertex64 Point;
+
+    /// <summary>
+    /// The next vertex in the contour.
+    /// </summary>
+    public SweepVertex? Next;
+
+    /// <summary>
+    /// The previous vertex in the contour.
+    /// </summary>
+    public SweepVertex? Prev;
+
+    /// <summary>
+    /// Flags describing sweep-related classification.
+    /// </summary>
+    public VertexFlags Flags;
+#pragma warning restore SA1401
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SweepVertex"/> class.
     /// </summary>
@@ -23,26 +45,6 @@ internal sealed class SweepVertex
         this.Next = null;
         this.Prev = prev;
     }
-
-    /// <summary>
-    /// Gets or sets the vertex position.
-    /// </summary>
-    public Vertex64 Point { get; set; }
-
-    /// <summary>
-    /// Gets or sets the next vertex in the contour.
-    /// </summary>
-    public SweepVertex? Next { get; set; }
-
-    /// <summary>
-    /// Gets or sets the previous vertex in the contour.
-    /// </summary>
-    public SweepVertex? Prev { get; set; }
-
-    /// <summary>
-    /// Gets or sets the flags describing sweep-related classification.
-    /// </summary>
-    public VertexFlags Flags { get; set; }
 
     /// <summary>
     /// Gets a value indicating whether this vertex is marked as a local maxima.

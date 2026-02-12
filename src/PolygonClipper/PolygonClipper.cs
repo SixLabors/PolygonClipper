@@ -101,12 +101,18 @@ public class PolygonClipper
     }
 
     /// <summary>
-    /// Removes self-intersections from a polygon using a positive fill rule.
+    /// Removes self-intersections from a polygon.
     /// </summary>
     /// <param name="polygon">The polygon to process.</param>
+    /// <param name="options">
+    /// Optional fixed-precision options for quantization and fill rule override.
+    /// When <see cref="ClipperOptions.FillRuleOverride"/> is <see langword="null"/>,
+    /// contour orientation is normalized and effective positive/negative fill
+    /// is inferred from the outer winding.
+    /// </param>
     /// <returns>A new <see cref="Polygon"/> without self-intersections.</returns>
-    public static Polygon RemoveSelfIntersections(Polygon polygon)
-        => SelfIntersectionRemover.Process(polygon);
+    public static Polygon RemoveSelfIntersections(Polygon polygon, ClipperOptions? options = null)
+        => SelfIntersectionRemover.Process(polygon, options);
 
     /// <summary>
     /// Executes the boolean operation using the sweep line algorithm.

@@ -12,6 +12,23 @@ namespace SixLabors.PolygonClipper;
 /// </remarks>
 internal readonly struct IntersectNode
 {
+#pragma warning disable SA1401 // Hot path intersection sorting benefits from field access.
+    /// <summary>
+    /// Gets the intersection point between <see cref="Edge1"/> and <see cref="Edge2"/>.
+    /// </summary>
+    public readonly Vertex64 Point;
+
+    /// <summary>
+    /// Gets the first active edge participating in the intersection.
+    /// </summary>
+    public readonly ActiveEdge Edge1;
+
+    /// <summary>
+    /// Gets the second active edge participating in the intersection.
+    /// </summary>
+    public readonly ActiveEdge Edge2;
+#pragma warning restore SA1401
+
     /// <summary>
     /// Initializes a new instance of the <see cref="IntersectNode"/> struct.
     /// </summary>
@@ -21,19 +38,4 @@ internal readonly struct IntersectNode
         this.Edge1 = edge1;
         this.Edge2 = edge2;
     }
-
-    /// <summary>
-    /// Gets the intersection point between <see cref="Edge1"/> and <see cref="Edge2"/>.
-    /// </summary>
-    public Vertex64 Point { get; }
-
-    /// <summary>
-    /// Gets the first active edge participating in the intersection.
-    /// </summary>
-    public ActiveEdge Edge1 { get; }
-
-    /// <summary>
-    /// Gets the second active edge participating in the intersection.
-    /// </summary>
-    public ActiveEdge Edge2 { get; }
 }

@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System;
 using System.Runtime.CompilerServices;
 
 namespace SixLabors.PolygonClipper;
@@ -15,85 +14,87 @@ namespace SixLabors.PolygonClipper;
 /// </remarks>
 internal sealed class ActiveEdge
 {
+#pragma warning disable SA1401 // Hot sweep state uses fields to avoid accessor overhead.
     /// <summary>
-    /// Gets or sets the lower endpoint of the edge in scanline order.
+    /// The lower endpoint of the edge in scanline order.
     /// </summary>
-    public Vertex64 Bottom { get; set; }
+    public Vertex64 Bottom;
 
     /// <summary>
-    /// Gets or sets the upper endpoint of the edge in scanline order.
+    /// The upper endpoint of the edge in scanline order.
     /// </summary>
-    public Vertex64 Top { get; set; }
+    public Vertex64 Top;
 
     /// <summary>
-    /// Gets or sets the X coordinate where the edge intersects the current scanline.
+    /// The X coordinate where the edge intersects the current scanline.
     /// </summary>
-    public long CurrentX { get; set; }
+    public long CurrentX;
 
     /// <summary>
-    /// Gets or sets the delta-X per delta-Y for the edge (its scanline slope).
+    /// The delta-X per delta-Y for the edge (its scanline slope).
     /// </summary>
-    public double Dx { get; set; }
+    public double Dx;
 
     /// <summary>
-    /// Gets or sets the winding delta contributed by this edge (+1 or -1).
+    /// The winding delta contributed by this edge (+1 or -1).
     /// </summary>
-    public int WindDelta { get; set; }
+    public int WindDelta;
 
     /// <summary>
-    /// Gets or sets the accumulated winding count for this edge.
+    /// The accumulated winding count for this edge.
     /// </summary>
-    public int WindCount { get; set; }
+    public int WindCount;
 
     /// <summary>
-    /// Gets or sets the output record this edge is contributing to, if any.
+    /// The output record this edge is contributing to, if any.
     /// </summary>
-    public OutputRecord? OutputRecord { get; set; }
+    public OutputRecord? OutputRecord;
 
     /// <summary>
-    /// Gets or sets the previous edge in the Active Edge List (AEL).
+    /// The previous edge in the Active Edge List (AEL).
     /// </summary>
-    public ActiveEdge? PrevInAel { get; set; }
+    public ActiveEdge? PrevInAel;
 
     /// <summary>
-    /// Gets or sets the next edge in the Active Edge List (AEL).
+    /// The next edge in the Active Edge List (AEL).
     /// </summary>
-    public ActiveEdge? NextInAel { get; set; }
+    public ActiveEdge? NextInAel;
 
     /// <summary>
-    /// Gets or sets the previous edge in the Sorted Edge List (SEL).
+    /// The previous edge in the Sorted Edge List (SEL).
     /// </summary>
-    public ActiveEdge? PrevInSel { get; set; }
+    public ActiveEdge? PrevInSel;
 
     /// <summary>
-    /// Gets or sets the next edge in the Sorted Edge List (SEL).
+    /// The next edge in the Sorted Edge List (SEL).
     /// </summary>
-    public ActiveEdge? NextInSel { get; set; }
+    public ActiveEdge? NextInSel;
 
     /// <summary>
-    /// Gets or sets the temporary link used when sorting intersections.
+    /// The temporary link used when sorting intersections.
     /// </summary>
-    public ActiveEdge? Jump { get; set; }
+    public ActiveEdge? Jump;
 
     /// <summary>
-    /// Gets or sets the current top vertex for this edge's bound.
+    /// The current top vertex for this edge's bound.
     /// </summary>
-    public SweepVertex? VertexTop { get; set; }
+    public SweepVertex? VertexTop;
 
     /// <summary>
-    /// Gets or sets the local minima that spawned this edge.
+    /// The local minima that spawned this edge.
     /// </summary>
-    public LocalMinima LocalMin { get; set; }
+    public LocalMinima LocalMin;
 
     /// <summary>
-    /// Gets or sets a value indicating whether this edge is the left bound of its pair.
+    /// Indicates whether this edge is the left bound of its pair.
     /// </summary>
-    public bool IsLeftBound { get; set; }
+    public bool IsLeftBound;
 
     /// <summary>
-    /// Gets or sets the pending join state for this edge.
+    /// The pending join state for this edge.
     /// </summary>
-    public JoinWith JoinWith { get; set; }
+    public JoinWith JoinWith;
+#pragma warning restore SA1401
 
     /// <summary>
     /// Gets a value indicating whether this edge currently contributes to output.
@@ -153,20 +154,22 @@ internal sealed class ActiveEdge
     /// <summary>
     /// Calculates the X coordinate where this edge intersects the scanline at <paramref name="currentY" />.
     /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public long TopX(long currentY)
+    // This method sits on the hottest path in large self-intersection workloads.
+    // AggressiveOptimization consistently improves codegen here versus tiered defaults.
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public static long TopX(ActiveEdge edge, long currentY)
     {
-        if (currentY == this.Top.Y || this.Top.X == this.Bottom.X)
+        if (currentY == edge.Top.Y || edge.Top.X == edge.Bottom.X)
         {
-            return this.Top.X;
+            return edge.Top.X;
         }
 
-        if (currentY == this.Bottom.Y)
+        if (currentY == edge.Bottom.Y)
         {
-            return this.Bottom.X;
+            return edge.Bottom.X;
         }
 
-        return this.Bottom.X + (long)Math.Round(this.Dx * (currentY - this.Bottom.Y), MidpointRounding.ToEven);
+        return edge.Bottom.X + (long)Math.Round(edge.Dx * (currentY - edge.Bottom.Y), MidpointRounding.ToEven);
     }
 
     /// <summary>

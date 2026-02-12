@@ -6,7 +6,7 @@ namespace SixLabors.PolygonClipper;
 /// <summary>
 /// Specifies the winding rule used to decide which regions are filled.
 /// </summary>
-internal enum FillRule
+public enum FillRule
 {
     /// <summary>
     /// Counts winding in the positive direction as filled.

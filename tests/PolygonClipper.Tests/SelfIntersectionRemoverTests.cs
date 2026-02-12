@@ -8944,8 +8944,15 @@ public class SelfIntersectionRemoverTests
 
         // Act
         Polygon result = PolygonClipper.RemoveSelfIntersections(input);
+        AssertMatchesClipperByCount(input, result);
+    }
 
-        AssertMatchesClipperByCount(input);
+    [Fact]
+    public void LargeStar_Benchmark_1001()
+    {
+        Polygon input = CreateStarPolygon(1001, 100D);
+        Polygon result = PolygonClipper.RemoveSelfIntersections(input);
+        AssertMatchesClipperByCount(input, result);
     }
 
     /// <summary>
@@ -8974,9 +8981,29 @@ public class SelfIntersectionRemoverTests
         return contour;
     }
 
-    private static void AssertMatchesClipperByCount(Polygon input)
+    private static Polygon CreateStarPolygon(int vertexCount, double radius)
     {
-        Polygon result = PolygonClipper.RemoveSelfIntersections(input);
+        if (vertexCount < 5 || (vertexCount & 1) == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(vertexCount), "Vertex count must be an odd number >= 5.");
+        }
+
+        int step = (vertexCount - 1) / 2;
+        Contour contour = new(vertexCount + 1);
+        for (int i = 0; i < vertexCount; i++)
+        {
+            int index = (i * step) % vertexCount;
+            double angle = (index * Math.PI * 2D) / vertexCount;
+            contour.Add(new Vertex(Math.Cos(angle) * radius, Math.Sin(angle) * radius));
+        }
+
+        contour.Add(contour[0]);
+        return [contour];
+    }
+
+    private static void AssertMatchesClipperByCount(Polygon input, Polygon result = null!)
+    {
+        result ??= PolygonClipper.RemoveSelfIntersections(input);
         PathsD clipperResult = RemoveSelfIntersectionsWithClipperD(input);
 
         List<PathD> expected = SortPathsByLowestPoint(clipperResult);
