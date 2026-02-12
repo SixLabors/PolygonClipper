@@ -21,7 +21,7 @@ internal static class PolygonUtilities
     /// <returns>The <see cref="double"/> area.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static double SignedArea(in Vertex p0, in Vertex p1, in Vertex p2)
-        => ((p0.X - p2.X) * (p1.Y - p2.Y)) - ((p1.X - p2.X) * (p0.Y - p2.Y));
+        => Vertex.Cross(p0 - p2, p1 - p2);
 
     /// <summary>
     /// Finds the intersection of two line segments, constraining results to their intersection bounding box.
@@ -99,26 +99,26 @@ internal static class PolygonUtilities
         {
             // Lines of the segments are not parallel
             double s = Vertex.Cross(e, vb) / kross;
-            if (s < 0 || s > 1)
+            if (s is < 0 or > 1)
             {
                 return 0;
             }
 
             double t = Vertex.Cross(e, va) / kross;
-            if (t < 0 || t > 1)
+            if (t is < 0 or > 1)
             {
                 return 0;
             }
 
             // If s or t is exactly 0 or 1, the intersection is on an endpoint
-            if (s == 0 || s == 1)
+            if (s is 0 or 1)
             {
                 // On an endpoint of line segment a
                 pi0 = MidPoint(a1, s, va);
                 return 1;
             }
 
-            if (t == 0 || t == 1)
+            if (t is 0 or 1)
             {
                 // On an endpoint of line segment b
                 pi0 = MidPoint(a2, t, vb);

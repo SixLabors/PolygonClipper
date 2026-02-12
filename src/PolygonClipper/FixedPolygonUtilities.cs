@@ -113,10 +113,12 @@ internal static class FixedPolygonUtilities
         in Vertex64 b2,
         out Vertex64 intersection)
     {
-        double dy1 = a2.Y - a1.Y;
-        double dx1 = a2.X - a1.X;
-        double dy2 = b2.Y - b1.Y;
-        double dx2 = b2.X - b1.X;
+        Vertex64 d1 = a2 - a1;
+        Vertex64 d2 = b2 - b1;
+        double dy1 = d1.Y;
+        double dx1 = d1.X;
+        double dy2 = d2.Y;
+        double dx2 = d2.X;
         double det = (dy1 * dx2) - (dy2 * dx1);
         if (det == 0D)
         {
@@ -157,7 +159,9 @@ internal static class FixedPolygonUtilities
         Vertex64 direction = seg2 - seg1;
         double lengthSquared = (double)Vertex64.Dot(direction, direction);
         double q = (double)Vertex64.Dot(point - seg1, direction) / lengthSquared;
-        Math.Clamp(q, 0, 1);
+
+        // Clamp to segment bounds so we always return the closest point on the finite segment.
+        q = Math.Clamp(q, 0D, 1D);
         return new Vertex64(
             seg1.X + (long)Math.Round(q * direction.X, MidpointRounding.ToEven),
             seg1.Y + (long)Math.Round(q * direction.Y, MidpointRounding.ToEven));
