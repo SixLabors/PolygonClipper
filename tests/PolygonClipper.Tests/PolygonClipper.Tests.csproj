@@ -21,6 +21,17 @@
   </Choose>
 
   <ItemGroup>
+    <Content Remove="D:\.nuget\packages\microsoft.testplatform.testhost\17.8.0\build\netcoreapp3.1\x64\testhost.dll" />
+    <Content Remove="D:\.nuget\packages\microsoft.testplatform.testhost\17.8.0\build\netcoreapp3.1\x64\testhost.exe" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="D:\.nuget\packages\xunit.runner.visualstudio\2.5.6\build\net6.0\xunit.runner.reporters.netcoreapp10.dll" />
+    <None Remove="D:\.nuget\packages\xunit.runner.visualstudio\2.5.6\build\net6.0\xunit.runner.utility.netcoreapp10.dll" />
+    <None Remove="D:\.nuget\packages\xunit.runner.visualstudio\2.5.6\build\net6.0\xunit.runner.visualstudio.testadapter.dll" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Clipper2" Version="2.0.0" />
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
   </ItemGroup>
