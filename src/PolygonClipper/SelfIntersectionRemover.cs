@@ -37,23 +37,25 @@ internal static class SelfIntersectionRemover
     /// Processes a polygon to remove self-intersections.
     /// </summary>
     /// <param name="polygon">The polygon to process.</param>
-    /// <param name="options">
-    /// Optional fixed-precision options for quantization and fill rule override.
+    /// <param name="fillRule">
+    /// Optional fill rule to determine which regions are considered filled.
+    /// When <see langword="null"/>, contour orientation is normalized and effective positive/negative fill
+    /// is inferred from the outer winding.
     /// </param>
     /// <returns>
     /// A new <see cref="Polygon"/> with self-intersections resolved. Regions considered
     /// filled by the effective fill rule are preserved.
     /// </returns>
-    public static Polygon Process(Polygon polygon, ClipperOptions? options = null)
+    public static Polygon Process(Polygon polygon, FillRule? fillRule = null)
     {
         if (polygon.Count == 0)
         {
             return [];
         }
 
-        bool hasExplicitFillRule = options?.FillRuleOverride is FillRule;
+        bool hasExplicitFillRule = fillRule is FillRule;
         List<List<Vertex>> subject = BuildSubjectPaths(polygon, !hasExplicitFillRule);
-        FillRule effectiveFillRule = options?.FillRuleOverride ?? FillRule.Positive;
+        FillRule effectiveFillRule = fillRule ?? FillRule.Positive;
         bool reverseSolution = false;
 
         // When no explicit rule is provided, normalize contours for positive fill and

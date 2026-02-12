@@ -476,12 +476,32 @@ internal sealed class SelfIntersectionSweepLine
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private bool IsContributingClosedEdge(ActiveEdge edge)
     {
-        if (this.fillRule == FillRule.Positive)
+        switch (this.fillRule)
         {
-            return edge.WindCount == 1;
+            case FillRule.Positive:
+                if (edge.WindCount != 1)
+                {
+                    return false;
+                }
+
+                break;
+            case FillRule.Negative:
+                if (edge.WindCount != -1)
+                {
+                    return false;
+                }
+
+                break;
+            case FillRule.NonZero:
+                if (Math.Abs(edge.WindCount) != 1)
+                {
+                    return false;
+                }
+
+                break;
         }
 
-        return edge.WindCount == -1;
+        return true;
     }
 
     /// <summary>
@@ -489,13 +509,14 @@ internal sealed class SelfIntersectionSweepLine
     /// </summary>
     /// <param name="edge">The active edge to update.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void SetWindingCountForClosedEdge(ActiveEdge edge)
+    private void SetWindingCountForClosedEdge(ActiveEdge edge)
     {
         // Winding counts apply to regions, not edges. The edge wind count tracks the
         // higher of the two adjacent region counts. Adjacent regions differ by one.
         ActiveEdge? edge2 = edge.PrevInAel;
 
-        if (edge2 == null)
+        // Even-odd filling tracks parity and doesn't accumulate winding depth.
+        if (edge2 == null || this.fillRule == FillRule.EvenOdd)
         {
             edge.WindCount = edge.WindDelta;
         }
@@ -601,7 +622,7 @@ internal sealed class SelfIntersectionSweepLine
             leftBound.IsLeftBound = true;
             this.activeEdges.InsertLeft(leftBound);
 
-            SetWindingCountForClosedEdge(leftBound);
+            this.SetWindingCountForClosedEdge(leftBound);
             contributing = this.IsContributingClosedEdge(leftBound);
 
             rightBound.WindCount = leftBound.WindCount;
@@ -918,34 +939,49 @@ internal sealed class SelfIntersectionSweepLine
         }
 
         // Update winding counts for both edges.
-        int oldE1WindCount, oldE2WindCount;
-        if (edge1.WindCount + edge2.WindDelta == 0)
-        {
-            edge1.WindCount = -edge1.WindCount;
-        }
-        else
-        {
-            edge1.WindCount += edge2.WindDelta;
-        }
-
-        if (edge2.WindCount - edge1.WindDelta == 0)
-        {
-            edge2.WindCount = -edge2.WindCount;
-        }
-        else
-        {
-            edge2.WindCount -= edge1.WindDelta;
-        }
-
-        if (this.fillRule == FillRule.Positive)
+        int oldE1WindCount;
+        int oldE2WindCount;
+        if (this.fillRule == FillRule.EvenOdd)
         {
             oldE1WindCount = edge1.WindCount;
-            oldE2WindCount = edge2.WindCount;
+            edge1.WindCount = edge2.WindCount;
+            edge2.WindCount = oldE1WindCount;
         }
         else
         {
-            oldE1WindCount = -edge1.WindCount;
-            oldE2WindCount = -edge2.WindCount;
+            if (edge1.WindCount + edge2.WindDelta == 0)
+            {
+                edge1.WindCount = -edge1.WindCount;
+            }
+            else
+            {
+                edge1.WindCount += edge2.WindDelta;
+            }
+
+            if (edge2.WindCount - edge1.WindDelta == 0)
+            {
+                edge2.WindCount = -edge2.WindCount;
+            }
+            else
+            {
+                edge2.WindCount -= edge1.WindDelta;
+            }
+        }
+
+        switch (this.fillRule)
+        {
+            case FillRule.Positive:
+                oldE1WindCount = edge1.WindCount;
+                oldE2WindCount = edge2.WindCount;
+                break;
+            case FillRule.Negative:
+                oldE1WindCount = -edge1.WindCount;
+                oldE2WindCount = -edge2.WindCount;
+                break;
+            default:
+                oldE1WindCount = Math.Abs(edge1.WindCount);
+                oldE2WindCount = Math.Abs(edge2.WindCount);
+                break;
         }
 
         bool e1WindCountIs0or1 = oldE1WindCount is 0 or 1;

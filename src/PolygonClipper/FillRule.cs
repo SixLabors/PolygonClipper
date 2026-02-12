@@ -9,6 +9,16 @@ namespace SixLabors.PolygonClipper;
 public enum FillRule
 {
     /// <summary>
+    /// Fills regions covered by an odd number of contours.
+    /// </summary>
+    EvenOdd,
+
+    /// <summary>
+    /// Fills regions whose winding count is non-zero.
+    /// </summary>
+    NonZero,
+
+    /// <summary>
     /// Counts winding in the positive direction as filled.
     /// </summary>
     Positive,

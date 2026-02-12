@@ -2250,6 +2250,42 @@ public class SelfIntersectionRemoverTests
     }
 
     /// <summary>
+    /// Tests that explicit EvenOdd and NonZero fill rules are applied through the self-intersection pipeline.
+    /// </summary>
+    [Fact]
+    public void FillRuleOverride_DuplicateContours_EvenOddAndNonZeroDiverge()
+    {
+        // Arrange: Two identical contours with the same winding.
+        Contour square1 = [];
+        square1.Add(new Vertex(0, 0));
+        square1.Add(new Vertex(10, 0));
+        square1.Add(new Vertex(10, 10));
+        square1.Add(new Vertex(0, 10));
+        square1.Add(new Vertex(0, 0));
+
+        Contour square2 = [];
+        square2.Add(new Vertex(0, 0));
+        square2.Add(new Vertex(10, 0));
+        square2.Add(new Vertex(10, 10));
+        square2.Add(new Vertex(0, 10));
+        square2.Add(new Vertex(0, 0));
+
+        Polygon input = [square1, square2];
+
+        // Act
+        Polygon evenOdd = PolygonClipper.RemoveSelfIntersections(input, FillRule.EvenOdd);
+
+        Polygon nonZero = PolygonClipper.RemoveSelfIntersections(input, FillRule.NonZero);
+
+        // Assert
+        Assert.Empty(evenOdd);
+        Assert.Single(nonZero);
+
+        AssertMatchesClipperByCount(input, FillRule.EvenOdd);
+        AssertMatchesClipperByCount(input, FillRule.NonZero);
+    }
+
+    /// <summary>
     /// Helper method to create a regular octagon centered at (cx, cy) with given radius.
     /// </summary>
     private static Contour CreateOctagon(double cx, double cy, double radius)
@@ -2275,30 +2311,27 @@ public class SelfIntersectionRemoverTests
         return contour;
     }
 
-    private static Polygon CreateStarPolygon(int vertexCount, double radius)
-    {
-        if (vertexCount < 5 || (vertexCount & 1) == 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(vertexCount), "Vertex count must be an odd number >= 5.");
-        }
-
-        int step = (vertexCount - 1) / 2;
-        Contour contour = new(vertexCount + 1);
-        for (int i = 0; i < vertexCount; i++)
-        {
-            int index = (i * step) % vertexCount;
-            double angle = (index * Math.PI * 2D) / vertexCount;
-            contour.Add(new Vertex(Math.Cos(angle) * radius, Math.Sin(angle) * radius));
-        }
-
-        contour.Add(contour[0]);
-        return [contour];
-    }
-
     private static void AssertMatchesClipperByCount(Polygon input)
     {
         Polygon result = PolygonClipper.RemoveSelfIntersections(input);
         PathsD clipperResult = RemoveSelfIntersectionsWithClipperD(input);
+
+        List<PathD> expected = SortPathsByLowestPoint(clipperResult);
+        List<Contour> actual = SortContoursByLowestPoint(result);
+
+        Assert.Equal(expected.Count, actual.Count);
+
+        for (int i = 0; i < expected.Count; i++)
+        {
+            PathD actualPath = ProjectContour(actual[i]);
+            Assert.Equal(expected[i].Count, actualPath.Count);
+        }
+    }
+
+    private static void AssertMatchesClipperByCount(Polygon input, FillRule fillRule)
+    {
+        Polygon result = PolygonClipper.RemoveSelfIntersections(input, fillRule);
+        PathsD clipperResult = RemoveSelfIntersectionsWithClipperD(input, ToClipperFillRule(fillRule));
 
         List<PathD> expected = SortPathsByLowestPoint(clipperResult);
         List<Contour> actual = SortContoursByLowestPoint(result);
@@ -2404,6 +2437,47 @@ public class SelfIntersectionRemoverTests
         clipper.Execute(ClipType.Union, fillRule, solution);
         return solution;
     }
+
+    private static PathsD RemoveSelfIntersectionsWithClipperD(
+        Polygon polygon,
+        Clipper2Lib.FillRule fillRule,
+        int precision = 6)
+    {
+        PathsD subject = new(polygon.Count);
+        for (int i = 0; i < polygon.Count; i++)
+        {
+            Contour contour = polygon[i];
+            PathD path = new(contour.Count);
+            for (int j = 0; j < contour.Count; j++)
+            {
+                Vertex vertex = contour[j];
+                path.Add(new PointD(vertex.X, vertex.Y));
+            }
+
+            subject.Add(path);
+        }
+
+        ClipperD clipper = new(precision)
+        {
+            PreserveCollinear = false,
+            ReverseSolution = false
+        };
+
+        clipper.AddSubject(subject);
+        PathsD solution = [];
+        clipper.Execute(ClipType.Union, fillRule, solution);
+        return solution;
+    }
+
+    private static Clipper2Lib.FillRule ToClipperFillRule(FillRule fillRule)
+        => fillRule switch
+        {
+            FillRule.EvenOdd => Clipper2Lib.FillRule.EvenOdd,
+            FillRule.NonZero => Clipper2Lib.FillRule.NonZero,
+            FillRule.Positive => Clipper2Lib.FillRule.Positive,
+            FillRule.Negative => Clipper2Lib.FillRule.Negative,
+            _ => throw new ArgumentOutOfRangeException(nameof(fillRule), fillRule, "Unsupported fill rule.")
+        };
 
     private static void GetLowestPathInfo(PathsD paths, out int lowestPathIdx, out bool isNegArea)
     {
