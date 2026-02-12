@@ -71,8 +71,7 @@ public class SelfIntersectionBenches
 
         contour.Add(contour[0]);
 
-        Polygon polygon = new(1);
-        polygon.Add(contour);
+        Polygon polygon = [contour];
         return polygon;
     }
 

@@ -30,105 +30,39 @@ internal sealed class SegmentComparer : IComparer<SweepEvent>, IComparer
             return 1;
         }
 
-        bool inversed = !x.IsBefore(y);
-        SweepEvent perhapsInversedX = inversed ? y : x;
-        SweepEvent perhapsInversedY = inversed ? x : y;
+        SweepEvent perhapsInversedX, perhapsInversedY;
+        bool inversed;
 
-        if (PolygonUtilities.UseFloatingScale)
+        if (x.IsBefore(y))
         {
-            Vertex xPointDouble = perhapsInversedX.PointDouble;
-            Vertex yPointDouble = perhapsInversedY.PointDouble;
-            Vertex xOtherDouble = perhapsInversedX.OtherEvent.PointDouble;
-            Vertex yOtherDouble = perhapsInversedY.OtherEvent.PointDouble;
-
-            double area1Double = ((xPointDouble.X - yPointDouble.X) * (xOtherDouble.Y - yPointDouble.Y)) -
-                                 ((xOtherDouble.X - yPointDouble.X) * (xPointDouble.Y - yPointDouble.Y));
-            double area2Double = ((xPointDouble.X - yOtherDouble.X) * (xOtherDouble.Y - yOtherDouble.Y)) -
-                                 ((xOtherDouble.X - yOtherDouble.X) * (xPointDouble.Y - yOtherDouble.Y));
-
-            if (area1Double != 0D || area2Double != 0D)
-            {
-                if (xPointDouble == yPointDouble)
-                {
-                    bool isBelow = perhapsInversedX.Left ? area2Double > 0D : area2Double < 0D;
-                    return LessIf(isBelow, inversed);
-                }
-
-                if (xPointDouble.X == yPointDouble.X)
-                {
-                    return LessIf(xPointDouble.Y < yPointDouble.Y, inversed);
-                }
-
-                if ((area1Double > 0D) == (area2Double > 0D))
-                {
-                    return LessIf(area1Double > 0D, inversed);
-                }
-
-                if (area1Double == 0D)
-                {
-                    return LessIf(area2Double > 0D, inversed);
-                }
-
-                int interResult = PolygonUtilities.FindIntersectionDouble(
-                    xPointDouble,
-                    xOtherDouble,
-                    yPointDouble,
-                    yOtherDouble,
-                    out Vertex pi0,
-                    out Vertex _);
-
-                if (interResult == 0)
-                {
-                    return LessIf(area1Double > 0D, inversed);
-                }
-
-                if (interResult == 1)
-                {
-                    if (pi0 == yPointDouble)
-                    {
-                        return LessIf(area2Double > 0D, inversed);
-                    }
-
-                    return LessIf(area1Double > 0D, inversed);
-                }
-            }
-
-            if (perhapsInversedX.PolygonType == perhapsInversedY.PolygonType)
-            {
-                if (xPointDouble == yPointDouble)
-                {
-                    return LessIf(perhapsInversedX.ContourId < perhapsInversedY.ContourId, inversed);
-                }
-
-                return LessIf(true, inversed);
-            }
-
-            return LessIf(perhapsInversedX.PolygonType == PolygonType.Subject, inversed);
+            perhapsInversedX = x;
+            perhapsInversedY = y;
+            inversed = false;
+        }
+        else
+        {
+            perhapsInversedX = y;
+            perhapsInversedY = x;
+            inversed = true;
         }
 
-        Vertex64 xPoint = perhapsInversedX.Point;
-        Vertex64 yPoint = perhapsInversedY.Point;
-        Vertex64 xOtherPoint = perhapsInversedX.OtherEvent.Point;
-        Vertex64 yOtherPoint = perhapsInversedY.OtherEvent.Point;
-
         // Check if the segments are collinear by comparing their signed areas
-        int area1 = PolygonUtilities.CrossSign(xPoint, xOtherPoint, yPoint);
-        int area2 = PolygonUtilities.CrossSign(xPoint, xOtherPoint, yOtherPoint);
+        double area1 = PolygonUtilities.SignedArea(perhapsInversedX.Point, perhapsInversedX.OtherEvent.Point, perhapsInversedY.Point);
+        double area2 = PolygonUtilities.SignedArea(perhapsInversedX.Point, perhapsInversedX.OtherEvent.Point, perhapsInversedY.OtherEvent.Point);
 
         if (area1 != 0 || area2 != 0)
         {
             // Segments are not collinear
             // If they share their left endpoint, use the right endpoint to sort
-            if (xPoint == yPoint)
+            if (perhapsInversedX.Point == perhapsInversedY.Point)
             {
-                bool isBelow = perhapsInversedX.Left ? area2 > 0 : area2 < 0;
-                return LessIf(isBelow, inversed);
+                return LessIf(perhapsInversedX.IsBelow(perhapsInversedY.OtherEvent.Point), inversed);
             }
 
             // Different left endpoints: use the y-coordinate to sort if x-coordinates are the same
-            if (xPoint.X == yPoint.X)
+            if (perhapsInversedX.Point.X == perhapsInversedY.Point.X)
             {
-                return LessIf(xPoint.Y < yPoint.Y, inversed);
+                return LessIf(perhapsInversedX.Point.Y < perhapsInversedY.Point.Y, inversed);
             }
 
             // If `x` and `y` lie on the same side of the reference segment,
@@ -145,21 +79,21 @@ internal sealed class SegmentComparer : IComparer<SweepEvent>, IComparer
             }
 
             // Form segments from the events.
-            Segment seg0 = new(xPoint, xOtherPoint);
-            Segment seg1 = new(yPoint, yOtherPoint);
+            Segment seg0 = new(perhapsInversedX.Point, perhapsInversedX.OtherEvent.Point);
+            Segment seg1 = new(perhapsInversedY.Point, perhapsInversedY.OtherEvent.Point);
 
             // Call the provided intersection method.
-            int interResult = PolygonUtilities.FindIntersection(seg0, seg1, out Vertex64 pi0, out Vertex64 _);
+            int interResult = PolygonUtilities.FindIntersection(seg0, seg1, out Vertex pi0, out Vertex _);
+
             if (interResult == 0)
             {
                 // No unique intersection found: decide based on area1.
                 return LessIf(area1 > 0, inversed);
             }
-
-            if (interResult == 1)
+            else if (interResult == 1)
             {
                 // Unique intersection found.
-                if (pi0 == perhapsInversedY.Point)
+                if (pi0 == y.Point)
                 {
                     return LessIf(area2 > 0, inversed);
                 }
@@ -170,11 +104,11 @@ internal sealed class SegmentComparer : IComparer<SweepEvent>, IComparer
             // If interResult is neither 0 nor 1, fall through to collinear logic.
         }
 
-        // Collinear branch - mimicking the Rust logic:
+        // Collinear branch – mimicking the Rust logic:
         if (perhapsInversedX.PolygonType == perhapsInversedY.PolygonType)
         {
             // Both segments belong to the same polygon.
-            if (xPoint == yPoint)
+            if (perhapsInversedX.Point == perhapsInversedY.Point)
             {
                 // When left endpoints are identical, order by contour id.
                 return LessIf(perhapsInversedX.ContourId < perhapsInversedY.ContourId, inversed);

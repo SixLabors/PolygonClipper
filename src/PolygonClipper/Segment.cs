@@ -16,33 +16,33 @@ internal readonly struct Segment : IEquatable<Segment>
     /// <param name="source">The segment source.</param>
     /// <param name="target">The segment target.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Segment(in Vertex64 source, in Vertex64 target)
+    public Segment(in Vertex source, in Vertex target)
     {
         this.Source = source;
         this.Target = target;
-        this.Min = Vertex64.Min(source, target);
-        this.Max = Vertex64.Max(source, target);
+        this.Min = Vertex.Min(source, target);
+        this.Max = Vertex.Max(source, target);
     }
 
     /// <summary>
     /// Gets the segment source vector.
     /// </summary>
-    public Vertex64 Source { get; }
+    public Vertex Source { get; }
 
     /// <summary>
     /// Gets the segment target vector.
     /// </summary>
-    public Vertex64 Target { get; }
+    public Vertex Target { get; }
 
     /// <summary>
     /// Gets the point of the segment with lexicographically smallest coordinate.
     /// </summary>
-    public Vertex64 Min { get; }
+    public Vertex Min { get; }
 
     /// <summary>
     /// Gets the point of the segment with lexicographically largest coordinate.
     /// </summary>
-    public Vertex64 Max { get; }
+    public Vertex Max { get; }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool operator ==(in Segment left, in Segment right)
@@ -68,15 +68,7 @@ internal readonly struct Segment : IEquatable<Segment>
     /// <see langword="true"/> if the segment is vertical; otherwise <see langword="false"/>.
     /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool IsVertical()
-    {
-        if (PolygonUtilities.UseFloatingScale)
-        {
-            return PolygonUtilities.ToDouble(this.Source.X) == PolygonUtilities.ToDouble(this.Target.X);
-        }
-
-        return this.Source.X == this.Target.X;
-    }
+    public bool IsVertical() => this.Source.X == this.Target.X;
 
     /// <summary>
     /// Changes the segment orientation.

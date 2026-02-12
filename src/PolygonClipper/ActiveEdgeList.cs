@@ -17,7 +17,6 @@ namespace SixLabors.PolygonClipper;
 internal sealed class ActiveEdgeList
 {
     private readonly Stack<ActiveEdge> pool;
-    private ActiveEdge? head;
     private ActiveEdge? horizontalHead;
 
     /// <summary>
@@ -28,16 +27,16 @@ internal sealed class ActiveEdgeList
     /// <summary>
     /// Gets the head of the active edge list.
     /// </summary>
-    public ActiveEdge? Head => this.head;
+    public ActiveEdge? Head { get; private set; }
 
     /// <summary>
     /// Clears all active edges and returns them to the pool.
     /// </summary>
     public void ClearActiveEdges()
     {
-        while (this.head != null)
+        while (this.Head != null)
         {
-            this.Remove(this.head);
+            this.Remove(this.Head);
         }
 
         this.horizontalHead = null;
@@ -48,7 +47,7 @@ internal sealed class ActiveEdgeList
     /// </summary>
     public void Reset()
     {
-        this.head = null;
+        this.Head = null;
         this.horizontalHead = null;
     }
 
@@ -65,24 +64,24 @@ internal sealed class ActiveEdgeList
     /// <param name="edge">The edge to insert.</param>
     public void InsertLeft(ActiveEdge edge)
     {
-        if (this.head == null)
+        if (this.Head == null)
         {
             edge.PrevInAel = null;
             edge.NextInAel = null;
-            this.head = edge;
+            this.Head = edge;
             return;
         }
 
-        if (!IsValidActiveEdgeOrder(this.head, edge))
+        if (!IsValidActiveEdgeOrder(this.Head, edge))
         {
             edge.PrevInAel = null;
-            edge.NextInAel = this.head;
-            this.head.PrevInAel = edge;
-            this.head = edge;
+            edge.NextInAel = this.Head;
+            this.Head.PrevInAel = edge;
+            this.Head = edge;
             return;
         }
 
-        ActiveEdge edge2 = this.head;
+        ActiveEdge edge2 = this.Head;
         while (edge2.NextInAel != null && IsValidActiveEdgeOrder(edge2.NextInAel, edge))
         {
             edge2 = edge2.NextInAel;
@@ -131,7 +130,7 @@ internal sealed class ActiveEdgeList
         ActiveEdge? prev = edge.PrevInAel;
         ActiveEdge? next = edge.NextInAel;
 
-        if (prev == null && next == null && edge != this.head)
+        if (prev == null && next == null && edge != this.Head)
         {
             return;
         }
@@ -142,7 +141,7 @@ internal sealed class ActiveEdgeList
         }
         else
         {
-            this.head = next;
+            this.Head = next;
         }
 
         if (next != null)
@@ -179,7 +178,7 @@ internal sealed class ActiveEdgeList
         left.NextInAel = next;
         if (right.PrevInAel == null)
         {
-            this.head = right;
+            this.Head = right;
         }
     }
 
@@ -225,7 +224,7 @@ internal sealed class ActiveEdgeList
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ActiveEdge? CopyToSorted(long topY)
     {
-        ActiveEdge? edge = this.head;
+        ActiveEdge? edge = this.Head;
         ActiveEdge? sortedHead = edge;
         while (edge != null)
         {
@@ -257,7 +256,7 @@ internal sealed class ActiveEdgeList
         }
 
         // Compare turning direction: resident.Top -> newcomer.Bottom -> newcomer.Top.
-        int d = PolygonUtilities.CrossSign(resident.Top, newcomer.Bottom, newcomer.Top);
+        int d = FixedPolygonUtilities.CrossSign(resident.Top, newcomer.Bottom, newcomer.Top);
         if (d != 0)
         {
             return d < 0;
@@ -266,7 +265,7 @@ internal sealed class ActiveEdgeList
         // For collinear bounds, use the next turn to order them.
         if (!resident.IsMaxima && (resident.Top.Y > newcomer.Top.Y))
         {
-            return PolygonUtilities.CrossSign(
+            return FixedPolygonUtilities.CrossSign(
                 newcomer.Bottom,
                 resident.Top,
                 resident.NextVertex.Point) <= 0;
@@ -274,7 +273,7 @@ internal sealed class ActiveEdgeList
 
         if (!newcomer.IsMaxima && (newcomer.Top.Y > resident.Top.Y))
         {
-            return PolygonUtilities.CrossSign(
+            return FixedPolygonUtilities.CrossSign(
                 newcomer.Bottom,
                 newcomer.Top,
                 newcomer.NextVertex.Point) >= 0;
@@ -294,7 +293,7 @@ internal sealed class ActiveEdgeList
             return newcomerIsLeft;
         }
 
-        if (PolygonUtilities.IsCollinear(
+        if (FixedPolygonUtilities.IsCollinear(
             resident.PrevPrevVertex.Point,
             resident.Bottom,
             resident.Top))
@@ -303,7 +302,7 @@ internal sealed class ActiveEdgeList
         }
 
         // Use the alternate bound turn to break the tie.
-        return (PolygonUtilities.CrossSign(
+        return (FixedPolygonUtilities.CrossSign(
             resident.PrevPrevVertex.Point,
             newcomer.Bottom,
             newcomer.PrevPrevVertex.Point) > 0) == newcomerIsLeft;

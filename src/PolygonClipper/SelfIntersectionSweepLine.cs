@@ -1109,7 +1109,7 @@ internal sealed class SelfIntersectionSweepLine
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void AddIntersectionNode(ActiveEdge edge1, ActiveEdge edge2, long topY)
     {
-        if (!PolygonUtilities.TryGetLineIntersection(
+        if (!FixedPolygonUtilities.TryGetLineIntersection(
             edge1.Bottom, edge1.Top, edge2.Bottom, edge2.Top, out Vertex64 intersectionPoint))
         {
             intersectionPoint = new Vertex64(edge1.CurrentX, topY);
@@ -1130,20 +1130,20 @@ internal sealed class SelfIntersectionSweepLine
                 case true when absDx2 > 100:
                 {
                     intersectionPoint = absDx1 > absDx2
-                        ? PolygonUtilities.ClosestPointOnSegment(intersectionPoint, edge1.Bottom, edge1.Top)
-                        : PolygonUtilities.ClosestPointOnSegment(intersectionPoint, edge2.Bottom, edge2.Top);
+                        ? FixedPolygonUtilities.ClosestPointOnSegment(intersectionPoint, edge1.Bottom, edge1.Top)
+                        : FixedPolygonUtilities.ClosestPointOnSegment(intersectionPoint, edge2.Bottom, edge2.Top);
 
                     break;
                 }
 
                 case true:
-                    intersectionPoint = PolygonUtilities.ClosestPointOnSegment(intersectionPoint, edge1.Bottom, edge1.Top);
+                    intersectionPoint = FixedPolygonUtilities.ClosestPointOnSegment(intersectionPoint, edge1.Bottom, edge1.Top);
                     break;
                 default:
                 {
                     if (absDx2 > 100)
                     {
-                        intersectionPoint = PolygonUtilities.ClosestPointOnSegment(intersectionPoint, edge2.Bottom, edge2.Top);
+                        intersectionPoint = FixedPolygonUtilities.ClosestPointOnSegment(intersectionPoint, edge2.Bottom, edge2.Top);
                     }
                     else
                     {
@@ -1725,7 +1725,7 @@ internal sealed class SelfIntersectionSweepLine
 
         if (checkCurrX)
         {
-            if (PolygonUtilities.PerpendicularDistanceSquared(point, prev.Bottom, prev.Top) > 0.25D)
+            if (FixedPolygonUtilities.PerpendicularDistanceSquared(point, prev.Bottom, prev.Top) > 0.25D)
             {
                 return;
             }
@@ -1735,7 +1735,7 @@ internal sealed class SelfIntersectionSweepLine
             return;
         }
 
-        if (!PolygonUtilities.IsCollinear(edge.Top, point, prev.Top))
+        if (!FixedPolygonUtilities.IsCollinear(edge.Top, point, prev.Top))
         {
             return;
         }
@@ -1787,7 +1787,7 @@ internal sealed class SelfIntersectionSweepLine
 
         if (checkCurrX)
         {
-            if (PolygonUtilities.PerpendicularDistanceSquared(point, next.Bottom, next.Top) > 0.25D)
+            if (FixedPolygonUtilities.PerpendicularDistanceSquared(point, next.Bottom, next.Top) > 0.25D)
             {
                 return;
             }
@@ -1797,7 +1797,7 @@ internal sealed class SelfIntersectionSweepLine
             return;
         }
 
-        if (!PolygonUtilities.IsCollinear(edge.Top, point, next.Top))
+        if (!FixedPolygonUtilities.IsCollinear(edge.Top, point, next.Top))
         {
             return;
         }
@@ -2175,7 +2175,7 @@ internal sealed class SelfIntersectionSweepLine
                 }
                 else
                 {
-                    int d = PolygonUtilities.CrossSign(outputPoint2.Prev.Point, outputPoint2.Point, point);
+                    int d = FixedPolygonUtilities.CrossSign(outputPoint2.Prev.Point, outputPoint2.Point, point);
                     if (d == 0)
                     {
                         return PointInPolygonResult.On;
@@ -2198,7 +2198,7 @@ internal sealed class SelfIntersectionSweepLine
         }
 
         {
-            int d = PolygonUtilities.CrossSign(outputPoint2.Prev.Point, outputPoint2.Point, point);
+            int d = FixedPolygonUtilities.CrossSign(outputPoint2.Prev.Point, outputPoint2.Point, point);
             if (d == 0)
             {
                 return PointInPolygonResult.On;
@@ -2253,7 +2253,7 @@ internal sealed class SelfIntersectionSweepLine
         while (outputPoint != outputPoint1);
 
         // Result is unclear, so try again using cleaned paths (Issue #973).
-        return PolygonUtilities.Path2ContainsPath1(BuildCleanContour(outputPoint1), BuildCleanContour(outputPoint2));
+        return FixedPolygonUtilities.Path2ContainsPath1(BuildCleanContour(outputPoint1), BuildCleanContour(outputPoint2));
     }
 
     /// <summary>

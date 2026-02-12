@@ -12,7 +12,7 @@ namespace SixLabors.PolygonClipper;
 /// </summary>
 [DebuggerDisplay("Count = {Count}")]
 #pragma warning disable CA1710 // Identifiers should have correct suffix
-public sealed class Contour : IReadOnlyList<Vertex>
+public sealed class Contour : IReadOnlyCollection<Vertex>
 #pragma warning restore CA1710 // Identifiers should have correct suffix
 {
     private bool hasCachedOrientation;
@@ -21,7 +21,7 @@ public sealed class Contour : IReadOnlyList<Vertex>
     /// <summary>
     /// Set of vertices conforming the external contour
     /// </summary>
-    private readonly List<Vertex> vertices;
+    private readonly List<Vertex> vertices = [];
 
     /// <summary>
     /// Holes of the contour. They are stored as the indexes of
@@ -38,9 +38,9 @@ public sealed class Contour : IReadOnlyList<Vertex>
     /// <summary>
     /// Initializes a new instance of the <see cref="Contour"/> class with a vertex capacity.
     /// </summary>
-    /// <param name="vertexCapacity">The initial vertex capacity.</param>
-    public Contour(int vertexCapacity)
-        => this.vertices = new List<Vertex>(vertexCapacity);
+    /// <param name="capacity">The initial vertex capacity.</param>
+    public Contour(int capacity)
+        => this.vertices = new List<Vertex>(capacity);
 
     /// <summary>
     /// Gets the number of vertices.
@@ -93,12 +93,11 @@ public sealed class Contour : IReadOnlyList<Vertex>
     /// Gets the segment at the specified index of the contour.
     /// </summary>
     /// <param name="index">The index of the segment.</param>
-    /// <param name="context">The fixed-precision context used to quantize vertices.</param>
     /// <returns>The <see cref="Segment"/>.</returns>
-    internal Segment GetSegment(int index, FixedPrecisionContext context)
+    internal Segment GetSegment(int index)
         => (index == this.Count - 1)
-        ? new Segment(context.Quantize(this.vertices[^1]), context.Quantize(this.vertices[0]))
-        : new Segment(context.Quantize(this.vertices[index]), context.Quantize(this.vertices[index + 1]));
+        ? new Segment(this.vertices[^1], this.vertices[0])
+        : new Segment(this.vertices[index], this.vertices[index + 1]);
 
     /// <summary>
     /// Gets the bounding box of the contour.
@@ -220,13 +219,6 @@ public sealed class Contour : IReadOnlyList<Vertex>
     /// <param name="index">The index of the vertex to remove.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void RemoveVertexAt(int index) => this.vertices.RemoveAt(index);
-
-    /// <summary>
-    /// Ensures the internal vertex capacity can accommodate the specified count.
-    /// </summary>
-    /// <param name="capacity">The minimum capacity to ensure.</param>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal void EnsureVertexCapacity(int capacity) => this.vertices.EnsureCapacity(capacity);
 
     /// <summary>
     /// Clears all vertices and holes from the contour.

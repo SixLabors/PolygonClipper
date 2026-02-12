@@ -55,6 +55,7 @@ internal static class SelfIntersectionRemover
     /// Processes a polygon to remove self-intersections using the positive fill rule.
     /// </summary>
     /// <param name="polygon">The polygon to process.</param>
+    /// <param name="options">Optional fixed-precision options for quantization.</param>
     /// <returns>
     /// A new <see cref="Polygon"/> with self-intersections resolved. Regions with
     /// positive winding number are considered filled.
@@ -80,6 +81,7 @@ internal static class SelfIntersectionRemover
     /// Executes a union using the internal clipper with a fill rule selected from the input orientation.
     /// </summary>
     /// <param name="polygon">The polygon to union.</param>
+    /// <param name="context">The fixed-precision context.</param>
     /// <returns>A polygon containing the unioned contours.</returns>
     private static Polygon UnionWithClipper(Polygon polygon, FixedPrecisionContext context)
     {
@@ -105,6 +107,7 @@ internal static class SelfIntersectionRemover
     /// Builds reusable subject paths from a polygon, minimizing allocations across calls.
     /// </summary>
     /// <param name="polygon">The polygon to convert.</param>
+    /// <param name="context">The fixed-precision context.</param>
     /// <returns>A cached list of fixed-precision vertex paths ready for clipping.</returns>
     private static List<List<Vertex64>> BuildSubjectPaths(Polygon polygon, FixedPrecisionContext context)
     {
@@ -229,7 +232,7 @@ internal static class SelfIntersectionRemover
             for (int i = 0; i < count; i++)
             {
                 List<Vertex64> contour = subject[i];
-                bounds[i] = PolygonUtilities.GetBounds(contour);
+                bounds[i] = FixedPolygonUtilities.GetBounds(contour);
                 absAreas[i] = Math.Abs(GetSignedArea(contour));
 
                 if (HasSelfIntersection(contour))
@@ -271,7 +274,7 @@ internal static class SelfIntersectionRemover
                         continue;
                     }
 
-                    if (PolygonUtilities.PointInPolygon(testPoint, subject[j]) != PointInPolygonResult.Inside)
+                    if (FixedPolygonUtilities.PointInPolygon(testPoint, subject[j]) != PointInPolygonResult.Inside)
                     {
                         continue;
                     }
@@ -486,9 +489,9 @@ internal static class SelfIntersectionRemover
                     continue;
                 }
 
-                if (PolygonUtilities.SegmentsIntersect(segA1, segA2, segB1, segB2, true) ||
-                    (PolygonUtilities.IsCollinear(segA1, segA2, segB1) &&
-                     PolygonUtilities.IsCollinear(segA1, segA2, segB2) &&
+                if (FixedPolygonUtilities.SegmentsIntersect(segA1, segA2, segB1, segB2, true) ||
+                    (FixedPolygonUtilities.IsCollinear(segA1, segA2, segB1) &&
+                     FixedPolygonUtilities.IsCollinear(segA1, segA2, segB2) &&
                      SegmentsOverlap(segA1, segA2, segB1, segB2)))
                 {
                     return true;
@@ -531,9 +534,9 @@ internal static class SelfIntersectionRemover
                     continue;
                 }
 
-                if (PolygonUtilities.SegmentsIntersect(leftSeg1, leftSeg2, rightSeg1, rightSeg2, true) ||
-                    (PolygonUtilities.IsCollinear(leftSeg1, leftSeg2, rightSeg1) &&
-                     PolygonUtilities.IsCollinear(leftSeg1, leftSeg2, rightSeg2) &&
+                if (FixedPolygonUtilities.SegmentsIntersect(leftSeg1, leftSeg2, rightSeg1, rightSeg2, true) ||
+                    (FixedPolygonUtilities.IsCollinear(leftSeg1, leftSeg2, rightSeg1) &&
+                     FixedPolygonUtilities.IsCollinear(leftSeg1, leftSeg2, rightSeg2) &&
                      SegmentsOverlap(leftSeg1, leftSeg2, rightSeg1, rightSeg2)))
                 {
                     return true;
@@ -715,9 +718,9 @@ internal static class SelfIntersectionRemover
             while (true)
             {
                 // When preserving collinear, only remove 180-degree spikes.
-                if (PolygonUtilities.IsCollinear(outputPoint2!.Prev.Point, outputPoint2.Point, outputPoint2.Next!.Point) &&
+                if (FixedPolygonUtilities.IsCollinear(outputPoint2!.Prev.Point, outputPoint2.Point, outputPoint2.Next!.Point) &&
                     (outputPoint2.Point == outputPoint2.Prev.Point || outputPoint2.Point == outputPoint2.Next.Point || !this.PreserveCollinear ||
-                    (PolygonUtilities.Dot(outputPoint2.Prev.Point, outputPoint2.Point, outputPoint2.Next.Point) < 0)))
+                    (FixedPolygonUtilities.Dot(outputPoint2.Prev.Point, outputPoint2.Point, outputPoint2.Next.Point) < 0)))
                 {
                     if (outputPoint2 == outputRecord.Points)
                     {
@@ -758,7 +761,7 @@ internal static class SelfIntersectionRemover
             OutputPoint nextNextOp = splitOp.Next!.Next!;
             outputRecord.Points = prevOp;
 
-            PolygonUtilities.TryGetLineIntersection(
+            FixedPolygonUtilities.TryGetLineIntersection(
                 prevOp.Point, splitOp.Point, splitOp.Next.Point, nextNextOp.Point, out Vertex64 intersectionPoint);
 
             double area1 = SelfIntersectionSweepLine.ComputeSignedArea(prevOp);
@@ -850,13 +853,13 @@ internal static class SelfIntersectionRemover
 
             while (true)
             {
-                if (PolygonUtilities.SegmentsIntersect(
+                if (FixedPolygonUtilities.SegmentsIntersect(
                     outputPoint2!.Prev.Point,
                     outputPoint2.Point,
                     outputPoint2.Next!.Point,
                     outputPoint2.Next.Next!.Point))
                 {
-                    if (PolygonUtilities.SegmentsIntersect(
+                    if (FixedPolygonUtilities.SegmentsIntersect(
                         outputPoint2.Prev.Point,
                         outputPoint2.Point,
                         outputPoint2.Next.Next!.Point,
@@ -1022,9 +1025,9 @@ internal static class SelfIntersectionRemover
                     continue;
                 }
 
-                Contour contour = new(outputRecord.OutputPointCount + 1);
+                Contour contour = new();
                 this.CleanCollinearEdges(outputRecord);
-                if (BuildContour(outputRecord.Points, this.ReverseSolution, contour))
+                if (this.BuildContour(outputRecord.Points, this.ReverseSolution, contour))
                 {
                     solution.Add(contour);
                 }
@@ -1056,7 +1059,7 @@ internal static class SelfIntersectionRemover
                 return false;
             }
 
-            outputRecord.Bounds = PolygonUtilities.GetBounds(outputRecord.Path);
+            outputRecord.Bounds = FixedPolygonUtilities.GetBounds(outputRecord.Path);
             return true;
         }
 
@@ -1180,8 +1183,8 @@ internal static class SelfIntersectionRemover
             for (int index = 0; index < closedOutputRecords.Count; index++)
             {
                 OutputRecord outputRecord = closedOutputRecords[index];
-                Contour contour = new(outputRecord.OutputPointCount + 1);
-                if (!BuildContour(outputRecord.Points, this.ReverseSolution, contour))
+                Contour contour = new();
+                if (!this.BuildContour(outputRecord.Points, this.ReverseSolution, contour))
                 {
                     continue;
                 }

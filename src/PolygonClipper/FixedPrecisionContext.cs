@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Buffers;
 using System.Runtime.CompilerServices;
 
 namespace SixLabors.PolygonClipper;
@@ -13,7 +14,6 @@ internal readonly struct FixedPrecisionContext
     private const long MaxInt64 = long.MaxValue;
     internal const long MaxCoord = (MaxInt64 / 3) * 2;
     private const double MaxCoordDouble = MaxCoord;
-    private const double DoubleExactIntLimit = 9007199254740992D; // 2^53
 
     public FixedPrecisionContext(double scale, Vertex origin)
     {
@@ -52,40 +52,54 @@ internal readonly struct FixedPrecisionContext
     public static FixedPrecisionContext Create(ClipperOptions? options, ReadOnlySpan<Polygon> polygons)
     {
         ClipperOptions resolved = options ?? ClipperOptions.Default;
-        GetCoordinateStats(polygons, out double minX, out double minY, out double maxX, out double maxY, out double minDelta);
-        Vertex origin = default;
+        GetCoordinateStats(
+            polygons,
+            resolved.ScaleMode == ClipperScaleMode.Auto,
+            out double minX,
+            out double minY,
+            out double maxX,
+            out double maxY,
+            out double minDelta);
+        Vertex origin = new((minX + maxX) * 0.5D, (minY + maxY) * 0.5D);
         double maxAbsCoord = Math.Max(
-            Math.Max(Math.Abs(minX), Math.Abs(maxX)),
-            Math.Max(Math.Abs(minY), Math.Abs(maxY)));
-        double scale = ResolveScale(resolved, maxAbsCoord, minDelta);
-        return new FixedPrecisionContext(scale, origin);
-    }
+            Math.Max(Math.Abs(minX - origin.X), Math.Abs(maxX - origin.X)),
+            Math.Max(Math.Abs(minY - origin.Y), Math.Abs(maxY - origin.Y)));
+        double scale;
 
-    private static double ResolveScale(ClipperOptions options, double maxAbsCoord, double minDelta)
-    {
-        double scale = options.ScaleMode switch
+        if (resolved.ScaleMode == ClipperScaleMode.Auto)
         {
-            ClipperScaleMode.FixedPrecision => GetPrecisionScale(options.Precision),
-            ClipperScaleMode.FixedScale => GetFixedScale(options.FixedScale),
-            ClipperScaleMode.Auto => GetPrecisionScale(options.Precision),
-            _ => GetPrecisionScale(options.Precision)
-        };
-
-        if (options.ScaleMode == ClipperScaleMode.Auto && maxAbsCoord > 0D)
-        {
-            double maxScale = (MaxCoordDouble - 1D) / maxAbsCoord;
-            if (maxScale < scale)
-            {
-                scale = maxScale;
-            }
-
+            double desiredScale = GetPrecisionScale(resolved.Precision);
             if (minDelta > 0D)
             {
                 double minDeltaScale = 1D / minDelta;
-                if (minDeltaScale > scale)
+                if (minDeltaScale > desiredScale)
                 {
-                    scale = Math.Min(minDeltaScale, maxScale);
+                    desiredScale = minDeltaScale;
                 }
+            }
+
+            double maxScale = maxAbsCoord > 0D
+                ? (MaxCoordDouble - 1D) / maxAbsCoord
+                : double.PositiveInfinity;
+            scale = Math.Min(desiredScale, maxScale);
+        }
+        else
+        {
+            scale = resolved.ScaleMode switch
+            {
+                ClipperScaleMode.FixedPrecision => GetPrecisionScale(resolved.Precision),
+                ClipperScaleMode.FixedScale => GetFixedScale(resolved.FixedScale),
+                _ => GetPrecisionScale(resolved.Precision)
+            };
+
+            if (scale <= 0D)
+            {
+                throw new ArgumentOutOfRangeException(nameof(options), "Scale must be greater than zero.");
+            }
+
+            if (maxAbsCoord > 0D && maxAbsCoord * scale >= MaxCoordDouble)
+            {
+                throw new ArgumentOutOfRangeException(nameof(options), "Input coordinates exceed fixed-precision range.");
             }
         }
 
@@ -94,39 +108,26 @@ internal readonly struct FixedPrecisionContext
             throw new ArgumentOutOfRangeException(nameof(options), "Scale must be greater than zero.");
         }
 
-        if (options.ScaleMode != ClipperScaleMode.Auto && maxAbsCoord > 0D &&
-            maxAbsCoord * scale >= MaxCoordDouble)
-        {
-            throw new ArgumentOutOfRangeException(nameof(options), "Input coordinates exceed fixed-precision range.");
-        }
-
-        return scale;
+        return new FixedPrecisionContext(scale, origin);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static double GetPrecisionScale(int precision)
     {
-        if (precision < -16 || precision > 16)
-        {
-            throw new ArgumentOutOfRangeException(nameof(precision), "Precision must be between -16 and 16.");
-        }
-
+        Guard.MustBeBetweenOrEqualTo(precision, -16, 16, nameof(precision));
         return Math.Pow(10D, precision);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static double GetFixedScale(double scale)
     {
-        if (scale <= 0D)
-        {
-            throw new ArgumentOutOfRangeException(nameof(scale), "Fixed scale must be greater than zero.");
-        }
-
+        Guard.MustBeGreaterThan(scale, 0D, nameof(scale));
         return scale;
     }
 
     private static void GetCoordinateStats(
         ReadOnlySpan<Polygon> polygons,
+        bool computeMinDelta,
         out double minX,
         out double minY,
         out double maxX,
@@ -138,6 +139,62 @@ internal readonly struct FixedPrecisionContext
         maxX = double.NegativeInfinity;
         maxY = double.NegativeInfinity;
         minDelta = double.PositiveInfinity;
+
+        if (!computeMinDelta)
+        {
+            for (int i = 0; i < polygons.Length; i++)
+            {
+                Polygon polygon = polygons[i];
+                for (int j = 0; j < polygon.Count; j++)
+                {
+                    Contour contour = polygon[j];
+                    int count = contour.Count;
+                    if (count == 0)
+                    {
+                        continue;
+                    }
+
+                    for (int k = 0; k < count; k++)
+                    {
+                        Vertex vertex = contour[k];
+                        double x = vertex.X;
+                        double y = vertex.Y;
+                        if (x < minX)
+                        {
+                            minX = x;
+                        }
+
+                        if (x > maxX)
+                        {
+                            maxX = x;
+                        }
+
+                        if (y < minY)
+                        {
+                            minY = y;
+                        }
+
+                        if (y > maxY)
+                        {
+                            maxY = y;
+                        }
+                    }
+                }
+            }
+
+            if (double.IsPositiveInfinity(minX))
+            {
+                minX = 0D;
+                minY = 0D;
+                maxX = 0D;
+                maxY = 0D;
+            }
+
+            minDelta = 0D;
+            return;
+        }
+
+        int totalVertices = 0;
 
         for (int i = 0; i < polygons.Length; i++)
         {
@@ -151,7 +208,7 @@ internal readonly struct FixedPrecisionContext
                     continue;
                 }
 
-                Vertex prev = contour[0];
+                totalVertices += count;
                 for (int k = 0; k < count; k++)
                 {
                     Vertex vertex = contour[k];
@@ -176,53 +233,102 @@ internal readonly struct FixedPrecisionContext
                     {
                         maxY = y;
                     }
-
-                    if (k > 0)
-                    {
-                        double dx = Math.Abs(vertex.X - prev.X);
-                        double dy = Math.Abs(vertex.Y - prev.Y);
-                        if (dx > 0D && dx < minDelta)
-                        {
-                            minDelta = dx;
-                        }
-
-                        if (dy > 0D && dy < minDelta)
-                        {
-                            minDelta = dy;
-                        }
-                    }
-
-                    prev = vertex;
                 }
             }
+        }
+
+        if (totalVertices == 0)
+        {
+            minDelta = 0D;
+            minX = 0D;
+            minY = 0D;
+            maxX = 0D;
+            maxY = 0D;
+            return;
+        }
+
+        double[] xs = ArrayPool<double>.Shared.Rent(totalVertices);
+        double[] ys = ArrayPool<double>.Shared.Rent(totalVertices);
+        int index = 0;
+
+        try
+        {
+            for (int i = 0; i < polygons.Length; i++)
+            {
+                Polygon polygon = polygons[i];
+                for (int j = 0; j < polygon.Count; j++)
+                {
+                    Contour contour = polygon[j];
+                    int count = contour.Count;
+                    if (count == 0)
+                    {
+                        continue;
+                    }
+
+                    for (int k = 0; k < count; k++)
+                    {
+                        Vertex vertex = contour[k];
+                        xs[index] = vertex.X;
+                        ys[index] = vertex.Y;
+                        index++;
+                    }
+                }
+            }
+
+            Array.Sort(xs, 0, index);
+            Array.Sort(ys, 0, index);
+
+            minDelta = FindMinPositiveDelta(xs, index);
+            double minDeltaY = FindMinPositiveDelta(ys, index);
+            if (minDeltaY < minDelta)
+            {
+                minDelta = minDeltaY;
+            }
+        }
+        finally
+        {
+            ArrayPool<double>.Shared.Return(xs);
+            ArrayPool<double>.Shared.Return(ys);
         }
 
         if (double.IsPositiveInfinity(minDelta))
         {
             minDelta = 0D;
         }
-
-        if (double.IsPositiveInfinity(minX))
-        {
-            minX = 0D;
-            minY = 0D;
-            maxX = 0D;
-            maxY = 0D;
-        }
     }
 
-
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static long CheckCast(double value)
+    private static double FindMinPositiveDelta(double[] values, int count)
     {
-        if (value > MaxCoordDouble || value < -MaxCoordDouble)
+        if (count < 2)
         {
-            throw new ArgumentOutOfRangeException(nameof(value), "Fixed-precision coordinate is out of range.");
+            return double.PositiveInfinity;
         }
 
-        if (value <= -DoubleExactIntLimit || value >= DoubleExactIntLimit)
+        double minDelta = double.PositiveInfinity;
+        double prev = values[0];
+
+        for (int i = 1; i < count; i++)
         {
-            return (long)Math.Round((decimal)value, MidpointRounding.AwayFromZero);
+            double current = values[i];
+            double delta = current - prev;
+            if (delta > 0D && delta < minDelta)
+            {
+                minDelta = delta;
+            }
+
+            prev = current;
+        }
+
+        return minDelta;
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static long CheckCast(double value)
+    {
+        if (value is > MaxCoordDouble or < -MaxCoordDouble)
+        {
+            throw new ArgumentOutOfRangeException(nameof(value), "Fixed-precision coordinate is out of range.");
         }
 
         return (long)Math.Round(value, MidpointRounding.AwayFromZero);

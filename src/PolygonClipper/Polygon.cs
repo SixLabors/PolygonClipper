@@ -27,9 +27,9 @@ public sealed class Polygon : IReadOnlyCollection<Contour>
     /// <summary>
     /// Initializes a new instance of the <see cref="Polygon"/> class with a contour capacity.
     /// </summary>
-    /// <param name="contourCapacity">The initial contour capacity.</param>
-    public Polygon(int contourCapacity)
-        => this.contours = new List<Contour>(contourCapacity);
+    /// <param name="capacity">The initial contour capacity.</param>
+    public Polygon(int capacity)
+        => this.contours = new List<Contour>(capacity);
 
     /// <summary>
     /// Gets the number of contours in the polygon.

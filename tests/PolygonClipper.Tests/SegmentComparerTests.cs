@@ -10,39 +10,39 @@ public class SegmentComparerTests
     public void NotCollinear_SharedLeftPoint_RightPointFirst()
     {
         StatusLine tree = new();
-        Vertex64 pt = default;
-        SweepEvent se1 = new(pt, true, new SweepEvent(new Vertex64(1, 1), false));
-        SweepEvent se2 = new(pt, true, new SweepEvent(new Vertex64(2, 3), false));
+        Vertex pt = default;
+        SweepEvent se1 = new(pt, true, new SweepEvent(new Vertex(1, 1), false));
+        SweepEvent se2 = new(pt, true, new SweepEvent(new Vertex(2, 3), false));
 
         tree.Add(se1);
         tree.Add(se2);
 
-        Assert.Equal(new Vertex64(2, 3), tree.Max.OtherEvent.Point);
-        Assert.Equal(new Vertex64(1, 1), tree.Min.OtherEvent.Point);
+        Assert.Equal(new Vertex(2, 3), tree.Max.OtherEvent.Point);
+        Assert.Equal(new Vertex(1, 1), tree.Min.OtherEvent.Point);
     }
 
     [Fact]
     public void NotCollinear_DifferentLeftPoint_RightPointYCoordToSort()
     {
         StatusLine tree = new();
-        SweepEvent se1 = new(new Vertex64(0, 1), true, new SweepEvent(new Vertex64(1, 1), false));
-        SweepEvent se2 = new(new Vertex64(0, 2), true, new SweepEvent(new Vertex64(2, 3), false));
+        SweepEvent se1 = new(new Vertex(0, 1), true, new SweepEvent(new Vertex(1, 1), false));
+        SweepEvent se2 = new(new Vertex(0, 2), true, new SweepEvent(new Vertex(2, 3), false));
 
         tree.Add(se1);
         tree.Add(se2);
 
-        Assert.Equal(new Vertex64(1, 1), tree.Min.OtherEvent.Point);
-        Assert.Equal(new Vertex64(2, 3), tree.Max.OtherEvent.Point);
+        Assert.Equal(new Vertex(1, 1), tree.Min.OtherEvent.Point);
+        Assert.Equal(new Vertex(2, 3), tree.Max.OtherEvent.Point);
     }
 
     [Fact]
     public void NotCollinear_EventsOrderInSweepLine()
     {
-        SweepEvent se1 = new(new Vertex64(0, 1), true, new SweepEvent(new Vertex64(2, 1), false));
-        SweepEvent se2 = new(new Vertex64(-1, 0), true, new SweepEvent(new Vertex64(2, 3), false));
+        SweepEvent se1 = new(new Vertex(0, 1), true, new SweepEvent(new Vertex(2, 1), false));
+        SweepEvent se2 = new(new Vertex(-1, 0), true, new SweepEvent(new Vertex(2, 3), false));
 
-        SweepEvent se3 = new(new Vertex64(0, 1), true, new SweepEvent(new Vertex64(3, 4), false));
-        SweepEvent se4 = new(new Vertex64(-1, 0), true, new SweepEvent(new Vertex64(3, 1), false));
+        SweepEvent se3 = new(new Vertex(0, 1), true, new SweepEvent(new Vertex(3, 4), false));
+        SweepEvent se4 = new(new Vertex(-1, 0), true, new SweepEvent(new Vertex(3, 1), false));
 
         SweepEventComparer eventComparer = new();
 
@@ -59,8 +59,8 @@ public class SegmentComparerTests
     [Fact]
     public void FirstPointIsBelow()
     {
-        SweepEvent se2 = new(new Vertex64(0, 1), true, new SweepEvent(new Vertex64(2, 1), false));
-        SweepEvent se1 = new(new Vertex64(-1, 0), true, new SweepEvent(new Vertex64(2, 3), false));
+        SweepEvent se2 = new(new Vertex(0, 1), true, new SweepEvent(new Vertex(2, 1), false));
+        SweepEvent se1 = new(new Vertex(-1, 0), true, new SweepEvent(new Vertex(2, 3), false));
 
         Assert.False(se1.IsBelow(se2.Point));
 
@@ -70,8 +70,8 @@ public class SegmentComparerTests
     [Fact]
     public void CollinearSegments()
     {
-        SweepEvent se1 = new(new Vertex64(1, 1), true, new SweepEvent(new Vertex64(5, 1), false), PolygonType.Subject);
-        SweepEvent se2 = new(new Vertex64(2, 1), true, new SweepEvent(new Vertex64(3, 1), false), PolygonType.Clipping);
+        SweepEvent se1 = new(new Vertex(1, 1), true, new SweepEvent(new Vertex(5, 1), false), PolygonType.Subject);
+        SweepEvent se2 = new(new Vertex(2, 1), true, new SweepEvent(new Vertex(3, 1), false), PolygonType.Clipping);
 
         // Assert that the segments belong to different polygons
         Assert.NotEqual(se1.PolygonType, se2.PolygonType);
@@ -82,10 +82,10 @@ public class SegmentComparerTests
     public void CollinearSharedLeftPoint()
     {
         // Arrange
-        Vertex64 pt = new(0, 1);
+        Vertex pt = new(0, 1);
 
-        SweepEvent se1 = new(pt, true, new SweepEvent(new Vertex64(5, 1), false), PolygonType.Clipping);
-        SweepEvent se2 = new(pt, true, new SweepEvent(new Vertex64(3, 1), false), PolygonType.Clipping);
+        SweepEvent se1 = new(pt, true, new SweepEvent(new Vertex(5, 1), false), PolygonType.Clipping);
+        SweepEvent se2 = new(pt, true, new SweepEvent(new Vertex(3, 1), false), PolygonType.Clipping);
 
         se1.ContourId = 1;
         se2.ContourId = 2;
@@ -106,8 +106,8 @@ public class SegmentComparerTests
     [Fact]
     public void CollinearSamePolygonDifferentLeftPoints()
     {
-        SweepEvent se1 = new(new Vertex64(1, 1), true, new SweepEvent(new Vertex64(5, 1), false), PolygonType.Subject);
-        SweepEvent se2 = new(new Vertex64(2, 1), true, new SweepEvent(new Vertex64(3, 1), false), PolygonType.Clipping);
+        SweepEvent se1 = new(new Vertex(1, 1), true, new SweepEvent(new Vertex(5, 1), false), PolygonType.Subject);
+        SweepEvent se2 = new(new Vertex(2, 1), true, new SweepEvent(new Vertex(3, 1), false), PolygonType.Clipping);
 
         Assert.NotEqual(se1.PolygonType, se2.PolygonType);
         Assert.NotEqual(se1.Point, se2.Point);
@@ -173,9 +173,8 @@ public class SegmentComparerTests
         double y2,
         bool left)
     {
-        const double scale = 2d;
-        Vertex64 v1 = new((long)(x1 * scale), (long)(y1 * scale));
-        Vertex64 v2 = new((long)(x2 * scale), (long)(y2 * scale));
+        Vertex v1 = new(x1, y1);
+        Vertex v2 = new(x2, y2);
         SweepEvent se2 = new(v2, !left);
         SweepEvent se1 = new(v1, left, se2) { ContourId = contourId };
         se2.OtherEvent = se1;
