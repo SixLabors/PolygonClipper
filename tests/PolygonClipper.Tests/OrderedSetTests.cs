@@ -1,8 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Collections.Generic;
-
 namespace SixLabors.PolygonClipper.Tests;
 
 public class OrderedSetTests
@@ -10,16 +8,9 @@ public class OrderedSetTests
     [Fact]
     public void Add_EnumeratesInOrder()
     {
-        OrderedSet<int> set = new();
-        set.Add(5);
-        set.Add(1);
-        set.Add(3);
+        OrderedSet<int> set = [5, 1, 3];
 
-        List<int> values = new();
-        foreach (int value in set)
-        {
-            values.Add(value);
-        }
+        List<int> values = [.. set];
 
         Assert.Equal(3, values.Count);
         Assert.Equal(1, values[0]);
@@ -32,12 +23,14 @@ public class OrderedSetTests
     [Fact]
     public void Add_DuplicatesPreserveInsertionOrder()
     {
-        OrderedSet<KeyedItem> set = new(new KeyedItemComparer());
-        set.Add(new KeyedItem(1, 1));
-        set.Add(new KeyedItem(1, 2));
-        set.Add(new KeyedItem(1, 3));
+        OrderedSet<KeyedItem> set = new(new KeyedItemComparer())
+        {
+            new KeyedItem(1, 1),
+            new KeyedItem(1, 2),
+            new KeyedItem(1, 3)
+        };
 
-        List<int> ids = new();
+        List<int> ids = [];
         foreach (KeyedItem item in set)
         {
             ids.Add(item.Id);
@@ -52,11 +45,7 @@ public class OrderedSetTests
     [Fact]
     public void LowerBoundUpperBound_ReturnExpectedNodes()
     {
-        OrderedSet<int> set = new();
-        set.Add(1);
-        set.Add(3);
-        set.Add(5);
-        set.Add(7);
+        OrderedSet<int> set = [1, 3, 5, 7];
 
         Assert.True(set.TryGetLowerBound(0, out int lower));
         Assert.Equal(1, lower);
@@ -76,10 +65,7 @@ public class OrderedSetTests
     [Fact]
     public void RemoveByValue_UpdatesOrder()
     {
-        OrderedSet<int> set = new();
-        set.Add(1);
-        set.Add(2);
-        set.Add(3);
+        OrderedSet<int> set = [1, 2, 3];
 
         Assert.True(set.Remove(2));
 
@@ -87,11 +73,7 @@ public class OrderedSetTests
         Assert.Equal(1, set.Min);
         Assert.Equal(3, set.Max);
 
-        List<int> values = new();
-        foreach (int value in set)
-        {
-            values.Add(value);
-        }
+        List<int> values = [.. set];
 
         Assert.Equal(2, values.Count);
         Assert.Equal(1, values[0]);
@@ -101,14 +83,16 @@ public class OrderedSetTests
     [Fact]
     public void RemoveByValue_RemovesFirstMatch()
     {
-        OrderedSet<KeyedItem> set = new(new KeyedItemComparer());
-        set.Add(new KeyedItem(1, 1));
-        set.Add(new KeyedItem(1, 2));
-        set.Add(new KeyedItem(1, 3));
+        OrderedSet<KeyedItem> set = new(new KeyedItemComparer())
+        {
+            new KeyedItem(1, 1),
+            new KeyedItem(1, 2),
+            new KeyedItem(1, 3)
+        };
 
         Assert.True(set.Remove(new KeyedItem(1, 0)));
 
-        List<int> ids = new();
+        List<int> ids = [];
         foreach (KeyedItem item in set)
         {
             ids.Add(item.Id);
@@ -122,7 +106,7 @@ public class OrderedSetTests
     [Fact]
     public void MinMax_ThrowsOnEmpty()
     {
-        OrderedSet<int> set = new();
+        OrderedSet<int> set = [];
         Assert.Throws<InvalidOperationException>(() => _ = set.Min);
         Assert.Throws<InvalidOperationException>(() => _ = set.Max);
     }
@@ -130,9 +114,7 @@ public class OrderedSetTests
     [Fact]
     public void Clear_ResetsSet()
     {
-        OrderedSet<int> set = new();
-        set.Add(2);
-        set.Add(1);
+        OrderedSet<int> set = [2, 1];
         set.Clear();
 
         Assert.Equal(0, set.Count);

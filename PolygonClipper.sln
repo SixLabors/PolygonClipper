@@ -21,8 +21,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		ci-pack.ps1 = ci-pack.ps1
 		ci-test.ps1 = ci-test.ps1
 		LICENSE = LICENSE
-		THIRD-PARTY-NOTICES.md = THIRD-PARTY-NOTICES.md
 		README.md = README.md
+		THIRD-PARTY-NOTICES.md = THIRD-PARTY-NOTICES.md
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GeoJson", "tests\GeoJson\GeoJson.csproj", "{F881441F-D3B6-4B48-8CEF-8DC0746D4578}"
@@ -51,10 +51,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ISSUE_TEMPLATE", "ISSUE_TEM
 		.github\ISSUE_TEMPLATE\oss-bug-report.yml = .github\ISSUE_TEMPLATE\oss-bug-report.yml
 	EndProjectSection
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImageSharp.Drawing", "..\..\sn\ImageSharp.Drawing\src\ImageSharp.Drawing\ImageSharp.Drawing.csproj", "{AF22020A-A77B-5728-6EB9-1F9F9FC344FA}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Clipper2Lib", "..\..\AngusJohnson\Clipper2\CSharp\Clipper2Lib\Clipper2Lib.csproj", "{442C0648-BED0-CD51-39C6-4D54ACAEC5B3}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -77,14 +73,6 @@ Global
 		{F1965B36-D896-4BC1-8941-7FE6CEB82CD5}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F1965B36-D896-4BC1-8941-7FE6CEB82CD5}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F1965B36-D896-4BC1-8941-7FE6CEB82CD5}.Release|Any CPU.Build.0 = Release|Any CPU
-		{AF22020A-A77B-5728-6EB9-1F9F9FC344FA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{AF22020A-A77B-5728-6EB9-1F9F9FC344FA}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{AF22020A-A77B-5728-6EB9-1F9F9FC344FA}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{AF22020A-A77B-5728-6EB9-1F9F9FC344FA}.Release|Any CPU.Build.0 = Release|Any CPU
-		{442C0648-BED0-CD51-39C6-4D54ACAEC5B3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{442C0648-BED0-CD51-39C6-4D54ACAEC5B3}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{442C0648-BED0-CD51-39C6-4D54ACAEC5B3}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{442C0648-BED0-CD51-39C6-4D54ACAEC5B3}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -98,8 +86,6 @@ Global
 		{F1965B36-D896-4BC1-8941-7FE6CEB82CD5} = {84C4B358-492B-46FC-9F11-FBB76B06BD3F}
 		{68A8CC40-6AED-4E96-B524-31B1158FDEEA} = {F0882E95-667C-48FE-B43A-24FC55D9F354}
 		{02EA681E-C7D8-13C7-8484-4AC65E1B71E8} = {6F7A3AE6-C7D1-441F-A203-BA6575931CE2}
-		{AF22020A-A77B-5728-6EB9-1F9F9FC344FA} = {F0882E95-667C-48FE-B43A-24FC55D9F354}
-		{442C0648-BED0-CD51-39C6-4D54ACAEC5B3} = {F0882E95-667C-48FE-B43A-24FC55D9F354}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {2C73BEEC-091B-45E4-A0BD-7D7CD16A8451}
@@ -107,6 +93,5 @@ Global
 	GlobalSection(SharedMSBuildProjectFiles) = preSolution
 		shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems*{3c8d945e-6074-437e-b6ea-237bd0c80411}*SharedItemsImports = 5
 		shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems*{68a8cc40-6aed-4e96-b524-31b1158fdeea}*SharedItemsImports = 13
-		..\..\sn\ImageSharp.Drawing\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems*{af22020a-a77b-5728-6eb9-1f9f9fc344fa}*SharedItemsImports = 5
 	EndGlobalSection
 EndGlobal
