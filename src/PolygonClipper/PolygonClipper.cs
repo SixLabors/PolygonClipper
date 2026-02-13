@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
@@ -100,15 +101,24 @@ public class PolygonClipper
     /// Removes self-intersections from a polygon.
     /// </summary>
     /// <param name="polygon">The polygon to process.</param>
-    /// <param name="fillRule">
-    /// Optional fill rule that determines which regions are considered filled after splitting intersections.
-    /// When <see langword="null"/>, the effective positive/negative winding rule is inferred from contour orientation.
-    /// </param>
     /// <returns>
     /// A new polygon with self-intersections resolved. Output contours are implicitly closed
     /// (the first vertex is not duplicated as a terminal closing vertex).
     /// </returns>
-    public static Polygon RemoveSelfIntersections(Polygon polygon, FillRule? fillRule = null)
+    public static Polygon RemoveSelfIntersections(Polygon polygon)
+        => SelfIntersectionRemover.Process(polygon, fillRule: null);
+
+    /// <summary>
+    /// Removes self-intersections from a polygon using an explicit fill rule.
+    /// </summary>
+    /// <param name="polygon">The polygon to process.</param>
+    /// <param name="fillRule">Fill rule that determines which regions are considered filled after splitting intersections.</param>
+    /// <returns>
+    /// A new polygon with self-intersections resolved. Output contours are implicitly closed
+    /// (the first vertex is not duplicated as a terminal closing vertex).
+    /// </returns>
+    [EditorBrowsable(EditorBrowsableState.Advanced)]
+    public static Polygon RemoveSelfIntersections(Polygon polygon, FillRule fillRule)
         => SelfIntersectionRemover.Process(polygon, fillRule);
 
     /// <summary>
