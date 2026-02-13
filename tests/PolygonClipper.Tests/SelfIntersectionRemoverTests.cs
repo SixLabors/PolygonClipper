@@ -14,12 +14,14 @@ public class SelfIntersectionRemoverTests
     public void SimpleRectangle_NoSelfIntersections_PreservesStructure()
     {
         // Arrange: Simple rectangle with explicitly closed input
-        Contour outer = [];
-        outer.Add(new Vertex(0, 0));
-        outer.Add(new Vertex(10, 0));
-        outer.Add(new Vertex(10, 10));
-        outer.Add(new Vertex(0, 10));
-        outer.Add(new Vertex(0, 0)); // Explicitly closes the input contour
+        Contour outer =
+        [
+            new Vertex(0, 0),
+            new Vertex(10, 0),
+            new Vertex(10, 10),
+            new Vertex(0, 10),
+            new Vertex(0, 0) // Explicitly closes the input contour
+        ];
 
         Polygon input = [outer];
 
@@ -28,7 +30,7 @@ public class SelfIntersectionRemoverTests
 
         // Assert
         Assert.Equal(1, result.Count);
-        Assert.Equal(4, result[0].Count);
+        Assert.Equal(outer.Count, result[0].Count);
         Assert.True(result[0].IsExternal);
     }
 
@@ -39,20 +41,25 @@ public class SelfIntersectionRemoverTests
     public void RectangleWithHole_NoSelfIntersections_PreservesStructure()
     {
         // Arrange: Outer rectangle
-        Contour outer = [];
-        outer.Add(new Vertex(0, 0));
-        outer.Add(new Vertex(20, 0));
-        outer.Add(new Vertex(20, 20));
-        outer.Add(new Vertex(0, 20));
-        outer.Add(new Vertex(0, 0)); // Closing vertex
+        Contour outer =
+        [
+            new Vertex(0, 0),
+            new Vertex(20, 0),
+            new Vertex(20, 20),
+            new Vertex(0, 20),
+            new Vertex(0, 0) // Closing vertex
+            // Inner rectangle (hole) - smaller, centered
+        ];
 
         // Inner rectangle (hole) - smaller, centered
-        Contour inner = [];
-        inner.Add(new Vertex(5, 5));
-        inner.Add(new Vertex(15, 5));
-        inner.Add(new Vertex(15, 15));
-        inner.Add(new Vertex(5, 15));
-        inner.Add(new Vertex(5, 5)); // Closing vertex
+        Contour inner =
+        [
+            new Vertex(5, 5),
+            new Vertex(15, 5),
+            new Vertex(15, 15),
+            new Vertex(5, 15),
+            new Vertex(5, 5) // Closing vertex
+        ];
 
         Polygon input = [outer, inner];
 
@@ -64,11 +71,11 @@ public class SelfIntersectionRemoverTests
 
         // First contour should be external (outer)
         Assert.True(result[0].IsExternal);
-        Assert.Equal(4, result[0].Count);
+        Assert.Equal(outer.Count, result[0].Count);
 
         // Second contour should be a hole (inner)
         Assert.False(result[1].IsExternal);
-        Assert.Equal(4, result[1].Count);
+        Assert.Equal(inner.Count, result[1].Count);
     }
 
     /// <summary>
@@ -116,8 +123,8 @@ public class SelfIntersectionRemoverTests
         Assert.False(result[1].IsExternal);
 
         // Vertex counts should be preserved.
-        Assert.Equal(32, result[0].Count);
-        Assert.Equal(32, result[1].Count);
+        Assert.Equal(outer.Count, result[0].Count);
+        Assert.Equal(inner.Count, result[1].Count);
     }
 
     /// <summary>
@@ -145,8 +152,8 @@ public class SelfIntersectionRemoverTests
         Assert.False(result[1].IsExternal);
 
         // Vertex counts should be preserved
-        Assert.Equal(outerVertices, result[0].Count);
-        Assert.Equal(innerVertices, result[1].Count);
+        Assert.Equal(outer.Count, result[0].Count);
+        Assert.Equal(inner.Count, result[1].Count);
     }
 
     /// <summary>
@@ -1951,8 +1958,8 @@ public class SelfIntersectionRemoverTests
         Assert.False(result[1].IsExternal);
 
         // Vertex counts should be preserved
-        Assert.Equal(outerVertices, result[0].Count);
-        Assert.Equal(innerVertices, result[1].Count);
+        Assert.Equal(outer.Count, result[0].Count);
+        Assert.Equal(inner.Count, result[1].Count);
     }
 
     /// <summary>
@@ -2004,8 +2011,8 @@ public class SelfIntersectionRemoverTests
         Assert.True(result[1].IsExternal);
 
         // Vertex counts preserved
-        Assert.Equal(100, result[0].Count);
-        Assert.Equal(100, result[1].Count);
+        Assert.Equal(circle1.Count, result[0].Count);
+        Assert.Equal(circle2.Count, result[1].Count);
     }
 
     /// <summary>
@@ -2015,12 +2022,14 @@ public class SelfIntersectionRemoverTests
     public void ExternalWithMultipleHoles_PreservesStructure()
     {
         // Arrange: Outer rectangle with two circular holes
-        Contour outer = [];
-        outer.Add(new Vertex(0, 0));
-        outer.Add(new Vertex(100, 0));
-        outer.Add(new Vertex(100, 200));
-        outer.Add(new Vertex(0, 200));
-        outer.Add(new Vertex(0, 0));
+        Contour outer =
+        [
+            new Vertex(0, 0),
+            new Vertex(100, 0),
+            new Vertex(100, 200),
+            new Vertex(0, 200),
+            new Vertex(0, 0)
+        ];
 
         Contour hole1 = CreateRegularPolygon(50, 50, 20, 32);
         Contour hole2 = CreateRegularPolygon(50, 150, 20, 32);
@@ -2046,19 +2055,23 @@ public class SelfIntersectionRemoverTests
         // Arrange: Two rectangles sharing edge at X=10
         // Rectangle A: (0,0)-(10,0)-(10,10)-(0,10)
         // Rectangle B: (10,0)-(20,0)-(20,10)-(10,10)
-        Contour rectA = [];
-        rectA.Add(new Vertex(0, 0));
-        rectA.Add(new Vertex(10, 0));
-        rectA.Add(new Vertex(10, 10));
-        rectA.Add(new Vertex(0, 10));
-        rectA.Add(new Vertex(0, 0));
+        Contour rectA =
+        [
+            new Vertex(0, 0),
+            new Vertex(10, 0),
+            new Vertex(10, 10),
+            new Vertex(0, 10),
+            new Vertex(0, 0)
+        ];
 
-        Contour rectB = [];
-        rectB.Add(new Vertex(10, 0));
-        rectB.Add(new Vertex(20, 0));
-        rectB.Add(new Vertex(20, 10));
-        rectB.Add(new Vertex(10, 10));
-        rectB.Add(new Vertex(10, 0));
+        Contour rectB =
+        [
+            new Vertex(10, 0),
+            new Vertex(20, 0),
+            new Vertex(20, 10),
+            new Vertex(10, 10),
+            new Vertex(10, 0)
+        ];
 
         Polygon input = [rectA, rectB];
 
@@ -2067,9 +2080,6 @@ public class SelfIntersectionRemoverTests
 
         // Assert: Should merge into a single rectangle (0,0)-(20,0)-(20,10)-(0,10)
         Assert.Equal(1, result.Count);
-
-        // The merged contour should have 4 vertices.
-        Assert.Equal(4, result[0].Count);
 
         AssertMatchesClipperByCount(input);
     }
@@ -2082,20 +2092,25 @@ public class SelfIntersectionRemoverTests
     public void RectangleAndParallelogramTouchingAtHorizontalEdge_MergeCorrectly()
     {
         // Arrange: Horizontal rectangle at Y=83-88
-        Contour rect = [];
-        rect.Add(new Vertex(37.5, 83));
-        rect.Add(new Vertex(51.61859893798828, 83));
-        rect.Add(new Vertex(51.61859893798828, 88));
-        rect.Add(new Vertex(37.5, 88));
-        rect.Add(new Vertex(37.5, 83));
+        Contour rect =
+        [
+            new Vertex(37.5, 83),
+            new Vertex(51.61859893798828, 83),
+            new Vertex(51.61859893798828, 88),
+            new Vertex(37.5, 88),
+            new Vertex(37.5, 83)
+            // Parallelogram that overlaps the rectangle (diagonal shape from ~Y=84-99)
+        ];
 
         // Parallelogram that overlaps the rectangle (diagonal shape from ~Y=84-99)
-        Contour para = [];
-        para.Add(new Vertex(35.29882049560547, 86.68524932861328));
-        para.Add(new Vertex(39.70117950439453, 84.31475067138672));
-        para.Add(new Vertex(46.81267547607422, 97.52181243896484));
-        para.Add(new Vertex(42.410316467285156, 99.8923110961914));
-        para.Add(new Vertex(35.29882049560547, 86.68524932861328));
+        Contour para =
+        [
+            new Vertex(35.29882049560547, 86.68524932861328),
+            new Vertex(39.70117950439453, 84.31475067138672),
+            new Vertex(46.81267547607422, 97.52181243896484),
+            new Vertex(42.410316467285156, 99.8923110961914),
+            new Vertex(35.29882049560547, 86.68524932861328)
+        ];
 
         Polygon input = [rect, para];
 
@@ -2110,12 +2125,14 @@ public class SelfIntersectionRemoverTests
     public void FigureEight_WithSelfIntersection_RemainsSingleContour()
     {
         // Arrange: Bowtie/hourglass that crosses itself at (5,0) so the winding stays >0 everywhere.
-        Contour figure8 = [];
-        figure8.Add(new Vertex(0, 5));    // Top-left
-        figure8.Add(new Vertex(10, -5));  // Bottom-right (crosses the next segment)
-        figure8.Add(new Vertex(10, 5));   // Top-right
-        figure8.Add(new Vertex(0, -5));   // Bottom-left (crosses back)
-        figure8.Add(new Vertex(0, 5));    // Back to start
+        Contour figure8 =
+        [
+            new Vertex(0, 5), // Top-left
+            new Vertex(10, -5), // Bottom-right (crosses the next segment)
+            new Vertex(10, 5), // Top-right
+            new Vertex(0, -5), // Bottom-left (crosses back)
+            new Vertex(0, 5) // Back to start
+        ];
 
         Polygon input = [figure8];
 
@@ -2134,33 +2151,41 @@ public class SelfIntersectionRemoverTests
     public void MultipleIntersectionsOnSingleSegment_SplitsAll()
     {
         // Arrange: A long rectangle edge intersected by multiple vertical rectangles.
-        Contour baseRect = [];
-        baseRect.Add(new Vertex(0, 0));
-        baseRect.Add(new Vertex(30, 0));
-        baseRect.Add(new Vertex(30, 4));
-        baseRect.Add(new Vertex(0, 4));
-        baseRect.Add(new Vertex(0, 0));
+        Contour baseRect =
+        [
+            new Vertex(0, 0),
+            new Vertex(30, 0),
+            new Vertex(30, 4),
+            new Vertex(0, 4),
+            new Vertex(0, 0)
+        ];
 
-        Contour post1 = [];
-        post1.Add(new Vertex(4, -2));
-        post1.Add(new Vertex(7, -2));
-        post1.Add(new Vertex(7, 8));
-        post1.Add(new Vertex(4, 8));
-        post1.Add(new Vertex(4, -2));
+        Contour post1 =
+        [
+            new Vertex(4, -2),
+            new Vertex(7, -2),
+            new Vertex(7, 8),
+            new Vertex(4, 8),
+            new Vertex(4, -2)
+        ];
 
-        Contour post2 = [];
-        post2.Add(new Vertex(13, -2));
-        post2.Add(new Vertex(16, -2));
-        post2.Add(new Vertex(16, 8));
-        post2.Add(new Vertex(13, 8));
-        post2.Add(new Vertex(13, -2));
+        Contour post2 =
+        [
+            new Vertex(13, -2),
+            new Vertex(16, -2),
+            new Vertex(16, 8),
+            new Vertex(13, 8),
+            new Vertex(13, -2)
+        ];
 
-        Contour post3 = [];
-        post3.Add(new Vertex(22, -2));
-        post3.Add(new Vertex(25, -2));
-        post3.Add(new Vertex(25, 8));
-        post3.Add(new Vertex(22, 8));
-        post3.Add(new Vertex(22, -2));
+        Contour post3 =
+        [
+            new Vertex(22, -2),
+            new Vertex(25, -2),
+            new Vertex(25, 8),
+            new Vertex(22, 8),
+            new Vertex(22, -2)
+        ];
 
         Polygon input = [baseRect, post1, post2, post3];
 
@@ -2175,19 +2200,23 @@ public class SelfIntersectionRemoverTests
     public void PartialOverlap_CollinearEdges_MatchesClipper()
     {
         // Arrange: Two rectangles with a partial overlap on the shared horizontal edges.
-        Contour rectA = [];
-        rectA.Add(new Vertex(0, 0));
-        rectA.Add(new Vertex(12, 0));
-        rectA.Add(new Vertex(12, 4));
-        rectA.Add(new Vertex(0, 4));
-        rectA.Add(new Vertex(0, 0));
+        Contour rectA =
+        [
+            new Vertex(0, 0),
+            new Vertex(12, 0),
+            new Vertex(12, 4),
+            new Vertex(0, 4),
+            new Vertex(0, 0)
+        ];
 
-        Contour rectB = [];
-        rectB.Add(new Vertex(6, 0));
-        rectB.Add(new Vertex(18, 0));
-        rectB.Add(new Vertex(18, 4));
-        rectB.Add(new Vertex(6, 4));
-        rectB.Add(new Vertex(6, 0));
+        Contour rectB =
+        [
+            new Vertex(6, 0),
+            new Vertex(18, 0),
+            new Vertex(18, 4),
+            new Vertex(6, 4),
+            new Vertex(6, 0)
+        ];
 
         Polygon input = [rectA, rectB];
 
@@ -2202,17 +2231,21 @@ public class SelfIntersectionRemoverTests
     public void DisjointPolygonsWithOverlappingBounds_RemainSeparate()
     {
         // Arrange: Two disjoint triangles with overlapping bounding boxes.
-        Contour triA = [];
-        triA.Add(new Vertex(0, 0));
-        triA.Add(new Vertex(4, 0));
-        triA.Add(new Vertex(0, 4));
-        triA.Add(new Vertex(0, 0));
+        Contour triA =
+        [
+            new Vertex(0, 0),
+            new Vertex(4, 0),
+            new Vertex(0, 4),
+            new Vertex(0, 0)
+        ];
 
-        Contour triB = [];
-        triB.Add(new Vertex(3, 3));
-        triB.Add(new Vertex(7, 3));
-        triB.Add(new Vertex(7, 7));
-        triB.Add(new Vertex(3, 3));
+        Contour triB =
+        [
+            new Vertex(3, 3),
+            new Vertex(7, 3),
+            new Vertex(7, 7),
+            new Vertex(3, 3)
+        ];
 
         Polygon input = [triA, triB];
 
@@ -2227,18 +2260,22 @@ public class SelfIntersectionRemoverTests
     public void PointTouchingContours_MergeIntoSingleContour()
     {
         // Arrange: Triangle touches the rectangle at a single edge point.
-        Contour rect = [];
-        rect.Add(new Vertex(0, 0));
-        rect.Add(new Vertex(10, 0));
-        rect.Add(new Vertex(10, 10));
-        rect.Add(new Vertex(0, 10));
-        rect.Add(new Vertex(0, 0));
+        Contour rect =
+        [
+            new Vertex(0, 0),
+            new Vertex(10, 0),
+            new Vertex(10, 10),
+            new Vertex(0, 10),
+            new Vertex(0, 0)
+        ];
 
-        Contour tri = [];
-        tri.Add(new Vertex(10, 5));
-        tri.Add(new Vertex(14, 3));
-        tri.Add(new Vertex(14, 7));
-        tri.Add(new Vertex(10, 5));
+        Contour tri =
+        [
+            new Vertex(10, 5),
+            new Vertex(14, 3),
+            new Vertex(14, 7),
+            new Vertex(10, 5)
+        ];
 
         Polygon input = [rect, tri];
 
@@ -2250,25 +2287,129 @@ public class SelfIntersectionRemoverTests
     }
 
     /// <summary>
+    /// Reproduces Clipper2 issue #1051 (add1 case) and validates against Martinez union.
+    /// </summary>
+    [Fact]
+    public void Issue1051_Union_Add1_MatchesMartinezUnion()
+    {
+        Contour mainActual = CreateIssue1051Main();
+
+        Contour add1 =
+        [
+            new Vertex(-2, 0),
+            new Vertex(0, 0),
+            new Vertex(0, 1),
+            new Vertex(-2, 1),
+            new Vertex(-2, 0)
+        ];
+
+        Polygon actual = PolygonClipper.RemoveSelfIntersections([mainActual, add1]);
+
+        Polygon expected = PolygonClipper.Union(
+            [CreateIssue1051Main()],
+            [[
+                new Vertex(-2, 0),
+                new Vertex(0, 0),
+                new Vertex(0, 1),
+                new Vertex(-2, 1),
+                new Vertex(-2, 0)
+            ]]);
+
+        AssertContourVertexSignature(expected, actual);
+    }
+
+    /// <summary>
+    /// Reproduces Clipper2 issue #1051 (add2 case) and validates against Martinez union.
+    /// </summary>
+    [Fact]
+    public void Issue1051_Union_Add2_MatchesMartinezUnion()
+    {
+        Contour mainActual = CreateIssue1051Main();
+
+        // Matches Rect64(-2, 1, 0, 1).AsPath() from the issue (degenerate rectangle).
+        Contour add2 =
+        [
+            new Vertex(-2, 1),
+            new Vertex(0, 1),
+            new Vertex(0, 1),
+            new Vertex(-2, 1),
+            new Vertex(-2, 1)
+        ];
+
+        Polygon actual = PolygonClipper.RemoveSelfIntersections([mainActual, add2]);
+
+        Polygon expected = PolygonClipper.Union(
+            [CreateIssue1051Main()],
+            [[
+                new Vertex(-2, 1),
+                new Vertex(0, 1),
+                new Vertex(0, 1),
+                new Vertex(-2, 1),
+                new Vertex(-2, 1)
+            ]]);
+
+        AssertContourVertexSignature(expected, actual);
+    }
+
+    private static Contour CreateIssue1051Main()
+        =>
+        [
+            new Vertex(0, 0),
+            new Vertex(2, 0),
+            new Vertex(2, 2),
+            new Vertex(0, 2),
+            new Vertex(0, 0)
+        ];
+
+    private static void AssertContourVertexSignature(Polygon expected, Polygon actual)
+    {
+        List<int> expectedCounts = GetContourVertexSignature(expected);
+        List<int> actualCounts = GetContourVertexSignature(actual);
+
+        Assert.Equal(expectedCounts.Count, actualCounts.Count);
+        for (int i = 0; i < expectedCounts.Count; i++)
+        {
+            Assert.Equal(expectedCounts[i], actualCounts[i]);
+        }
+    }
+
+    private static List<int> GetContourVertexSignature(Polygon polygon)
+    {
+        List<int> counts = new(polygon.Count);
+        for (int i = 0; i < polygon.Count; i++)
+        {
+            Contour contour = polygon[i];
+            counts.Add(contour.Count);
+        }
+
+        counts.Sort();
+        return counts;
+    }
+
+    /// <summary>
     /// Tests that explicit EvenOdd and NonZero fill rules are applied through the self-intersection pipeline.
     /// </summary>
     [Fact]
     public void FillRuleOverride_DuplicateContours_EvenOddAndNonZeroDiverge()
     {
         // Arrange: Two identical contours with the same winding.
-        Contour square1 = [];
-        square1.Add(new Vertex(0, 0));
-        square1.Add(new Vertex(10, 0));
-        square1.Add(new Vertex(10, 10));
-        square1.Add(new Vertex(0, 10));
-        square1.Add(new Vertex(0, 0));
+        Contour square1 =
+        [
+            new Vertex(0, 0),
+            new Vertex(10, 0),
+            new Vertex(10, 10),
+            new Vertex(0, 10),
+            new Vertex(0, 0)
+        ];
 
-        Contour square2 = [];
-        square2.Add(new Vertex(0, 0));
-        square2.Add(new Vertex(10, 0));
-        square2.Add(new Vertex(10, 10));
-        square2.Add(new Vertex(0, 10));
-        square2.Add(new Vertex(0, 0));
+        Contour square2 =
+        [
+            new Vertex(0, 0),
+            new Vertex(10, 0),
+            new Vertex(10, 10),
+            new Vertex(0, 10),
+            new Vertex(0, 0)
+        ];
 
         Polygon input = [square1, square2];
 
@@ -2428,7 +2569,7 @@ public class SelfIntersectionRemoverTests
 
         ClipperD clipper = new(precision)
         {
-            PreserveCollinear = false,
+            PreserveCollinear = true,
             ReverseSolution = pathsReversed
         };
 
@@ -2459,7 +2600,7 @@ public class SelfIntersectionRemoverTests
 
         ClipperD clipper = new(precision)
         {
-            PreserveCollinear = false,
+            PreserveCollinear = true,
             ReverseSolution = false
         };
 

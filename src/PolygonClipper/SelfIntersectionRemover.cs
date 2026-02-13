@@ -55,6 +55,7 @@ internal static class SelfIntersectionRemover
 
         bool hasExplicitFillRule = fillRule is FillRule;
         List<List<Vertex>> subject = BuildSubjectPaths(polygon, !hasExplicitFillRule);
+
         FillRule effectiveFillRule = fillRule ?? FillRule.Positive;
         bool reverseSolution = false;
 
@@ -86,14 +87,11 @@ internal static class SelfIntersectionRemover
     {
         OutputBuilder builder = new()
         {
-            PreserveCollinear = false,
+            PreserveCollinear = true,
             ReverseSolution = reverseSolution
         };
         builder.AddSubject(subject);
-
-        Polygon result = new(resultCapacity);
-        builder.Execute(fillRule, result);
-        return result;
+        return builder.Execute(fillRule, resultCapacity);
     }
 
     /// <summary>
@@ -537,6 +535,12 @@ internal static class SelfIntersectionRemover
 
     private sealed class OutputBuilder
     {
+        // Clipper integer-space tolerances converted to double-space equivalents
+        // of ClipperD(6).
+        private const double NearPointDelta = 2E-6D;
+        private const double MinimumSplitArea = 2E-12D;
+        private const double SignificantTriangleArea = 1E-12D;
+
         private readonly SelfIntersectionSweepLine sweepLine;
         private bool buildHierarchy;
 
@@ -580,7 +584,7 @@ internal static class SelfIntersectionRemover
         private static bool ArePointsVeryClose(in Vertex firstPoint, in Vertex secondPoint)
         {
             Vertex delta = Vertex.Abs(firstPoint - secondPoint);
-            return delta.X < 2 && delta.Y < 2;
+            return delta.X < NearPointDelta && delta.Y < NearPointDelta;
         }
 
         /// <summary>
@@ -683,10 +687,17 @@ internal static class SelfIntersectionRemover
             OutputPoint? outputPoint2 = startOp;
             while (true)
             {
-                // When preserving collinear, only remove 180-degree spikes.
+                // Preserve immediate A-B-A return spikes. The flat-ring fix injects
+                // these intentionally (touch -> tip -> touch), so we keep apex B even
+                // when collinear to avoid collapsing expected boundary detail.
+                bool isReturnSpikeApex = outputPoint2!.Prev.Point == outputPoint2.Next!.Point &&
+                    outputPoint2.Point != outputPoint2.Prev.Point;
                 if (PolygonUtilities.IsCollinear(outputPoint2!.Prev.Point, outputPoint2.Point, outputPoint2.Next!.Point) &&
-                    (outputPoint2.Point == outputPoint2.Prev.Point || outputPoint2.Point == outputPoint2.Next.Point || !this.PreserveCollinear ||
-                    (PolygonUtilities.Dot(outputPoint2.Prev.Point, outputPoint2.Point, outputPoint2.Next.Point) < 0)))
+                    (outputPoint2.Point == outputPoint2.Prev.Point ||
+                     outputPoint2.Point == outputPoint2.Next.Point ||
+                     (!this.PreserveCollinear && !isReturnSpikeApex) ||
+                     (PolygonUtilities.Dot(outputPoint2.Prev.Point, outputPoint2.Point, outputPoint2.Next.Point) < 0 &&
+                      !isReturnSpikeApex)))
                 {
                     if (outputPoint2 == outputRecord.Points)
                     {
@@ -733,7 +744,7 @@ internal static class SelfIntersectionRemover
             double area1 = SelfIntersectionSweepLine.ComputeSignedArea(prevOp);
             double absArea1 = Math.Abs(area1);
 
-            if (absArea1 < 2D)
+            if (absArea1 < MinimumSplitArea)
             {
                 outputRecord.Points = null;
                 return;
@@ -762,7 +773,7 @@ internal static class SelfIntersectionRemover
             // So the only way for these areas to have the same sign is if
             // the split triangle is larger than the path containing prevOp or
             // if there's more than one self-intersection.
-            if (!(absArea2 > 1D) ||
+            if (!(absArea2 > SignificantTriangleArea) ||
                     (!(absArea2 > absArea1) &&
                       ((area2 > 0) != (area1 > 0))))
             {
@@ -916,7 +927,7 @@ internal static class SelfIntersectionRemover
         }
 
         /// <summary>
-        /// Builds a contour from an output ring without duplicating the start vertex.
+        /// Builds a contour from an output ring and emits an explicit closing vertex.
         /// </summary>
         /// <param name="outputPoint">A point on the output ring.</param>
         /// <param name="reverse">Whether to reverse point order.</param>
@@ -965,6 +976,11 @@ internal static class SelfIntersectionRemover
                 return false;
             }
 
+            if (contour[0] != contour[^1])
+            {
+                contour.Add(contour[0]);
+            }
+
             return true;
         }
 
@@ -974,9 +990,6 @@ internal static class SelfIntersectionRemover
         /// <param name="solution">The destination contour list.</param>
         private void BuildContours(List<Contour> solution)
         {
-            solution.Clear();
-            solution.EnsureCapacity(this.sweepLine.OutputRecords.Count);
-
             int i = 0;
             while (i < this.sweepLine.OutputRecords.Count)
             {
@@ -987,7 +1000,7 @@ internal static class SelfIntersectionRemover
                 }
 
                 int estimatedCapacity = outputRecord.OutputPointCount > 0
-                    ? outputRecord.OutputPointCount
+                    ? outputRecord.OutputPointCount + 1
                     : 0;
                 Contour contour = estimatedCapacity > 0 ? new Contour(estimatedCapacity) : [];
                 this.CleanCollinearEdges(outputRecord);
@@ -1120,18 +1133,18 @@ internal static class SelfIntersectionRemover
         }
 
         /// <summary>
-        /// Builds a hierarchical polygon from output records.
+        /// Builds and returns a hierarchical polygon from output records.
         /// </summary>
-        /// <param name="polygon">The polygon to populate.</param>
-        private void BuildPolygon(Polygon polygon)
+        /// <param name="resultCapacity">The initial contour capacity for the output polygon.</param>
+        /// <returns>The built polygon.</returns>
+        private Polygon BuildPolygon(int resultCapacity)
         {
-            polygon.Clear();
-            List<OutputRecord> closedOutputRecords = new(this.sweepLine.OutputRecords.Count);
-
+            int validClosedCount = 0;
             int i = 0;
 
-            // outputRecordPool.Count may change because CheckOutputBounds can add records
-            // via FixOutputRecordPoints and CleanCollinearEdges.
+            // First pass: validate bounds and resolve owners.
+            // Complexity is O(N) over current output records, but N can grow during
+            // the pass because CheckOutputBounds may split/fix paths and append records.
             while (i < this.sweepLine.OutputRecords.Count)
             {
                 OutputRecord outputRecord = this.sweepLine.OutputRecords[i++];
@@ -1143,21 +1156,33 @@ internal static class SelfIntersectionRemover
                 if (this.CheckOutputBounds(outputRecord))
                 {
                     this.ResolveOutputOwner(outputRecord);
-                    closedOutputRecords.Add(outputRecord);
+                    validClosedCount++;
                 }
             }
 
-            if (closedOutputRecords.Count == 0)
+            if (validClosedCount == 0)
             {
-                return;
+                return new Polygon(resultCapacity);
             }
 
-            Dictionary<OutputRecord, int> outputRecordIndices = new(closedOutputRecords.Count);
-            for (int index = 0; index < closedOutputRecords.Count; index++)
+            int outputRecordCount = this.sweepLine.OutputRecords.Count;
+            Polygon polygon = new(Math.Max(resultCapacity, validClosedCount));
+            using Buffer<int> contourIndexBuffer = new(outputRecordCount);
+            Span<int> contourIndexByOutputRecord = contourIndexBuffer.GetSpan();
+            contourIndexByOutputRecord.Fill(-1);
+
+            // Second pass: build contours and map OutputRecord.Index -> contour index.
+            // This avoids a dictionary allocation and keeps lookups O(1).
+            for (int index = 0; index < outputRecordCount; index++)
             {
-                OutputRecord outputRecord = closedOutputRecords[index];
+                OutputRecord outputRecord = this.sweepLine.OutputRecords[index];
+                if (outputRecord.Points == null || outputRecord.Bounds.IsEmpty())
+                {
+                    continue;
+                }
+
                 int estimatedCapacity = outputRecord.OutputPointCount > 0
-                    ? outputRecord.OutputPointCount
+                    ? outputRecord.OutputPointCount + 1
                     : 0;
                 Contour contour = estimatedCapacity > 0 ? new Contour(estimatedCapacity) : [];
                 if (!BuildContour(outputRecord.Points, this.ReverseSolution, contour))
@@ -1167,12 +1192,16 @@ internal static class SelfIntersectionRemover
 
                 int contourIndex = polygon.Count;
                 polygon.Add(contour);
-                outputRecordIndices[outputRecord] = contourIndex;
+                int outputRecordIndex = outputRecord.Index;
+                if ((uint)outputRecordIndex < (uint)contourIndexByOutputRecord.Length)
+                {
+                    contourIndexByOutputRecord[outputRecordIndex] = contourIndex;
+                }
             }
 
             if (polygon.Count == 0)
             {
-                return;
+                return polygon;
             }
 
             for (int index = 0; index < polygon.Count; index++)
@@ -1183,25 +1212,52 @@ internal static class SelfIntersectionRemover
                 contour.ClearHoles();
             }
 
-            for (int index = 0; index < closedOutputRecords.Count; index++)
+            // Third pass: map owner links to parent contour indices.
+            for (int index = 0; index < outputRecordCount; index++)
             {
-                OutputRecord outputRecord = closedOutputRecords[index];
-                if (!outputRecordIndices.TryGetValue(outputRecord, out int contourIndex))
+                OutputRecord outputRecord = this.sweepLine.OutputRecords[index];
+                int outputRecordIndex = outputRecord.Index;
+                if ((uint)outputRecordIndex >= (uint)contourIndexByOutputRecord.Length)
+                {
+                    continue;
+                }
+
+                int contourIndex = contourIndexByOutputRecord[outputRecordIndex];
+                if (contourIndex < 0)
                 {
                     continue;
                 }
 
                 OutputRecord? owner = outputRecord.Owner;
-                if (owner != null && outputRecordIndices.TryGetValue(owner, out int parentIndex))
+                while (owner != null)
                 {
-                    polygon[contourIndex].ParentIndex = parentIndex;
+                    int ownerIndex = owner.Index;
+                    if ((uint)ownerIndex < (uint)contourIndexByOutputRecord.Length)
+                    {
+                        int parentIndex = contourIndexByOutputRecord[ownerIndex];
+                        if (parentIndex >= 0)
+                        {
+                            polygon[contourIndex].ParentIndex = parentIndex;
+                            break;
+                        }
+                    }
+
+                    owner = owner.Owner;
                 }
             }
 
-            for (int index = 0; index < closedOutputRecords.Count; index++)
+            // Fourth pass: depth is owner-chain length within the emitted contour set.
+            for (int index = 0; index < outputRecordCount; index++)
             {
-                OutputRecord outputRecord = closedOutputRecords[index];
-                if (!outputRecordIndices.TryGetValue(outputRecord, out int contourIndex))
+                OutputRecord outputRecord = this.sweepLine.OutputRecords[index];
+                int outputRecordIndex = outputRecord.Index;
+                if ((uint)outputRecordIndex >= (uint)contourIndexByOutputRecord.Length)
+                {
+                    continue;
+                }
+
+                int contourIndex = contourIndexByOutputRecord[outputRecordIndex];
+                if (contourIndex < 0)
                 {
                     continue;
                 }
@@ -1209,9 +1265,15 @@ internal static class SelfIntersectionRemover
                 // Depth is the number of owning contours in the chain.
                 int depth = 0;
                 OutputRecord? owner = outputRecord.Owner;
-                while (owner != null && outputRecordIndices.ContainsKey(owner))
+                while (owner != null)
                 {
-                    depth++;
+                    int ownerIndex = owner.Index;
+                    if ((uint)ownerIndex < (uint)contourIndexByOutputRecord.Length &&
+                        contourIndexByOutputRecord[ownerIndex] >= 0)
+                    {
+                        depth++;
+                    }
+
                     owner = owner.Owner;
                 }
 
@@ -1227,50 +1289,25 @@ internal static class SelfIntersectionRemover
                     polygon[contour.ParentIndex.Value].AddHoleIndex(index);
                 }
             }
+
+            return polygon;
         }
 
         /// <summary>
-        /// Executes the union and builds a hierarchical polygon.
+        /// Executes the union and returns a hierarchical polygon.
         /// </summary>
         /// <param name="fillRule">The fill rule for the union.</param>
-        /// <param name="polygon">The polygon to populate.</param>
-        /// <returns><see langword="true"/> if the union completed successfully.</returns>
-        public bool Execute(
+        /// <param name="resultCapacity">The initial contour capacity for the output polygon.</param>
+        /// <returns>The resulting polygon.</returns>
+        public Polygon Execute(
             FillRule fillRule,
-            Polygon polygon)
+            int resultCapacity)
         {
-            polygon.Clear();
             this.buildHierarchy = true;
             bool succeeded = this.sweepLine.Execute(fillRule, true);
-            if (succeeded)
-            {
-                this.BuildPolygon(polygon);
-            }
-
+            Polygon result = succeeded ? this.BuildPolygon(resultCapacity) : [];
             this.sweepLine.ClearSolutionData();
-            return succeeded;
-        }
-
-        /// <summary>
-        /// Executes the union and builds a flat list of contours.
-        /// </summary>
-        /// <param name="fillRule">The fill rule for the union.</param>
-        /// <param name="solution">The contour list to populate.</param>
-        /// <returns><see langword="true"/> if the union completed successfully.</returns>
-        public bool Execute(
-            FillRule fillRule,
-            List<Contour> solution)
-        {
-            solution.Clear();
-            this.buildHierarchy = false;
-            bool succeeded = this.sweepLine.Execute(fillRule, false);
-            if (succeeded)
-            {
-                this.BuildContours(solution);
-            }
-
-            this.sweepLine.ClearSolutionData();
-            return succeeded;
+            return result;
         }
     }
 }

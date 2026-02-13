@@ -206,14 +206,21 @@ internal sealed class ActiveEdgeList
     /// <returns><see langword="true"/> when a horizontal edge was available.</returns>
     public bool TryPopHorizontal(out ActiveEdge? edge)
     {
-        edge = this.horizontalHead;
-        if (edge == null)
+        while (true)
         {
-            return false;
-        }
+            edge = this.horizontalHead;
+            if (edge == null)
+            {
+                return false;
+            }
 
-        this.horizontalHead = edge.NextInSel;
-        return true;
+            ActiveEdge? next = edge.NextInSel;
+            this.horizontalHead = ReferenceEquals(next, edge) ? null : next;
+            if (edge.VertexTop != null)
+            {
+                return true;
+            }
+        }
     }
 
     /// <summary>

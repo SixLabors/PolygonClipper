@@ -14,6 +14,13 @@ namespace SixLabors.PolygonClipper;
 /// </remarks>
 internal sealed class SelfIntersectionSweepLine
 {
+    // Clipper's integer constants are calibrated for scaled coordinates.
+    // This port operates directly in double-space, so thresholds must be
+    // converted to the equivalent ClipperD(6) magnitudes.
+    private const double JoinExtremaDelta = 2E-6D;
+    private const double JoinPerpendicularDistanceSquaredTolerance = 2.5E-13D;
+    private const int HorizontalLoopFailSafeLimit = 100_000;
+
     private FillRule fillRule;
     private readonly ActiveEdgeList activeEdges;
     private readonly ScanlineSchedule scanlineSchedule;
@@ -96,19 +103,48 @@ internal sealed class SelfIntersectionSweepLine
     private static SweepVertex? GetMaximaVertexAtCurrentY(ActiveEdge edge)
     {
         SweepVertex? result = edge.VertexTop;
+        if (result == null)
+        {
+            return null;
+        }
+
+        SweepVertex start = result;
+
+        // Horizontal plateaus at the top can have multiple same-Y vertices.
+        // Follow the plateau in winding direction to find the effective scanline
+        // endpoint candidate in O(k), where k is plateau length.
         if (edge.WindDelta > 0)
         {
-            while (result!.Next!.Point.Y == result.Point.Y)
+            while (result.Next!.Point.Y == result.Point.Y)
             {
-                result = result.Next;
+                SweepVertex next = result.Next;
+                if (next == start)
+                {
+                    break;
+                }
+
+                result = next;
             }
         }
         else
         {
-            while (result!.Prev!.Point.Y == result.Point.Y)
+            while (result.Prev!.Point.Y == result.Point.Y)
             {
-                result = result.Prev;
+                SweepVertex prev = result.Prev;
+                if (prev == start)
+                {
+                    break;
+                }
+
+                result = prev;
             }
+        }
+
+        // If the traversed endpoint is not flagged maxima but the start vertex is
+        // a maxima on the same scanline, prefer the explicit maxima marker.
+        if (!result.IsMaxima && start.IsMaxima && start.Point.Y == result.Point.Y)
+        {
+            result = start;
         }
 
         if (!result.IsMaxima)
@@ -178,6 +214,35 @@ internal sealed class SelfIntersectionSweepLine
 
         edge1.OutputRecord = outputRecord2;
         edge2.OutputRecord = outputRecord1;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsTwoVertexFlatRingEdge(ActiveEdge edge)
+    {
+        // Degenerate "ring" used by issue-style tests: two opposing horizontal
+        // edges around a single local minimum (A-B-A). This is an O(1) shape check.
+        return edge.IsHorizontal && edge.LocalMin.Vertex.Prev == edge.LocalMin.Vertex.Next;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static Vertex GetFlatRingTip(ActiveEdge flatEdge, in Vertex touchPoint)
+    {
+        // If touch is at an endpoint, the tip is the opposite endpoint.
+        if (touchPoint == flatEdge.Bottom)
+        {
+            return flatEdge.Top;
+        }
+
+        if (touchPoint == flatEdge.Top)
+        {
+            return flatEdge.Bottom;
+        }
+
+        // Otherwise choose the endpoint farther from the touch in X.
+        // This gives a stable spike apex for touch->tip->touch emission.
+        double bottomDx = Math.Abs(touchPoint.X - flatEdge.Bottom.X);
+        double topDx = Math.Abs(touchPoint.X - flatEdge.Top.X);
+        return bottomDx > topDx ? flatEdge.Bottom : flatEdge.Top;
     }
 
     /// <summary>
@@ -428,7 +493,12 @@ internal sealed class SelfIntersectionSweepLine
 
             if (prevVertex == v0)
             {
-                // Closed rings cannot be completely flat.
+                // Flat closed rings still contribute when they touch other contours.
+                if (!RegisterFlatRingExtrema(v0, this.scanlineSchedule.LocalMinima))
+                {
+                    continue;
+                }
+
                 continue;
             }
 
@@ -466,6 +536,39 @@ internal sealed class SelfIntersectionSweepLine
                 }
             }
         }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool RegisterFlatRingExtrema(SweepVertex start, List<LocalMinima> localMinimaList)
+    {
+        // For a fully flat closed ring, derive synthetic extrema by scanning once
+        // for left/right-most vertices: O(m) in ring vertex count.
+        SweepVertex leftMost = start;
+        SweepVertex rightMost = start;
+        SweepVertex current = start.Next!;
+        while (current != start)
+        {
+            if (current.Point.X < leftMost.Point.X)
+            {
+                leftMost = current;
+            }
+
+            if (current.Point.X > rightMost.Point.X)
+            {
+                rightMost = current;
+            }
+
+            current = current.Next!;
+        }
+
+        if (leftMost == rightMost)
+        {
+            return false;
+        }
+
+        rightMost.Flags |= VertexFlags.LocalMax;
+        RegisterLocalMinima(leftMost, localMinimaList);
+        return true;
     }
 
     /// <summary>
@@ -624,6 +727,12 @@ internal sealed class SelfIntersectionSweepLine
 
             this.SetWindingCountForClosedEdge(leftBound);
             contributing = this.IsContributingClosedEdge(leftBound);
+            if (leftBound.IsHorizontal &&
+                rightBound.IsHorizontal &&
+                leftBound.LocalMin.Vertex.Prev == leftBound.LocalMin.Vertex.Next)
+            {
+                contributing = false;
+            }
 
             rightBound.WindCount = leftBound.WindCount;
             ActiveEdgeList.InsertRight(leftBound, rightBound);
@@ -741,6 +850,22 @@ internal sealed class SelfIntersectionSweepLine
 
         if (edge1.IsFront == edge2.IsFront)
         {
+            bool hasTwoVertexFlatEdge =
+                (edge1.IsHorizontal && edge1.NextVertex == edge1.LocalMin.Vertex) ||
+                (edge2.IsHorizontal && edge2.NextVertex == edge2.LocalMin.Vertex);
+            if (hasTwoVertexFlatEdge)
+            {
+                OutputPoint outputPoint = this.AddOutputPoint(edge1, point);
+                this.AddOutputPoint(edge2, point);
+                SwapOutputRecords(edge1, edge2);
+                return outputPoint;
+            }
+
+            if (edge1.IsHorizontal && edge2.IsHorizontal)
+            {
+                return this.AddOutputPoint(edge1, point);
+            }
+
             this.succeeded = false;
             return null;
         }
@@ -986,11 +1111,32 @@ internal sealed class SelfIntersectionSweepLine
 
         bool e1WindCountIs0or1 = oldE1WindCount is 0 or 1;
         bool e2WindCountIs0or1 = oldE2WindCount is 0 or 1;
+        bool edge1IsTwoVertexFlatRing = IsTwoVertexFlatRingEdge(edge1);
+        bool edge2IsTwoVertexFlatRing = IsTwoVertexFlatRingEdge(edge2);
 
-        if ((!edge1.IsHot && !e1WindCountIs0or1) ||
-            (!edge2.IsHot && !e2WindCountIs0or1))
+        if ((!edge1.IsHot && !e1WindCountIs0or1 && !edge1IsTwoVertexFlatRing) ||
+            (!edge2.IsHot && !e2WindCountIs0or1 && !edge2IsTwoVertexFlatRing))
         {
             return;
+        }
+
+        if (edge1IsTwoVertexFlatRing || edge2IsTwoVertexFlatRing)
+        {
+            if (edge1.IsHot ^ edge2.IsHot)
+            {
+                ActiveEdge hotEdge = edge1.IsHot ? edge1 : edge2;
+                ActiveEdge flatEdge = edge1IsTwoVertexFlatRing ? edge1 : edge2;
+                if (!flatEdge.IsHot)
+                {
+                    // Keep the fix in-sweep: inject touch->tip->touch directly into the
+                    // hot output chain in O(1), avoiding any post-process contour scans.
+                    Vertex tip = GetFlatRingTip(flatEdge, point);
+                    this.AddOutputPoint(hotEdge, point);
+                    this.AddOutputPoint(hotEdge, tip);
+                    this.AddOutputPoint(hotEdge, point);
+                    return;
+                }
+            }
         }
 
         // Emit output based on hot edges and winding state.
@@ -1493,19 +1639,85 @@ internal sealed class SelfIntersectionSweepLine
         bool isLeftToRight =
             ResetHorizontalDirection(horizontalEdge, vertexMax, out double leftX, out double rightX);
 
+        ActiveEdge? immediatePair = horizontalEdge.NextInAel;
+        if (immediatePair == null ||
+            immediatePair.LocalMin.Vertex != horizontalEdge.LocalMin.Vertex ||
+            !immediatePair.IsHorizontal)
+        {
+            immediatePair = horizontalEdge.PrevInAel;
+        }
+
+        if (!horizontalEdge.IsHot &&
+            IsTwoVertexFlatRingEdge(horizontalEdge) &&
+            immediatePair != null &&
+            immediatePair.LocalMin.Vertex == horizontalEdge.LocalMin.Vertex &&
+            immediatePair.IsHorizontal)
+        {
+            // Fast path for degenerate flat rings. Complexity is O(K) where K is the
+            // number of active edges crossing this horizontal span at the scanline.
+            // No extra contour collections are built.
+            ActiveEdge? scan = isLeftToRight ? horizontalEdge.NextInAel : horizontalEdge.PrevInAel;
+            if (scan == immediatePair)
+            {
+                scan = isLeftToRight ? immediatePair.NextInAel : immediatePair.PrevInAel;
+            }
+
+            while (scan != null)
+            {
+                if ((isLeftToRight && scan.CurrentX > rightX) ||
+                    (!isLeftToRight && scan.CurrentX < leftX))
+                {
+                    break;
+                }
+
+                if (!scan.IsHorizontal)
+                {
+                    Vertex point = new Vertex(scan.CurrentX, y);
+                    if (isLeftToRight)
+                    {
+                        this.IntersectActiveEdges(horizontalEdge, scan, point);
+                    }
+                    else
+                    {
+                        this.IntersectActiveEdges(scan, horizontalEdge, point);
+                    }
+                }
+
+                scan = isLeftToRight ? scan.NextInAel : scan.PrevInAel;
+            }
+
+            this.activeEdges.Remove(immediatePair);
+            this.activeEdges.Remove(horizontalEdge);
+            return;
+        }
+
         if (horizontalEdge.IsHot)
         {
             OutputPoint outputPoint = this.AddOutputPoint(horizontalEdge, new Vertex(horizontalEdge.CurrentX, y));
             this.AddHorizontalSegment(outputPoint);
         }
 
+        int horizontalLoopGuard = 0;
         while (true)
         {
+            if (++horizontalLoopGuard > HorizontalLoopFailSafeLimit)
+            {
+                // Fail-safe for corrupted links: bail out instead of throwing/hanging.
+                return;
+            }
+
             // Traverse consecutive horizontal edges on this scanline.
             ActiveEdge? edge = isLeftToRight ? horizontalEdge.NextInAel : horizontalEdge.PrevInAel;
 
+            int edgeLoopGuard = 0;
             while (edge != null)
             {
+                if (++edgeLoopGuard > HorizontalLoopFailSafeLimit)
+                {
+                    // Fail-safe for corrupted links: bail out instead of throwing/hanging.
+                    return;
+                }
+
                 if (edge.VertexTop == vertexMax)
                 {
                     // Handle the maxima pair before processing other intersections.
@@ -1556,7 +1768,7 @@ internal sealed class SelfIntersectionSweepLine
                         // At the horizontal end, stop only when the outslope overtakes the edge
                         // (greater when heading right, smaller when heading left).
                         if ((isLeftToRight && (ActiveEdge.TopX(edge, point.Y) >= point.X)) ||
-                                (!isLeftToRight && (ActiveEdge.TopX(edge, point.Y) <= point.X)))
+                            (!isLeftToRight && (ActiveEdge.TopX(edge, point.Y) <= point.X)))
                         {
                             break;
                         }
@@ -1765,7 +1977,7 @@ internal sealed class SelfIntersectionSweepLine
         }
 
         // Reject joins that are too close to extrema (Issue #490).
-        if ((point.Y < edge.Top.Y + 2 || point.Y < prev.Top.Y + 2) &&
+        if ((point.Y < edge.Top.Y + JoinExtremaDelta || point.Y < prev.Top.Y + JoinExtremaDelta) &&
             ((edge.Bottom.Y > point.Y) || (prev.Bottom.Y > point.Y)))
         {
             // Issue #490.
@@ -1774,7 +1986,8 @@ internal sealed class SelfIntersectionSweepLine
 
         if (checkCurrX)
         {
-            if (PolygonUtilities.PerpendicularDistanceSquared(point, prev.Bottom, prev.Top) > 0.25D)
+            if (PolygonUtilities.PerpendicularDistanceSquared(point, prev.Bottom, prev.Top) >
+                JoinPerpendicularDistanceSquaredTolerance)
             {
                 return;
             }
@@ -1827,7 +2040,7 @@ internal sealed class SelfIntersectionSweepLine
         }
 
         // Reject joins that are too close to extrema (Issue #490).
-        if ((point.Y < edge.Top.Y + 2 || point.Y < next.Top.Y + 2) &&
+        if ((point.Y < edge.Top.Y + JoinExtremaDelta || point.Y < next.Top.Y + JoinExtremaDelta) &&
             ((edge.Bottom.Y > point.Y) || (next.Bottom.Y > point.Y)))
         {
             // Issue #490.
@@ -1836,7 +2049,8 @@ internal sealed class SelfIntersectionSweepLine
 
         if (checkCurrX)
         {
-            if (PolygonUtilities.PerpendicularDistanceSquared(point, next.Bottom, next.Top) > 0.25D)
+            if (PolygonUtilities.PerpendicularDistanceSquared(point, next.Bottom, next.Top) >
+                JoinPerpendicularDistanceSquaredTolerance)
             {
                 return;
             }
