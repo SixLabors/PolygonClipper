@@ -916,7 +916,7 @@ internal static class SelfIntersectionRemover
         }
 
         /// <summary>
-        /// Builds a closed contour from an output ring and adds a closing vertex.
+        /// Builds a contour from an output ring without duplicating the start vertex.
         /// </summary>
         /// <param name="outputPoint">A point on the output ring.</param>
         /// <param name="reverse">Whether to reverse point order.</param>
@@ -965,11 +965,6 @@ internal static class SelfIntersectionRemover
                 return false;
             }
 
-            if (contour.Count > 0)
-            {
-                contour.Add(contour[0]);
-            }
-
             return true;
         }
 
@@ -992,7 +987,7 @@ internal static class SelfIntersectionRemover
                 }
 
                 int estimatedCapacity = outputRecord.OutputPointCount > 0
-                    ? outputRecord.OutputPointCount + 1
+                    ? outputRecord.OutputPointCount
                     : 0;
                 Contour contour = estimatedCapacity > 0 ? new Contour(estimatedCapacity) : [];
                 this.CleanCollinearEdges(outputRecord);
@@ -1162,7 +1157,7 @@ internal static class SelfIntersectionRemover
             {
                 OutputRecord outputRecord = closedOutputRecords[index];
                 int estimatedCapacity = outputRecord.OutputPointCount > 0
-                    ? outputRecord.OutputPointCount + 1
+                    ? outputRecord.OutputPointCount
                     : 0;
                 Contour contour = estimatedCapacity > 0 ? new Contour(estimatedCapacity) : [];
                 if (!BuildContour(outputRecord.Points, this.ReverseSolution, contour))

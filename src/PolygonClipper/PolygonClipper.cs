@@ -104,7 +104,10 @@ public class PolygonClipper
     /// Optional fill rule that determines which regions are considered filled after splitting intersections.
     /// When <see langword="null"/>, the effective positive/negative winding rule is inferred from contour orientation.
     /// </param>
-    /// <returns>A new polygon with self-intersections resolved.</returns>
+    /// <returns>
+    /// A new polygon with self-intersections resolved. Output contours are implicitly closed
+    /// (the first vertex is not duplicated as a terminal closing vertex).
+    /// </returns>
     public static Polygon RemoveSelfIntersections(Polygon polygon, FillRule? fillRule = null)
         => SelfIntersectionRemover.Process(polygon, fillRule);
 
@@ -145,7 +148,8 @@ public class PolygonClipper
         {
             Contour contour = subject[i];
             contourId++;
-            for (int j = 0; j < contour.Count - 1; j++)
+            int segmentCount = GetContourSegmentCount(contour);
+            for (int j = 0; j < segmentCount; j++)
             {
                 ProcessSegment(
                     contourId,
@@ -167,7 +171,8 @@ public class PolygonClipper
         {
             Contour contour = clipping[i];
 
-            for (int j = 0; j < contour.Count - 1; j++)
+            int segmentCount = GetContourSegmentCount(contour);
+            for (int j = 0; j < segmentCount; j++)
             {
                 ProcessSegment(
                     contourId,
@@ -266,6 +271,23 @@ public class PolygonClipper
 
         // Connect edges after processing all events
         return ConnectEdges(sortedEvents, comparer);
+    }
+
+    /// <summary>
+    /// Gets the number of edges to process for a contour, treating non-closed rings as implicitly closed.
+    /// </summary>
+    /// <param name="contour">The contour to inspect.</param>
+    /// <returns>The number of segments to iterate.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int GetContourSegmentCount(Contour contour)
+    {
+        int count = contour.Count;
+        if (count < 3)
+        {
+            return 0;
+        }
+
+        return contour[0] == contour[^1] ? count - 1 : count;
     }
 
     /// <summary>

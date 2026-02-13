@@ -13,13 +13,13 @@ public class SelfIntersectionRemoverTests
     [Fact]
     public void SimpleRectangle_NoSelfIntersections_PreservesStructure()
     {
-        // Arrange: Simple rectangle with closing vertex
+        // Arrange: Simple rectangle with explicitly closed input
         Contour outer = [];
         outer.Add(new Vertex(0, 0));
         outer.Add(new Vertex(10, 0));
         outer.Add(new Vertex(10, 10));
         outer.Add(new Vertex(0, 10));
-        outer.Add(new Vertex(0, 0)); // Closing vertex
+        outer.Add(new Vertex(0, 0)); // Explicitly closes the input contour
 
         Polygon input = [outer];
 
@@ -28,7 +28,7 @@ public class SelfIntersectionRemoverTests
 
         // Assert
         Assert.Equal(1, result.Count);
-        Assert.Equal(5, result[0].Count); // 4 unique + 1 closing
+        Assert.Equal(4, result[0].Count);
         Assert.True(result[0].IsExternal);
     }
 
@@ -64,11 +64,11 @@ public class SelfIntersectionRemoverTests
 
         // First contour should be external (outer)
         Assert.True(result[0].IsExternal);
-        Assert.Equal(5, result[0].Count);
+        Assert.Equal(4, result[0].Count);
 
         // Second contour should be a hole (inner)
         Assert.False(result[1].IsExternal);
-        Assert.Equal(5, result[1].Count);
+        Assert.Equal(4, result[1].Count);
     }
 
     /// <summary>
@@ -115,9 +115,9 @@ public class SelfIntersectionRemoverTests
         Assert.True(result[0].IsExternal);
         Assert.False(result[1].IsExternal);
 
-        // Vertex counts should be preserved (32 + closing vertex = 33 each)
-        Assert.Equal(33, result[0].Count);
-        Assert.Equal(33, result[1].Count);
+        // Vertex counts should be preserved.
+        Assert.Equal(32, result[0].Count);
+        Assert.Equal(32, result[1].Count);
     }
 
     /// <summary>
@@ -145,8 +145,8 @@ public class SelfIntersectionRemoverTests
         Assert.False(result[1].IsExternal);
 
         // Vertex counts should be preserved
-        Assert.Equal(outerVertices + 1, result[0].Count); // +1 for closing vertex
-        Assert.Equal(innerVertices + 1, result[1].Count);
+        Assert.Equal(outerVertices, result[0].Count);
+        Assert.Equal(innerVertices, result[1].Count);
     }
 
     /// <summary>
@@ -1951,8 +1951,8 @@ public class SelfIntersectionRemoverTests
         Assert.False(result[1].IsExternal);
 
         // Vertex counts should be preserved
-        Assert.Equal(outerVertices + 1, result[0].Count);
-        Assert.Equal(innerVertices + 1, result[1].Count);
+        Assert.Equal(outerVertices, result[0].Count);
+        Assert.Equal(innerVertices, result[1].Count);
     }
 
     /// <summary>
@@ -2004,8 +2004,8 @@ public class SelfIntersectionRemoverTests
         Assert.True(result[1].IsExternal);
 
         // Vertex counts preserved
-        Assert.Equal(101, result[0].Count);
-        Assert.Equal(101, result[1].Count);
+        Assert.Equal(100, result[0].Count);
+        Assert.Equal(100, result[1].Count);
     }
 
     /// <summary>
@@ -2068,8 +2068,8 @@ public class SelfIntersectionRemoverTests
         // Assert: Should merge into a single rectangle (0,0)-(20,0)-(20,10)-(0,10)
         Assert.Equal(1, result.Count);
 
-        // The merged contour should have 4 vertices (plus closing)
-        Assert.Equal(5, result[0].Count);
+        // The merged contour should have 4 vertices.
+        Assert.Equal(4, result[0].Count);
 
         AssertMatchesClipperByCount(input);
     }
