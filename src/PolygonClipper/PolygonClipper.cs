@@ -231,7 +231,7 @@ public class PolygonClipper
             if (sweepEvent.Left)
             {
                 // Insert the event into the status line and get neighbors
-                int it = sweepEvent.PosSL = statusLine.Add(sweepEvent);
+                int it = statusLine.Add(sweepEvent);
                 prevEvent = statusLine.Prev(it);
                 nextEvent = statusLine.Next(it);
 
@@ -255,7 +255,8 @@ public class PolygonClipper
                     // Check intersection with the previous neighbor
                     if (PossibleIntersection(prevEvent, sweepEvent, eventQueue, workspace) == 2)
                     {
-                        SweepEvent? prevPrevEvent = statusLine.Prev(prevEvent.PosSL);
+                        int prevIndex = statusLine.IndexOf(prevEvent);
+                        SweepEvent? prevPrevEvent = statusLine.Prev(prevIndex);
                         ComputeFields(prevEvent, prevPrevEvent, operation);
                         ComputeFields(sweepEvent, prevEvent, operation);
                     }
@@ -265,7 +266,7 @@ public class PolygonClipper
             {
                 // Remove the event from the status line
                 sweepEvent = sweepEvent.OtherEvent;
-                int it = sweepEvent.PosSL;
+                int it = statusLine.IndexOf(sweepEvent);
                 prevEvent = statusLine.Prev(it);
                 nextEvent = statusLine.Next(it);
 

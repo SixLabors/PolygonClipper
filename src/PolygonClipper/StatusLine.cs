@@ -89,7 +89,7 @@ internal sealed class StatusLine
         }
 
         this.sortedEvents.Insert(index, e);
-        this.Up(index);
+        e.PosSL = index;
         return index;
     }
 
@@ -102,9 +102,64 @@ internal sealed class StatusLine
     /// </exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public void RemoveAt(int index)
+        => this.sortedEvents.RemoveAt(index);
+
+    /// <summary>
+    /// Finds the current index of a sweep event in the status line.
+    /// </summary>
+    /// <param name="e">The event to locate.</param>
+    /// <returns>The index of the event, or -1 if it is not present.</returns>
+    public int IndexOf(SweepEvent e)
     {
-        this.sortedEvents.RemoveAt(index);
-        this.Down(index);
+        List<SweepEvent> events = this.sortedEvents;
+        int count = events.Count;
+        int hint = e.PosSL;
+
+        if ((uint)hint < (uint)count && ReferenceEquals(events[hint], e))
+        {
+            return hint;
+        }
+
+        int index = events.BinarySearch(e, this.comparer);
+        if (index >= 0)
+        {
+            if (ReferenceEquals(events[index], e))
+            {
+                e.PosSL = index;
+                return index;
+            }
+
+            // BinarySearch can return any comparer-equal slot. Scan local ties by reference.
+            for (int i = index - 1; i >= 0 && this.comparer.Compare(events[i], e) == 0; i--)
+            {
+                if (ReferenceEquals(events[i], e))
+                {
+                    e.PosSL = i;
+                    return i;
+                }
+            }
+
+            for (int i = index + 1; i < count && this.comparer.Compare(events[i], e) == 0; i++)
+            {
+                if (ReferenceEquals(events[i], e))
+                {
+                    e.PosSL = i;
+                    return i;
+                }
+            }
+        }
+
+        // Fail-safe reference lookup for correctness if comparer order is temporarily unstable.
+        for (int i = 0; i < count; i++)
+        {
+            if (ReferenceEquals(events[i], e))
+            {
+                e.PosSL = i;
+                return i;
+            }
+        }
+
+        return -1;
     }
 
     /// <summary>
@@ -137,25 +192,5 @@ internal sealed class StatusLine
         }
 
         return null;
-    }
-
-    private void Up(int index)
-    {
-        List<SweepEvent> e = this.sortedEvents;
-
-        for (int i = index + 1; i < e.Count; i++)
-        {
-            e[i].PosSL = i;
-        }
-    }
-
-    private void Down(int index)
-    {
-        List<SweepEvent> e = this.sortedEvents;
-
-        for (int i = index; i < e.Count; i++)
-        {
-            e[i].PosSL = i;
-        }
     }
 }

@@ -35,61 +35,61 @@ public class StarBooleanBenches
     public Polygon PolygonClipperUnion()
         => PolygonClipper.Union(this.subject, this.clipping);
 
-    [Benchmark]
-    public PolyTreeD Clipper2Union()
-    {
-        ClipperD clipper = CreateClipper();
-        clipper.AddSubject(this.clipperSubject);
-        clipper.AddClip(this.clipperClipping);
-        PolyTreeD solution = [];
-        clipper.Execute(ClipType.Union, Clipper2Lib.FillRule.EvenOdd, solution);
-        return solution;
-    }
+    //[Benchmark]
+    //public PolyTreeD Clipper2Union()
+    //{
+    //    ClipperD clipper = CreateClipper();
+    //    clipper.AddSubject(this.clipperSubject);
+    //    clipper.AddClip(this.clipperClipping);
+    //    PolyTreeD solution = [];
+    //    clipper.Execute(ClipType.Union, Clipper2Lib.FillRule.EvenOdd, solution);
+    //    return solution;
+    //}
 
     [Benchmark]
     public Polygon PolygonClipperIntersection()
         => PolygonClipper.Intersection(this.subject, this.clipping);
 
-    [Benchmark]
-    public PolyTreeD Clipper2Intersection()
-    {
-        ClipperD clipper = CreateClipper();
-        clipper.AddSubject(this.clipperSubject);
-        clipper.AddClip(this.clipperClipping);
-        PolyTreeD solution = [];
-        clipper.Execute(ClipType.Intersection, Clipper2Lib.FillRule.EvenOdd, solution);
-        return solution;
-    }
+    //[Benchmark]
+    //public PolyTreeD Clipper2Intersection()
+    //{
+    //    ClipperD clipper = CreateClipper();
+    //    clipper.AddSubject(this.clipperSubject);
+    //    clipper.AddClip(this.clipperClipping);
+    //    PolyTreeD solution = [];
+    //    clipper.Execute(ClipType.Intersection, Clipper2Lib.FillRule.EvenOdd, solution);
+    //    return solution;
+    //}
 
     [Benchmark]
     public Polygon PolygonClipperDifference()
         => PolygonClipper.Difference(this.subject, this.clipping);
 
-    [Benchmark]
-    public PolyTreeD Clipper2Difference()
-    {
-        ClipperD clipper = CreateClipper();
-        clipper.AddSubject(this.clipperSubject);
-        clipper.AddClip(this.clipperClipping);
-        PolyTreeD solution = [];
-        clipper.Execute(ClipType.Difference, Clipper2Lib.FillRule.EvenOdd, solution);
-        return solution;
-    }
+    //[Benchmark]
+    //public PolyTreeD Clipper2Difference()
+    //{
+    //    ClipperD clipper = CreateClipper();
+    //    clipper.AddSubject(this.clipperSubject);
+    //    clipper.AddClip(this.clipperClipping);
+    //    PolyTreeD solution = [];
+    //    clipper.Execute(ClipType.Difference, Clipper2Lib.FillRule.EvenOdd, solution);
+    //    return solution;
+    //}
 
     [Benchmark]
     public Polygon PolygonClipperXor()
         => PolygonClipper.Xor(this.subject, this.clipping);
 
-    [Benchmark]
-    public PolyTreeD Clipper2Xor()
-    {
-        ClipperD clipper = CreateClipper();
-        clipper.AddSubject(this.clipperSubject);
-        clipper.AddClip(this.clipperClipping);
-        PolyTreeD solution = [];
-        clipper.Execute(ClipType.Xor, Clipper2Lib.FillRule.EvenOdd, solution);
-        return solution;
-    }
+    //[Benchmark]
+    //public PolyTreeD Clipper2Xor()
+    //{
+    //    ClipperD clipper = CreateClipper();
+    //    clipper.AddSubject(this.clipperSubject);
+    //    clipper.AddClip(this.clipperClipping);
+    //    PolyTreeD solution = [];
+    //    clipper.Execute(ClipType.Xor, Clipper2Lib.FillRule.EvenOdd, solution);
+    //    return solution;
+    //}
 
     private static ClipperD CreateClipper()
         => new(ClipperPrecision)
