@@ -16,7 +16,7 @@ namespace SixLabors.PolygonClipper;
 /// <item><description>Expand each source contour into one or two stroke-side outlines with joins/caps.</description></item>
 /// <item><description>Resolve generated overlaps/self-intersections using <see cref="SelfIntersectionRemover"/> with positive fill semantics.</description></item>
 /// </list>
-/// The emitted contours are closed before returning.
+/// The emitted contours are implicitly closed (first vertex is not duplicated at the end).
 /// </remarks>
 public sealed class PolygonStroker
 {
@@ -351,7 +351,7 @@ public sealed class PolygonStroker
             if (command.MoveTo())
             {
                 // Start a new contour. Commit any previous contour that is already complete.
-                if (currentContour is { Count: >= 4 })
+                if (currentContour is { Count: >= 3 })
                 {
                     result.Add(currentContour);
                 }
@@ -376,13 +376,7 @@ public sealed class PolygonStroker
 
             if (command.EndPoly())
             {
-                // Ensure explicit closure at contour boundaries.
-                if (currentContour is { Count: > 0 } && currentContour[0] != currentContour[^1])
-                {
-                    currentContour.Add(currentContour[0]);
-                }
-
-                if (currentContour is { Count: >= 4 })
+                if (currentContour is { Count: >= 3 })
                 {
                     result.Add(currentContour);
                 }
@@ -392,12 +386,7 @@ public sealed class PolygonStroker
             }
         }
 
-        if (currentContour is { Count: > 0 } && currentContour[0] != currentContour[^1])
-        {
-            currentContour.Add(currentContour[0]);
-        }
-
-        if (currentContour is { Count: >= 4 })
+        if (currentContour is { Count: >= 3 })
         {
             result.Add(currentContour);
         }
@@ -1042,7 +1031,7 @@ public sealed class PolygonStroker
     /// </summary>
     /// <param name="x">Point X.</param>
     /// <param name="y">Point Y.</param>
-    /// <returns>A closed contour representing the cap footprint.</returns>
+    /// <returns>An implicitly closed contour representing the cap footprint.</returns>
     private Contour GeneratePointCap(double x, double y)
     {
         if (this.LineCap == LineCap.Round)
@@ -1052,7 +1041,7 @@ public sealed class PolygonStroker
             int n = Math.Max(4, (int)(PiMul2 / da));
             double angleStep = PiMul2 / n;
 
-            Contour result = new(n + 1);
+            Contour result = new(n);
             for (int i = 0; i < n; i++)
             {
                 double angle = i * angleStep;
@@ -1061,7 +1050,6 @@ public sealed class PolygonStroker
                     y + (Math.Sin(angle) * this.strokeWidth)));
             }
 
-            result.Add(result[0]);
             return result;
         }
 
@@ -1071,8 +1059,7 @@ public sealed class PolygonStroker
             new Vertex(x - w, y - w),
             new Vertex(x + w, y - w),
             new Vertex(x + w, y + w),
-            new Vertex(x - w, y + w),
-            new Vertex(x - w, y - w),
+            new Vertex(x - w, y + w)
         ];
         return square;
     }

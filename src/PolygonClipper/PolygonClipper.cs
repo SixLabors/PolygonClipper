@@ -102,8 +102,8 @@ public class PolygonClipper
     /// </summary>
     /// <param name="polygon">The polygon to process.</param>
     /// <returns>
-    /// A new polygon with self-intersections resolved. Output contours are explicitly closed
-    /// (the first vertex is repeated as the terminal closing vertex).
+    /// A new polygon with self-intersections resolved. Output contours are implicitly closed
+    /// (no duplicated terminal closing vertex is appended).
     /// </returns>
     public static Polygon RemoveSelfIntersections(Polygon polygon)
         => SelfIntersectionRemover.Process(polygon, null);
@@ -114,8 +114,8 @@ public class PolygonClipper
     /// <param name="polygon">The polygon to process.</param>
     /// <param name="fillRule">Fill rule that determines which regions are considered filled after splitting intersections.</param>
     /// <returns>
-    /// A new polygon with self-intersections resolved. Output contours are explicitly closed
-    /// (the first vertex is repeated as the terminal closing vertex).
+    /// A new polygon with self-intersections resolved. Output contours are implicitly closed
+    /// (no duplicated terminal closing vertex is appended).
     /// </returns>
     [EditorBrowsable(EditorBrowsableState.Advanced)]
     public static Polygon RemoveSelfIntersections(Polygon polygon, FillRule fillRule)

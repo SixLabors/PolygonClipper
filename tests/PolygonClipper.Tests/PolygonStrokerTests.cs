@@ -40,8 +40,7 @@ public class PolygonStrokerTests
         Assert.True(result.Count > 0);
         Contour contour = result[0];
 
-        Assert.Equal(5, contour.Count);
-        Assert.Equal(contour[0], contour[^1]);
+        Assert.Equal(4, contour.Count);
     }
 
     [Fact]
@@ -416,19 +415,24 @@ public class PolygonStrokerTests
         for (int contourIndex = 0; contourIndex < polygon.Count; contourIndex++)
         {
             Contour contour = polygon[contourIndex];
-            Assert.True(contour.Count >= 4, $"Contour {contourIndex} must have at least 4 vertices including closure.");
-            Assert.Equal(contour[0], contour[^1]);
+            Assert.True(contour.Count >= 3, $"Contour {contourIndex} must have at least 3 vertices.");
 
-            int edgeCount = contour.Count - 1;
+            int edgeCount = contour.Count;
+            if (edgeCount > 1 && contour[0] == contour[^1])
+            {
+                edgeCount--;
+            }
+
+            Assert.True(edgeCount >= 3, $"Contour {contourIndex} must have at least 3 edge vertices.");
             for (int i = 0; i < edgeCount; i++)
             {
-                Assert.NotEqual(contour[i], contour[i + 1]);
+                Assert.NotEqual(contour[i], contour[(i + 1) % edgeCount]);
             }
 
             double signedArea2 = 0D;
             for (int i = 0; i < edgeCount; i++)
             {
-                signedArea2 += Vertex.Cross(contour[i], contour[i + 1]);
+                signedArea2 += Vertex.Cross(contour[i], contour[(i + 1) % edgeCount]);
             }
 
             Assert.True(Math.Abs(signedArea2) > 1E-10D, $"Contour {contourIndex} is degenerate.");
@@ -436,7 +440,7 @@ public class PolygonStrokerTests
             for (int i = 0; i < edgeCount; i++)
             {
                 Vertex a1 = contour[i];
-                Vertex a2 = contour[i + 1];
+                Vertex a2 = contour[(i + 1) % edgeCount];
 
                 for (int j = i + 1; j < edgeCount; j++)
                 {
@@ -446,7 +450,7 @@ public class PolygonStrokerTests
                     }
 
                     Vertex b1 = contour[j];
-                    Vertex b2 = contour[j + 1];
+                    Vertex b2 = contour[(j + 1) % edgeCount];
 
                     int intersections = PolygonUtilities.FindIntersection(a1, a2, b1, b2, out Vertex pi0, out Vertex pi1);
                     Assert.True(intersections == 0, $"Contour {contourIndex} self-intersects between edges {i} and {j} at {pi0} / {pi1}.");

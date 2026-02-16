@@ -8,8 +8,13 @@ using System.Runtime.CompilerServices;
 namespace SixLabors.PolygonClipper;
 
 /// <summary>
-/// Represents a simple polygon. The edges of the contours are interior disjoint.
+/// Represents a single polygon ring (outer contour or hole).
 /// </summary>
+/// <remarks>
+/// A contour is treated as implicitly closed: an edge is always considered between the last
+/// vertex and the first vertex. A duplicated terminal closing vertex is optional on input
+/// but not required.
+/// </remarks>
 [DebuggerDisplay("Count = {Count}")]
 #pragma warning disable CA1710 // Identifiers should have correct suffix
 public sealed class Contour : IReadOnlyCollection<Vertex>
@@ -43,7 +48,7 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
         => this.vertices = new List<Vertex>(capacity);
 
     /// <summary>
-    /// Gets the number of vertices.
+    /// Gets the number of stored vertices.
     /// </summary>
     public int Count
     {
@@ -93,7 +98,7 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     /// Gets the segment at the specified index of the contour.
     /// </summary>
     /// <param name="index">The index of the segment.</param>
-    /// <returns>The <see cref="Segment"/>.</returns>
+    /// <returns>The <see cref="Segment"/>. The final segment wraps from last vertex to first vertex.</returns>
     internal Segment GetSegment(int index)
         => (index == this.Count - 1)
         ? new Segment(this.vertices[^1], this.vertices[0])

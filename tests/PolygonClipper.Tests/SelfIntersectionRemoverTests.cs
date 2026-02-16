@@ -30,7 +30,7 @@ public class SelfIntersectionRemoverTests
 
         // Assert
         Assert.Equal(1, result.Count);
-        Assert.Equal(outer.Count, result[0].Count);
+        Assert.Equal(GetImplicitVertexCount(outer), GetImplicitVertexCount(result[0]));
         Assert.True(result[0].IsExternal);
     }
 
@@ -71,11 +71,11 @@ public class SelfIntersectionRemoverTests
 
         // First contour should be external (outer)
         Assert.True(result[0].IsExternal);
-        Assert.Equal(outer.Count, result[0].Count);
+        Assert.Equal(GetImplicitVertexCount(outer), GetImplicitVertexCount(result[0]));
 
         // Second contour should be a hole (inner)
         Assert.False(result[1].IsExternal);
-        Assert.Equal(inner.Count, result[1].Count);
+        Assert.Equal(GetImplicitVertexCount(inner), GetImplicitVertexCount(result[1]));
     }
 
     /// <summary>
@@ -123,8 +123,8 @@ public class SelfIntersectionRemoverTests
         Assert.False(result[1].IsExternal);
 
         // Vertex counts should be preserved.
-        Assert.Equal(outer.Count, result[0].Count);
-        Assert.Equal(inner.Count, result[1].Count);
+        Assert.Equal(GetImplicitVertexCount(outer), GetImplicitVertexCount(result[0]));
+        Assert.Equal(GetImplicitVertexCount(inner), GetImplicitVertexCount(result[1]));
     }
 
     /// <summary>
@@ -152,8 +152,8 @@ public class SelfIntersectionRemoverTests
         Assert.False(result[1].IsExternal);
 
         // Vertex counts should be preserved
-        Assert.Equal(outer.Count, result[0].Count);
-        Assert.Equal(inner.Count, result[1].Count);
+        Assert.Equal(GetImplicitVertexCount(outer), GetImplicitVertexCount(result[0]));
+        Assert.Equal(GetImplicitVertexCount(inner), GetImplicitVertexCount(result[1]));
     }
 
     /// <summary>
@@ -1958,8 +1958,8 @@ public class SelfIntersectionRemoverTests
         Assert.False(result[1].IsExternal);
 
         // Vertex counts should be preserved
-        Assert.Equal(outer.Count, result[0].Count);
-        Assert.Equal(inner.Count, result[1].Count);
+        Assert.Equal(GetImplicitVertexCount(outer), GetImplicitVertexCount(result[0]));
+        Assert.Equal(GetImplicitVertexCount(inner), GetImplicitVertexCount(result[1]));
     }
 
     /// <summary>
@@ -2011,8 +2011,8 @@ public class SelfIntersectionRemoverTests
         Assert.True(result[1].IsExternal);
 
         // Vertex counts preserved
-        Assert.Equal(circle1.Count, result[0].Count);
-        Assert.Equal(circle2.Count, result[1].Count);
+        Assert.Equal(GetImplicitVertexCount(circle1), GetImplicitVertexCount(result[0]));
+        Assert.Equal(GetImplicitVertexCount(circle2), GetImplicitVertexCount(result[1]));
     }
 
     /// <summary>
@@ -2099,6 +2099,7 @@ public class SelfIntersectionRemoverTests
             new Vertex(51.61859893798828, 88),
             new Vertex(37.5, 88),
             new Vertex(37.5, 83)
+
             // Parallelogram that overlaps the rectangle (diagonal shape from ~Y=84-99)
         ];
 
@@ -2346,7 +2347,7 @@ public class SelfIntersectionRemoverTests
         for (int i = 0; i < polygon.Count; i++)
         {
             Contour contour = polygon[i];
-            counts.Add(contour.Count);
+            counts.Add(GetImplicitVertexCount(contour));
         }
 
         counts.Sort();
@@ -2419,6 +2420,25 @@ public class SelfIntersectionRemoverTests
         return contour;
     }
 
+    private static int GetImplicitVertexCount(Contour contour)
+    {
+        int count = contour.Count;
+        return count > 1 && contour[0] == contour[^1] ? count - 1 : count;
+    }
+
+    private static int GetImplicitVertexCount(PathD path)
+    {
+        int count = path.Count;
+        if (count <= 1)
+        {
+            return count;
+        }
+
+        PointD first = path[0];
+        PointD last = path[^1];
+        return first.x == last.x && first.y == last.y ? count - 1 : count;
+    }
+
     private static void AssertMatchesClipperByCount(Polygon input)
     {
         Polygon result = PolygonClipper.RemoveSelfIntersections(input);
@@ -2432,7 +2452,7 @@ public class SelfIntersectionRemoverTests
         for (int i = 0; i < expected.Count; i++)
         {
             PathD actualPath = ProjectContour(actual[i]);
-            Assert.Equal(expected[i].Count, actualPath.Count);
+            Assert.Equal(GetImplicitVertexCount(expected[i]), GetImplicitVertexCount(actualPath));
         }
     }
 
@@ -2449,7 +2469,7 @@ public class SelfIntersectionRemoverTests
         for (int i = 0; i < expected.Count; i++)
         {
             PathD actualPath = ProjectContour(actual[i]);
-            Assert.Equal(expected[i].Count, actualPath.Count);
+            Assert.Equal(GetImplicitVertexCount(expected[i]), GetImplicitVertexCount(actualPath));
         }
     }
 
@@ -2639,125 +2659,6 @@ public class SelfIntersectionRemoverTests
         return lowest;
     }
 
-    private static bool ArePathsEquivalent(PathD expected, PathD actual, double quantizationScale)
-    {
-        if (expected.Count != actual.Count)
-        {
-            return false;
-        }
-
-        List<QuantizedPoint> expectedForward = NormalizeQuantizedPath(QuantizePath(expected, quantizationScale));
-        List<QuantizedPoint> actualForward = NormalizeQuantizedPath(QuantizePath(actual, quantizationScale));
-
-        if (AreQuantizedPathsEqual(expectedForward, actualForward))
-        {
-            return true;
-        }
-
-        List<QuantizedPoint> expectedReverse = new(expectedForward);
-        expectedReverse.Reverse();
-        expectedReverse = NormalizeQuantizedPath(expectedReverse);
-        return AreQuantizedPathsEqual(expectedReverse, actualForward);
-    }
-
-    private static int FindMatchingPathIndex(PathD expected, List<PathD> actualCandidates, double quantizationScale)
-    {
-        for (int i = 0; i < actualCandidates.Count; i++)
-        {
-            if (ArePathsEquivalent(expected, actualCandidates[i], quantizationScale))
-            {
-                return i;
-            }
-        }
-
-        return -1;
-    }
-
-    private static List<QuantizedPoint> QuantizePath(PathD path, double scale)
-    {
-        List<QuantizedPoint> result = new(path.Count);
-        for (int i = 0; i < path.Count; i++)
-        {
-            PointD point = path[i];
-            result.Add(
-                new QuantizedPoint(
-                    QuantizeCoordinate(point.x, scale),
-                    QuantizeCoordinate(point.y, scale)));
-        }
-
-        return result;
-    }
-
-    private static long QuantizeCoordinate(double value, double scale)
-        => (long)Math.Round(value * scale, MidpointRounding.AwayFromZero);
-
-    private static bool AreQuantizedPathsEqual(List<QuantizedPoint> left, List<QuantizedPoint> right)
-    {
-        if (left.Count != right.Count)
-        {
-            return false;
-        }
-
-        for (int i = 0; i < left.Count; i++)
-        {
-            if (left[i] != right[i])
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static List<QuantizedPoint> NormalizeQuantizedPath(List<QuantizedPoint> path)
-    {
-        if (path.Count <= 1)
-        {
-            return path;
-        }
-
-        int bestStart = 0;
-        for (int i = 1; i < path.Count; i++)
-        {
-            if (CompareQuantizedRotation(path, i, bestStart) < 0)
-            {
-                bestStart = i;
-            }
-        }
-
-        List<QuantizedPoint> normalized = new(path.Count);
-        for (int i = 0; i < path.Count; i++)
-        {
-            normalized.Add(path[(bestStart + i) % path.Count]);
-        }
-
-        return normalized;
-    }
-
-    private static int CompareQuantizedRotation(List<QuantizedPoint> points, int leftStart, int rightStart)
-    {
-        int count = points.Count;
-        for (int i = 0; i < count; i++)
-        {
-            QuantizedPoint left = points[(leftStart + i) % count];
-            QuantizedPoint right = points[(rightStart + i) % count];
-
-            int compareX = left.X.CompareTo(right.X);
-            if (compareX != 0)
-            {
-                return compareX;
-            }
-
-            int compareY = left.Y.CompareTo(right.Y);
-            if (compareY != 0)
-            {
-                return compareY;
-            }
-        }
-
-        return 0;
-    }
-
     private static PathD ProjectContour(Contour contour)
     {
         int count = contour.Count;
@@ -2775,6 +2676,4 @@ public class SelfIntersectionRemoverTests
 
         return path;
     }
-
-    private readonly record struct QuantizedPoint(long X, long Y);
 }
