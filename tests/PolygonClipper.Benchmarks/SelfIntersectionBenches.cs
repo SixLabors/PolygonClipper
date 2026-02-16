@@ -13,8 +13,8 @@ namespace SixLabors.PolygonClipper.Benchmarks;
 [OperationsPerSecond]
 public class SelfIntersectionBenches
 {
-    private Polygon polygon = null!;
-    private PathsD clipperSubject = null!;
+    private Polygon polygon;
+    private PathsD clipperSubject;
     private Clipper2Lib.FillRule clipperFillRule;
     private bool clipperReverseSolution;
     private const int ClipperPrecision = 6;
@@ -36,7 +36,7 @@ public class SelfIntersectionBenches
     public Polygon RemoveSelfIntersections()
         => PolygonClipper.RemoveSelfIntersections(this.polygon);
 
-    [Benchmark]
+    [Benchmark(Baseline = true)]
     public PolyTreeD Clipper2Union()
     {
         // Match Clipper2's single-polygon union with a positive fill rule.

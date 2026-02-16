@@ -13,7 +13,9 @@ SixLabors.PolygonClipper
 
 </div>
 
-SixLabors.PolygonClipper provides boolean operations on polygons in C# using a Martínez-Rueda sweep-line implementation. It supports union, intersection, difference, and xor on complex polygons with holes and multiple contours. Self-intersection normalization is provided via a separate Clipper2-inspired pipeline.
+SixLabors.PolygonClipper provides high-performance polygon clipping and stroking in C#.
+Boolean operations (union, intersection, difference, xor) are implemented with a Martinez-Rueda sweep-line pipeline for complex polygons with holes and multiple contours.
+Self-intersection normalization is handled by a dedicated Vatti/Clipper2-inspired remover, and `PolygonStroker` builds stroke geometry on top of that normalization path.
 
 ## Features
 
@@ -22,14 +24,15 @@ SixLabors.PolygonClipper provides boolean operations on polygons in C# using a M
 - Preserves topology: output polygons include hole/contour hierarchy
 - Deterministic and robust sweep line algorithm with O((n + k) log n) complexity
 - Includes self-intersection removal (Clipper2-inspired) to normalize input contours for boolean operations
+- Includes `PolygonStroker` for configurable geometric stroking (joins, caps, miter limits)
 - Uses double precision geometry without coordinate quantization
 
 ## Usage
 
-The API centers around `Polygon` and `Contour` types. Construct input polygons using contours, then apply Boolean operations via the `PolygonClipper` class:
+The API centers around `Polygon` and `Contour` types. Construct input polygons using contours, then apply Boolean operations via `PolygonClipper`:
 
 ```csharp
-Polygon result = PolygonClipper.Intersection(subject, clipping);
+Polygon result = PolygonClipper.Union(subject, clipping);
 ```
 
 You can also normalize input before boolean operations if your contours contain self-intersections:
@@ -38,17 +41,40 @@ You can also normalize input before boolean operations if your contours contain 
 Polygon clean = PolygonClipper.RemoveSelfIntersections(input);
 ```
 
+### Stroking
+
+Use `PolygonStroker` to generate filled stroke polygons from input contours:
+
+```csharp
+Polygon stroked = PolygonStroker.Stroke(input, width: 12);
+```
+
+Configure join/cap behavior through `StrokeOptions`:
+
+```csharp
+StrokeOptions options = new()
+{
+    LineJoin = LineJoin.Round,
+    LineCap = LineCap.Round,
+    MiterLimit = 4,
+    InnerMiterLimit = 1.01,
+    ArcDetailScale = 1
+};
+
+Polygon stroked = PolygonStroker.Stroke(input, width: 12, options);
+```
+
 ## Algorithm References
 
 This project draws on the following algorithm and implementation references:
 
-> F. Martínez et al., "A simple algorithm for Boolean operations on polygons", *Advances in Engineering Software*, 64 (2013), pp. 11-19.  
+> F. Martinez et al., "A simple algorithm for Boolean operations on polygons", *Advances in Engineering Software*, 64 (2013), pp. 11-19.  
 > https://doi.org/10.1016/j.advengsoft.2013.04.004
 
 > B. R. Vatti, "A generic solution to polygon clipping", *Communications of the ACM*, 35(7), 1992, pp. 56-63.  
 > https://dl.acm.org/doi/pdf/10.1145/129902.129906
 
-> 21re, *rust-geo-booleanop* (Rust Martínez-Rueda implementation reference).  
+> 21re, *rust-geo-booleanop* (Rust Martinez-Rueda implementation reference).  
 > https://github.com/21re/rust-geo-booleanop
 
 > Angus Johnson, *Clipper2* polygon clipping library (reference implementation for the self-intersection pipeline).  

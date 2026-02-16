@@ -299,17 +299,15 @@ internal static class SelfIntersectionRemover
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool SegmentsOverlap(in Vertex a1, in Vertex a2, in Vertex b1, in Vertex b2)
     {
-        // TODO: Vector Min/Max may be the most efficient way to do this.
-        double minAx = Math.Min(a1.X, a2.X);
-        double maxAx = Math.Max(a1.X, a2.X);
-        double minAy = Math.Min(a1.Y, a2.Y);
-        double maxAy = Math.Max(a1.Y, a2.Y);
-        double minBx = Math.Min(b1.X, b2.X);
-        double maxBx = Math.Max(b1.X, b2.X);
-        double minBy = Math.Min(b1.Y, b2.Y);
-        double maxBy = Math.Max(b1.Y, b2.Y);
+        Vertex aMin = Vertex.Min(a1, a2);
+        Vertex aMax = Vertex.Max(a1, a2);
+        Vertex bMin = Vertex.Min(b1, b2);
+        Vertex bMax = Vertex.Max(b1, b2);
 
-        return maxAx >= minBx && maxBx >= minAx && maxAy >= minBy && maxBy >= minAy;
+        return aMax.X >= bMin.X &&
+               bMax.X >= aMin.X &&
+               aMax.Y >= bMin.Y &&
+               bMax.Y >= aMin.Y;
     }
 
     /// <summary>
@@ -982,33 +980,6 @@ internal static class SelfIntersectionRemover
             }
 
             return true;
-        }
-
-        /// <summary>
-        /// Builds output contours from completed output records.
-        /// </summary>
-        /// <param name="solution">The destination contour list.</param>
-        private void BuildContours(List<Contour> solution)
-        {
-            int i = 0;
-            while (i < this.sweepLine.OutputRecords.Count)
-            {
-                OutputRecord outputRecord = this.sweepLine.OutputRecords[i++];
-                if (outputRecord.Points == null)
-                {
-                    continue;
-                }
-
-                int estimatedCapacity = outputRecord.OutputPointCount > 0
-                    ? outputRecord.OutputPointCount + 1
-                    : 0;
-                Contour contour = estimatedCapacity > 0 ? new Contour(estimatedCapacity) : [];
-                this.CleanCollinearEdges(outputRecord);
-                if (BuildContour(outputRecord.Points, this.ReverseSolution, contour))
-                {
-                    solution.Add(contour);
-                }
-            }
         }
 
         /// <summary>

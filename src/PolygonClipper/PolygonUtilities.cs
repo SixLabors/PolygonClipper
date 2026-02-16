@@ -228,11 +228,7 @@ internal static class PolygonUtilities
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static double Dot(in Vertex a, in Vertex b, in Vertex c)
-    {
-        Vertex ab = b - a;
-        Vertex bc = c - b;
-        return Vertex.Dot(ab, bc);
-    }
+        => Vertex.Dot(b - a, c - b);
 
     /// <summary>
     /// Returns the cross product of the vectors AB and BC.
@@ -715,148 +711,6 @@ internal static class PolygonUtilities
         return interResult;
     }
 
-    internal static int FindIntersectionDouble(
-        in Vertex a1,
-        in Vertex a2,
-        in Vertex b1,
-        in Vertex b2,
-        out Vertex pi0,
-        out Vertex pi1)
-    {
-        pi0 = default;
-        pi1 = default;
-
-        if (!TryGetIntersectionBoundingBoxDouble(a1, a2, b1, b2, out Box2 bbox))
-        {
-            return 0;
-        }
-
-        int interResult = FindIntersectionImplDouble(a1, a2, b1, b2, out pi0, out pi1);
-        if (interResult == 1)
-        {
-            pi0 = ConstrainToBoundingBoxDouble(pi0, bbox);
-        }
-        else if (interResult == 2)
-        {
-            pi0 = ConstrainToBoundingBoxDouble(pi0, bbox);
-            pi1 = ConstrainToBoundingBoxDouble(pi1, bbox);
-        }
-
-        return interResult;
-    }
-
-    private static int FindIntersectionImplDouble(
-        in Vertex a1,
-        in Vertex a2,
-        in Vertex b1,
-        in Vertex b2,
-        out Vertex pi0,
-        out Vertex pi1)
-    {
-        pi0 = default;
-        pi1 = default;
-
-        Vertex va = a2 - a1;
-        Vertex vb = b2 - b1;
-        Vertex e = b1 - a1;
-
-        double kross = Vertex.Cross(va, vb);
-        double sqrKross = kross * kross;
-        double sqrLenA = Vertex.Dot(va, va);
-
-        if (sqrKross > 0D)
-        {
-            double s = Vertex.Cross(e, vb) / kross;
-            if (s is < 0D or > 1D)
-            {
-                return 0;
-            }
-
-            double t = Vertex.Cross(e, va) / kross;
-            if (t is < 0D or > 1D)
-            {
-                return 0;
-            }
-
-            if (s is 0D or 1D)
-            {
-                pi0 = a1 + (s * va);
-                return 1;
-            }
-
-            if (t is 0D or 1D)
-            {
-                pi0 = b1 + (t * vb);
-                return 1;
-            }
-
-            pi0 = a1 + (s * va);
-            return 1;
-        }
-
-        kross = Vertex.Cross(e, va);
-        sqrKross = kross * kross;
-        if (sqrKross > 0D)
-        {
-            return 0;
-        }
-
-        double sa = Vertex.Dot(va, e) / sqrLenA;
-        double sb = sa + (Vertex.Dot(va, vb) / sqrLenA);
-        double smin = Math.Min(sa, sb);
-        double smax = Math.Max(sa, sb);
-
-        if (smin <= 1D && smax >= 0D)
-        {
-            if (smin == 1D)
-            {
-                pi0 = a1 + (smin * va);
-                return 1;
-            }
-
-            if (smax == 0D)
-            {
-                pi0 = a1 + (smax * va);
-                return 1;
-            }
-
-            pi0 = a1 + (Math.Max(smin, 0D) * va);
-            pi1 = a1 + (Math.Min(smax, 1D) * va);
-            return 2;
-        }
-
-        return 0;
-    }
-
-    private static bool TryGetIntersectionBoundingBoxDouble(
-        in Vertex a1,
-        in Vertex a2,
-        in Vertex b1,
-        in Vertex b2,
-        out Box2 result)
-    {
-        Vertex minA = Vertex.Min(a1, a2);
-        Vertex maxA = Vertex.Max(a1, a2);
-        Vertex minB = Vertex.Min(b1, b2);
-        Vertex maxB = Vertex.Max(b1, b2);
-
-        Vertex interMin = Vertex.Max(minA, minB);
-        Vertex interMax = Vertex.Min(maxA, maxB);
-
-        if (interMin.X <= interMax.X && interMin.Y <= interMax.Y)
-        {
-            result = new Box2(interMin, interMax);
-            return true;
-        }
-
-        result = default;
-        return false;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static Vertex ConstrainToBoundingBoxDouble(in Vertex p, in Box2 bbox)
-        => Vertex.Min(Vertex.Max(p, bbox.Min), bbox.Max);
-
     /// <summary>
     /// Finds the intersection of two line segments.
     /// </summary>
@@ -885,44 +739,51 @@ internal static class PolygonUtilities
         Vertex va = a2 - a1;
         Vertex vb = b2 - b1;
         Vertex e = b1 - a1;
-        double kross = (va.X * vb.Y) - (va.Y * vb.X);
+        double kross = Vertex.Cross(va, vb);
         double sqrKross = kross * kross;
-        double sqrLenA = (va.X * va.X) + (va.Y * va.Y);
+        double sqrLenA = Vertex.Dot(va, va);
 
         if (sqrKross > 0D)
         {
-            double s = ((e.X * vb.Y) - (e.Y * vb.X)) / kross;
+            // Lines of the segments are not parallel.
+            double s = Vertex.Cross(e, vb) / kross;
             if (s is < 0D or > 1D)
             {
                 return 0;
             }
 
-            double t = ((e.X * va.Y) - (e.Y * va.X)) / kross;
+            double t = Vertex.Cross(e, va) / kross;
             if (t is < 0D or > 1D)
             {
                 return 0;
             }
 
+            // If s or t is exactly 0 or 1, the intersection is on an endpoint.
             if (s is 0D or 1D)
             {
+                // On an endpoint of segment a.
                 pi0 = MidPoint(a1, s, va);
                 return 1;
             }
 
             if (t is 0D or 1D)
             {
+                // On an endpoint of segment b.
                 pi0 = MidPoint(a2, t, vb);
                 return 1;
             }
 
+            // Intersection of lines is a point on each segment.
             pi0 = MidPoint(a1, s, va);
             return 1;
         }
 
-        kross = (e.X * va.Y) - (e.Y * va.X);
+        // Lines are parallel; check if they are collinear.
+        kross = Vertex.Cross(e, va);
         sqrKross = kross * kross;
         if (sqrKross > 0D)
         {
+            // Parallel but not collinear.
             return 0;
         }
 
@@ -931,8 +792,9 @@ internal static class PolygonUtilities
             return 0;
         }
 
-        double sa = ((va.X * e.X) + (va.Y * e.Y)) / sqrLenA;
-        double sb = sa + (((va.X * vb.X) + (va.Y * vb.Y)) / sqrLenA);
+        // Segments are collinear, check 1D overlap in segment-a parameter space.
+        double sa = Vertex.Dot(va, e) / sqrLenA;
+        double sb = sa + (Vertex.Dot(va, vb) / sqrLenA);
         double smin = Math.Min(sa, sb);
         double smax = Math.Max(sa, sb);
 

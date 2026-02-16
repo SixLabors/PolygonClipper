@@ -102,4 +102,35 @@ public class GenericTestCases
 
         MultiPolygon = 1
     }
+
+    [Fact(Skip = "Used for performance tracing only.")]
+    public void StarBenchmark()
+    {
+        Polygon subject = BuildStarPolygon(1001, 100D, 0D, 0D);
+        Polygon clipping = BuildStarPolygon(1001, 100D, 35D, 22D);
+        Polygon result = PolygonClipper.Union(subject, clipping);
+    }
+
+    private static Polygon BuildStarPolygon(int vertexCount, double radius, double centerX, double centerY)
+    {
+        if (vertexCount < 5 || (vertexCount & 1) == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(vertexCount), "Vertex count must be an odd number >= 5.");
+        }
+
+        int step = (vertexCount - 1) / 2;
+        Contour contour = new(vertexCount + 1);
+        for (int i = 0; i < vertexCount; i++)
+        {
+            int index = (i * step) % vertexCount;
+            double angle = (index * Math.PI * 2D) / vertexCount;
+            double x = centerX + (Math.Cos(angle) * radius);
+            double y = centerY + (Math.Sin(angle) * radius);
+            contour.Add(new Vertex(x, y));
+        }
+
+        contour.Add(contour[0]);
+        Polygon polygon = [contour];
+        return polygon;
+    }
 }

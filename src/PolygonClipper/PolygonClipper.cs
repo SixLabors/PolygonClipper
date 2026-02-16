@@ -106,7 +106,7 @@ public class PolygonClipper
     /// (the first vertex is repeated as the terminal closing vertex).
     /// </returns>
     public static Polygon RemoveSelfIntersections(Polygon polygon)
-        => SelfIntersectionRemover.Process(polygon, fillRule: null);
+        => SelfIntersectionRemover.Process(polygon, null);
 
     /// <summary>
     /// Removes self-intersections from a polygon using an explicit fill rule.

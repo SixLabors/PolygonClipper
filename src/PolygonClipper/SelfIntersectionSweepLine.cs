@@ -41,7 +41,7 @@ internal sealed class SelfIntersectionSweepLine
         this.scanlineSchedule = new ScanlineSchedule();
         this.intersectionList = [];
         this.vertexList = [];
-        this.OutputRecords = new OutputRecordPoolList();
+        this.OutputRecords = [];
         this.horizontalSegments = [];
         this.horizontalJoins = [];
         this.OutputPoints = [];
@@ -217,12 +217,11 @@ internal sealed class SelfIntersectionSweepLine
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsTwoVertexFlatRingEdge(ActiveEdge edge)
-    {
+    private static bool IsTwoVertexFlatRingEdge(ActiveEdge edge) =>
+
         // Degenerate "ring" used by issue-style tests: two opposing horizontal
         // edges around a single local minimum (A-B-A). This is an O(1) shape check.
-        return edge.IsHorizontal && edge.LocalMin.Vertex.Prev == edge.LocalMin.Vertex.Next;
-    }
+        edge.IsHorizontal && edge.LocalMin.Vertex.Prev == edge.LocalMin.Vertex.Next;
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Vertex GetFlatRingTip(ActiveEdge flatEdge, in Vertex touchPoint)
@@ -739,7 +738,7 @@ internal sealed class SelfIntersectionSweepLine
 
             if (contributing)
             {
-                this.AddLocalMinimumOutput(leftBound, rightBound, leftBound.Bottom, true);
+                _ = this.AddLocalMinimumOutput(leftBound, rightBound, leftBound.Bottom, true);
                 if (!leftBound.IsHorizontal)
                 {
                     this.CheckJoinLeft(leftBound, leftBound.Bottom);
@@ -856,7 +855,7 @@ internal sealed class SelfIntersectionSweepLine
             if (hasTwoVertexFlatEdge)
             {
                 OutputPoint outputPoint = this.AddOutputPoint(edge1, point);
-                this.AddOutputPoint(edge2, point);
+                _ = this.AddOutputPoint(edge2, point);
                 SwapOutputRecords(edge1, edge2);
                 return outputPoint;
             }
@@ -1131,9 +1130,9 @@ internal sealed class SelfIntersectionSweepLine
                     // Keep the fix in-sweep: inject touch->tip->touch directly into the
                     // hot output chain in O(1), avoiding any post-process contour scans.
                     Vertex tip = GetFlatRingTip(flatEdge, point);
-                    this.AddOutputPoint(hotEdge, point);
-                    this.AddOutputPoint(hotEdge, tip);
-                    this.AddOutputPoint(hotEdge, point);
+                    _ = this.AddOutputPoint(hotEdge, point);
+                    _ = this.AddOutputPoint(hotEdge, tip);
+                    _ = this.AddOutputPoint(hotEdge, point);
                     return;
                 }
             }
@@ -1146,19 +1145,19 @@ internal sealed class SelfIntersectionSweepLine
         {
             if ((oldE1WindCount != 0 && oldE1WindCount != 1) || (oldE2WindCount != 0 && oldE2WindCount != 1))
             {
-                this.AddLocalMaximumOutput(edge1, edge2, point);
+                _ = this.AddLocalMaximumOutput(edge1, edge2, point);
             }
             else if (edge1.IsFront || (edge1.OutputRecord == edge2.OutputRecord))
             {
                 // this 'else if' condition isn't strictly needed but
                 // it's sensible to split polygons that only touch at
                 // a common vertex (not at common edges).
-                this.AddLocalMaximumOutput(edge1, edge2, point);
+                _ = this.AddLocalMaximumOutput(edge1, edge2, point);
             }
             else
             {
                 // Treat as a crossing; emit and swap output records.
-                this.AddOutputPoint(edge1, point);
+                _ = this.AddOutputPoint(edge1, point);
                 SwapOutputRecords(edge1, edge2);
             }
         }
@@ -1166,12 +1165,12 @@ internal sealed class SelfIntersectionSweepLine
         // If only one edge is hot, emit and swap.
         else if (edge1.IsHot)
         {
-            this.AddOutputPoint(edge1, point);
+            _ = this.AddOutputPoint(edge1, point);
             SwapOutputRecords(edge1, edge2);
         }
         else if (edge2.IsHot)
         {
-            this.AddOutputPoint(edge2, point);
+            _ = this.AddOutputPoint(edge2, point);
             SwapOutputRecords(edge1, edge2);
         }
 
@@ -1180,7 +1179,7 @@ internal sealed class SelfIntersectionSweepLine
         {
             if (oldE1WindCount == 1 && oldE2WindCount == 1)
             {
-                this.AddLocalMinimumOutput(edge1, edge2, point);
+                _ = this.AddLocalMinimumOutput(edge1, edge2, point);
             }
         }
     }
@@ -1672,7 +1671,7 @@ internal sealed class SelfIntersectionSweepLine
 
                 if (!scan.IsHorizontal)
                 {
-                    Vertex point = new Vertex(scan.CurrentX, y);
+                    Vertex point = new(scan.CurrentX, y);
                     if (isLeftToRight)
                     {
                         this.IntersectActiveEdges(horizontalEdge, scan, point);
@@ -1730,17 +1729,17 @@ internal sealed class SelfIntersectionSweepLine
                     {
                         while (horizontalEdge.VertexTop != vertexMax)
                         {
-                            this.AddOutputPoint(horizontalEdge, horizontalEdge.Top);
+                            _ = this.AddOutputPoint(horizontalEdge, horizontalEdge.Top);
                             this.UpdateEdgeInActiveList(horizontalEdge);
                         }
 
                         if (isLeftToRight)
                         {
-                            this.AddLocalMaximumOutput(horizontalEdge, edge, horizontalEdge.Top);
+                            _ = this.AddLocalMaximumOutput(horizontalEdge, edge, horizontalEdge.Top);
                         }
                         else
                         {
-                            this.AddLocalMaximumOutput(edge, horizontalEdge, horizontalEdge.Top);
+                            _ = this.AddLocalMaximumOutput(edge, horizontalEdge, horizontalEdge.Top);
                         }
                     }
 
@@ -1809,7 +1808,7 @@ internal sealed class SelfIntersectionSweepLine
             // Advance to the next horizontal segment in the bound.
             if (horizontalEdge.IsHot)
             {
-                this.AddOutputPoint(horizontalEdge, horizontalEdge.Top);
+                _ = this.AddOutputPoint(horizontalEdge, horizontalEdge.Top);
             }
 
             this.UpdateEdgeInActiveList(horizontalEdge);
@@ -1857,7 +1856,7 @@ internal sealed class SelfIntersectionSweepLine
                 // Intermediate vertex on the bound.
                 if (edge.IsHot)
                 {
-                    this.AddOutputPoint(edge, edge.Top);
+                    _ = this.AddOutputPoint(edge, edge.Top);
                 }
 
                 this.UpdateEdgeInActiveList(edge);
@@ -1919,7 +1918,7 @@ internal sealed class SelfIntersectionSweepLine
         // At this point edge.NextInAel == maxPair.
         if (edge.IsHot)
         {
-            this.AddLocalMaximumOutput(edge, maxPair, edge.Top);
+            _ = this.AddLocalMaximumOutput(edge, maxPair, edge.Top);
         }
 
         this.activeEdges.Remove(edge);
@@ -1946,13 +1945,13 @@ internal sealed class SelfIntersectionSweepLine
         {
             edge.JoinWith = JoinWith.None;
             edge.NextInAel!.JoinWith = JoinWith.None;
-            this.AddLocalMinimumOutput(edge, edge.NextInAel, point, true);
+            _ = this.AddLocalMinimumOutput(edge, edge.NextInAel, point, true);
         }
         else
         {
             edge.JoinWith = JoinWith.None;
             edge.PrevInAel!.JoinWith = JoinWith.None;
-            this.AddLocalMinimumOutput(edge.PrevInAel, edge, point, true);
+            _ = this.AddLocalMinimumOutput(edge.PrevInAel, edge, point, true);
         }
     }
 
@@ -2004,7 +2003,7 @@ internal sealed class SelfIntersectionSweepLine
 
         if (edge.OutputRecord!.Index == prev.OutputRecord!.Index)
         {
-            this.AddLocalMaximumOutput(prev, edge, point);
+            _ = this.AddLocalMaximumOutput(prev, edge, point);
         }
         else if (edge.OutputRecord!.Index < prev.OutputRecord!.Index)
         {
@@ -2067,7 +2066,7 @@ internal sealed class SelfIntersectionSweepLine
 
         if (edge.OutputRecord!.Index == next.OutputRecord!.Index)
         {
-            this.AddLocalMaximumOutput(edge, next, point);
+            _ = this.AddLocalMaximumOutput(edge, next, point);
         }
         else if (edge.OutputRecord!.Index < next.OutputRecord!.Index)
         {

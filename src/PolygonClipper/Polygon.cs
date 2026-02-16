@@ -3,6 +3,7 @@
 
 using System.Collections;
 using System.Runtime.CompilerServices;
+using System.Text;
 
 namespace SixLabors.PolygonClipper;
 
@@ -147,4 +148,29 @@ public sealed class Polygon : IReadOnlyCollection<Contour>
     /// <inheritdoc/>
     IEnumerator IEnumerable.GetEnumerator()
         => ((IEnumerable)this.contours).GetEnumerator();
+
+    /// <summary>
+    /// Creates a string useful for debugging.
+    /// </summary>
+    /// <returns>The <see cref="string"/>.</returns>
+    public string ToDebugString()
+    {
+        StringBuilder stringBuilder = new();
+        stringBuilder.AppendLine("[");
+
+        foreach (Contour contour in this.contours)
+        {
+            stringBuilder.AppendLine("    [");
+            foreach (Vertex vertex in contour)
+            {
+                stringBuilder.AppendLine("        new Vertex(" + vertex.X + ", " + vertex.Y + "),");
+            }
+
+            stringBuilder.AppendLine("    ],");
+        }
+
+        stringBuilder.AppendLine("];");
+
+        return stringBuilder.ToString();
+    }
 }
