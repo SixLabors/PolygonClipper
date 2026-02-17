@@ -61,6 +61,46 @@ public class PolygonStrokerTests
     }
 
     [Fact]
+    public void Stroke_OpenPolylineWithThreeVertices_IsNotForcedClosed()
+    {
+        const double width = 2D;
+
+        StrokeOptions options = new()
+        {
+            LineCap = LineCap.Butt,
+            LineJoin = LineJoin.Miter,
+            InnerJoin = InnerJoin.Miter
+        };
+
+        Polygon open =
+        [[
+            new Vertex(0, 0),
+            new Vertex(12, 0),
+            new Vertex(12, 9)
+        ]];
+
+        Polygon closed =
+        [[
+            new Vertex(0, 0),
+            new Vertex(12, 0),
+            new Vertex(12, 9),
+            new Vertex(0, 0)
+        ]];
+
+        Polygon openResult = PolygonStroker.Stroke(open, width, options);
+        Polygon closedResult = PolygonStroker.Stroke(closed, width, options);
+
+        AssertPolygonIsValid(openResult);
+        AssertPolygonIsValid(closedResult);
+
+        double openArea = ComputeTotalAbsoluteArea(openResult);
+        double closedArea = ComputeTotalAbsoluteArea(closedResult);
+        Assert.True(
+            Math.Abs(openArea - closedArea) > 1E-6D,
+            $"Open and closed path strokes should differ. openArea={openArea:R}, closedArea={closedArea:R}.");
+    }
+
+    [Fact]
     public void ProcessPolygonAndClip_FoldBackOpenPath_ProducesValidStroke()
     {
         const double width = 12D;
@@ -94,6 +134,29 @@ public class PolygonStrokerTests
 
         AssertPolygonIsValid(actual);
         AssertStrokeCoversInputCenterline(input, actual, samplesPerSegment: 3);
+    }
+
+    [Theory (Skip = "For profiling only.")]
+    [InlineData(101)]
+    [InlineData(301)]
+    [InlineData(1001)]
+    public void ProcessPolygonAndClip_CompoundGearBenchmarkInput_ProducesStroke(int toothCount)
+    {
+        const double width = 12D;
+        StrokeOptions options = new()
+        {
+            LineJoin = LineJoin.Round,
+            LineCap = LineCap.Round
+        };
+
+        Polygon input = BuildCompoundGearPolygon(toothCount);
+        Polygon actual = PolygonStroker.Stroke(input, width, options);
+
+        Assert.True(actual.Count > 0);
+        for (int i = 0; i < actual.Count; i++)
+        {
+            Assert.True(actual[i].Count >= 3, $"Contour {i} must have at least 3 vertices.");
+        }
     }
 
     [Fact]
@@ -459,6 +522,37 @@ public class PolygonStrokerTests
         }
     }
 
+    private static double ComputeTotalAbsoluteArea(Polygon polygon)
+    {
+        double total = 0D;
+        for (int i = 0; i < polygon.Count; i++)
+        {
+            total += Math.Abs(ComputeSignedArea(polygon[i]));
+        }
+
+        return total;
+    }
+
+    private static double ComputeSignedArea(Contour contour)
+    {
+        int count = contour.Count;
+        if (count < 3)
+        {
+            return 0D;
+        }
+
+        double area = 0D;
+        Vertex previous = contour[count - 1];
+        for (int i = 0; i < count; i++)
+        {
+            Vertex current = contour[i];
+            area += (previous.Y + current.Y) * (previous.X - current.X);
+            previous = current;
+        }
+
+        return area * 0.5D;
+    }
+
     private static void AssertStrokeCoversInputCenterline(Polygon input, Polygon stroked, int samplesPerSegment)
     {
         Assert.True(samplesPerSegment > 0);
@@ -550,6 +644,49 @@ public class PolygonStrokerTests
             double x = centerX + (Math.Cos(angle) * radius);
             double y = centerY + (Math.Sin(angle) * radius);
             contour.Add(new Vertex(x, y));
+        }
+
+        return contour;
+    }
+
+    private static Polygon BuildCompoundGearPolygon(int toothCount)
+    {
+        if (toothCount < 3)
+        {
+            throw new ArgumentOutOfRangeException(nameof(toothCount), "Tooth count must be >= 3.");
+        }
+
+        Contour outer = BuildGearContour(toothCount, 120D, 104D, 0D, 0D, clockwise: false);
+        Contour inner = BuildGearContour(toothCount, 62D, 50D, 0D, 0D, clockwise: true);
+        return [outer, inner];
+    }
+
+    private static Contour BuildGearContour(
+        int toothCount,
+        double outerRadius,
+        double innerRadius,
+        double centerX,
+        double centerY,
+        bool clockwise)
+    {
+        int vertexCount = toothCount * 2;
+        double angleStep = Math.PI / toothCount;
+        Contour contour = new(vertexCount + 1);
+
+        for (int i = 0; i < vertexCount; i++)
+        {
+            double radius = (i & 1) == 0 ? outerRadius : innerRadius;
+            double angle = i * angleStep;
+            contour.Add(new Vertex(
+                centerX + (Math.Cos(angle) * radius),
+                centerY + (Math.Sin(angle) * radius)));
+        }
+
+        contour.Add(contour[0]);
+        bool shouldBeCounterClockwise = !clockwise;
+        if (contour.IsCounterClockwise() != shouldBeCounterClockwise)
+        {
+            contour.Reverse();
         }
 
         return contour;

@@ -162,6 +162,23 @@ internal sealed class HorizontalJoinPoolList : PooledList<HorizontalJoin>
 }
 
 /// <summary>
+/// Pool-backed list of sweep events reused between clipping runs.
+/// </summary>
+internal sealed class SweepEventPoolList : PooledList<SweepEvent>
+{
+    /// <summary>
+    /// Adds a sweep event to the active range.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Add(SweepEvent sweepEvent)
+    {
+        this.TryGrow();
+        this.Items[this.Size] = sweepEvent;
+        this.Size++;
+    }
+}
+
+/// <summary>
 /// Base class for pool-backed lists with stable indexing and reuse.
 /// </summary>
 /// <remarks>
@@ -198,12 +215,12 @@ internal abstract class PooledList<T> : IReadOnlyList<T>
     protected int Size { get; set; }
 
     /// <summary>
-    /// Gets or sets the current capacity of the pooled storage.
+    /// Gets the current capacity of the pooled storage.
     /// </summary>
     public int Capacity
     {
         get => this.Items.Length;
-        set
+        private set
         {
             if (value <= this.Items.Length)
             {
@@ -283,7 +300,7 @@ internal abstract class PooledList<T> : IReadOnlyList<T>
         {
             this.list = list;
             this.index = 0;
-            this.current = default;
+            this.current = null;
         }
 
         public readonly TItem Current => this.current!;
@@ -310,14 +327,14 @@ internal abstract class PooledList<T> : IReadOnlyList<T>
         private bool MoveNextRare(int count)
         {
             this.index = count + 1;
-            this.current = default;
+            this.current = null;
             return false;
         }
 
         public void Reset()
         {
             this.index = 0;
-            this.current = default;
+            this.current = null;
         }
     }
 }

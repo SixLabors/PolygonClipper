@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
@@ -52,6 +53,12 @@ internal struct ArrayBuilder<T>
             }
         }
     }
+
+    /// <summary>
+    /// Gets the backing buffer capacity.
+    /// </summary>
+    public readonly int Capacity
+        => this.data?.Length ?? 0;
 
     /// <summary>
     /// Returns a reference to specified element of the array.
@@ -118,6 +125,21 @@ internal struct ArrayBuilder<T>
 
         // No need to actually clear since we're not allowing reference types.
         this.size = 0;
+
+    /// <summary>
+    /// Sorts the active range of items using the specified comparer.
+    /// </summary>
+    /// <param name="comparer">The comparer to use, or null for the default comparer.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly void Sort(IComparer<T>? comparer = null)
+    {
+        if (this.size <= 1 || this.data == null)
+        {
+            return;
+        }
+
+        Array.Sort(this.data, 0, this.size, comparer);
+    }
 
     private void EnsureCapacity(int min)
     {

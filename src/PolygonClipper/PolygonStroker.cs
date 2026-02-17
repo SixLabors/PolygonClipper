@@ -17,6 +17,12 @@ namespace SixLabors.PolygonClipper;
 /// <item><description>Resolve generated overlaps/self-intersections using <see cref="SelfIntersectionRemover"/> with positive fill semantics.</description></item>
 /// </list>
 /// The emitted contours are implicitly closed (first vertex is not duplicated at the end).
+/// <para>
+/// The static <see cref="Stroke(Polygon,double,StrokeOptions?)"/> method is the recommended
+/// entry point. It routes calls through an internal thread-local pool of reusable stroker
+/// instances and automatically resets temporary state between calls.
+/// </para>
+/// <para>Instance members are not thread-safe for concurrent use.</para>
 /// </remarks>
 public sealed class PolygonStroker
 {
@@ -26,6 +32,19 @@ public sealed class PolygonStroker
     private const double IntersectionEpsilon = 1E-30D;
     private const double Pi = Math.PI;
     private const double PiMul2 = Math.PI * 2D;
+
+    // Keep at most 2 warm instances per option-set (one active shape and one spare)
+    // to reduce churn without retaining many rarely reused configurations.
+    private const int MaxPooledStrokersPerOptions = 2;
+
+    // Discard oversized scratch buffers so a single pathological stroke does not pin
+    // large arrays in thread-local pools for the lifetime of the thread.
+    private const int MaxRetainedScratchBytes = 256 * 1024;
+
+    private static readonly StrokeOptions DefaultStrokeOptions = new();
+
+    [ThreadStatic]
+    private static Dictionary<StrokeOptionsKey, Stack<PolygonStroker>>? strokersByOptions;
 
     // Scratch buffers reused across contours to keep per-call allocations down.
     private ArrayBuilder<Vertex> outVertices = new(1);
@@ -47,6 +66,11 @@ public sealed class PolygonStroker
     /// </summary>
     /// <param name="options">The stroke options.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is null.</exception>
+    /// <remarks>
+    /// This constructor is intended for advanced/manual usage.
+    /// For typical call patterns, prefer the static <see cref="Stroke(Polygon,double,StrokeOptions?)"/>
+    /// method to use internal pooling automatically.
+    /// </remarks>
     public PolygonStroker(StrokeOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -97,6 +121,50 @@ public sealed class PolygonStroker
         Stop
     }
 
+    private readonly struct StrokeOptionsKey : IEquatable<StrokeOptionsKey>
+    {
+        public StrokeOptionsKey(StrokeOptions options)
+        {
+            this.LineJoin = options.LineJoin;
+            this.InnerJoin = options.InnerJoin;
+            this.LineCap = options.LineCap;
+            this.MiterLimit = options.MiterLimit;
+            this.InnerMiterLimit = options.InnerMiterLimit;
+            this.ArcDetailScale = options.ArcDetailScale;
+        }
+
+        public LineJoin LineJoin { get; }
+
+        public InnerJoin InnerJoin { get; }
+
+        public LineCap LineCap { get; }
+
+        public double MiterLimit { get; }
+
+        public double InnerMiterLimit { get; }
+
+        public double ArcDetailScale { get; }
+
+        public bool Equals(StrokeOptionsKey other)
+            => this.LineJoin == other.LineJoin &&
+               this.InnerJoin == other.InnerJoin &&
+               this.LineCap == other.LineCap &&
+               this.MiterLimit == other.MiterLimit &&
+               this.InnerMiterLimit == other.InnerMiterLimit &&
+               this.ArcDetailScale == other.ArcDetailScale;
+
+        public override bool Equals(object? obj) => obj is StrokeOptionsKey other && this.Equals(other);
+
+        public override int GetHashCode()
+            => HashCode.Combine(
+                this.LineJoin,
+                this.InnerJoin,
+                this.LineCap,
+                this.MiterLimit,
+                this.InnerMiterLimit,
+                this.ArcDetailScale);
+    }
+
     /// <summary>
     /// Strokes <paramref name="polygon"/> with <paramref name="width"/> using optional
     /// <paramref name="options"/> and resolves overlaps via <see cref="SelfIntersectionRemover"/>
@@ -110,14 +178,21 @@ public sealed class PolygonStroker
     /// </param>
     /// <returns>Self-intersection resolved stroke polygon.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="polygon"/> is null.</exception>
+    /// <remarks>Preferred entry point. Uses internal thread-local reusable instances.</remarks>
     public static Polygon Stroke(Polygon polygon, double width, StrokeOptions? options = null)
     {
-        PolygonStroker stroker = new(options ?? new StrokeOptions())
+        StrokeOptions effectiveOptions = options ?? DefaultStrokeOptions;
+        StrokeOptionsKey key = new(effectiveOptions);
+        PolygonStroker stroker = Rent(key, effectiveOptions);
+        try
         {
-            Width = width
-        };
-
-        return stroker.Stroke(polygon);
+            stroker.Width = width;
+            return stroker.Stroke(polygon);
+        }
+        finally
+        {
+            Return(key, stroker);
+        }
     }
 
     /// <summary>
@@ -126,6 +201,7 @@ public sealed class PolygonStroker
     /// <param name="polygon">Input polygon to stroke.</param>
     /// <returns>Self-intersection resolved stroke polygon.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="polygon"/> is null.</exception>
+    /// <remarks>Instance execution is not thread-safe for concurrent use.</remarks>
     public Polygon Stroke(Polygon polygon)
     {
         ArgumentNullException.ThrowIfNull(polygon);
@@ -139,9 +215,9 @@ public sealed class PolygonStroker
         {
             Contour contour = polygon[i];
 
-            // Treat almost-closed contours as closed so joins are generated
-            // consistently at the seam.
-            bool isClosed = contour.Count > 2 || IsContourClosedForEmission(contour);
+            // Close explicit or near-seam contours to avoid tiny stitch gaps,
+            // but keep clearly open polylines open so caps are emitted.
+            bool isClosed = IsContourClosedForEmission(contour, this.widthAbs * 2D);
             Polygon stroked = this.ProcessPathToPolygon(contour, isClosed);
             if (stroked.Count > 0)
             {
@@ -165,6 +241,7 @@ public sealed class PolygonStroker
     /// <param name="polygon">Input polygon to stroke.</param>
     /// <param name="width">Stroke width.</param>
     /// <returns>Self-intersection resolved stroke polygon.</returns>
+    /// <remarks>Instance execution is not thread-safe for concurrent use.</remarks>
     public Polygon Stroke(Polygon polygon, double width)
     {
         this.Width = width;
@@ -287,13 +364,69 @@ public sealed class PolygonStroker
         return result;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static PolygonStroker Rent(in StrokeOptionsKey key, StrokeOptions options)
+    {
+        Dictionary<StrokeOptionsKey, Stack<PolygonStroker>>? pools = strokersByOptions;
+        if (pools != null &&
+            pools.TryGetValue(key, out Stack<PolygonStroker>? pool) &&
+            pool.Count > 0)
+        {
+            return pool.Pop();
+        }
+
+        return new PolygonStroker(options);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void Return(in StrokeOptionsKey key, PolygonStroker stroker)
+    {
+        stroker.ResetForReuse();
+
+        // Pool only compact instances; large retained buffers are intentionally dropped.
+        if (stroker.GetRetainedScratchBytes() > MaxRetainedScratchBytes)
+        {
+            return;
+        }
+
+        Dictionary<StrokeOptionsKey, Stack<PolygonStroker>> pools = strokersByOptions ??= [];
+        if (!pools.TryGetValue(key, out Stack<PolygonStroker>? pool))
+        {
+            pool = new Stack<PolygonStroker>(MaxPooledStrokersPerOptions);
+            pools[key] = pool;
+        }
+
+        if (pool.Count < MaxPooledStrokersPerOptions)
+        {
+            pool.Push(stroker);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private int GetRetainedScratchBytes()
+        => (this.outVertices.Capacity * Unsafe.SizeOf<Vertex>()) +
+           (this.srcVertices.Capacity * Unsafe.SizeOf<StrokeVertexDistance>());
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ResetForReuse()
+    {
+        this.outVertices.Clear();
+        this.srcVertices.Clear();
+        this.closed = 0;
+        this.outVertex = 0;
+        this.prevStatus = Status.Initial;
+        this.srcVertex = 0;
+        this.status = Status.Initial;
+    }
+
     /// <summary>
     /// Returns whether a contour should be treated as closed when emitting stroke geometry.
     /// </summary>
     /// <param name="contour">The contour to inspect.</param>
+    /// <param name="strokeWidth">Current stroke width.</param>
     /// <returns><see langword="true"/> if the contour should be treated as closed; otherwise <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsContourClosedForEmission(Contour contour)
+    private static bool IsContourClosedForEmission(Contour contour, double strokeWidth)
     {
         int count = contour.Count;
         if (count < 3)
@@ -307,7 +440,7 @@ public sealed class PolygonStroker
         }
 
         Vertex delta = contour[0] - contour[^1];
-        const double closeThreshold = 1E-9D;
+        double closeThreshold = Math.Max(strokeWidth, 1E-3D);
         return delta.LengthSquared() <= closeThreshold * closeThreshold;
     }
 
@@ -454,6 +587,7 @@ public sealed class PolygonStroker
     /// <returns>The next path command.</returns>
     private PathCommand Accumulate(ref Vertex point)
     {
+        ref ArrayBuilder<StrokeVertexDistance> src = ref this.srcVertices;
         PathCommand cmd = PathCommand.LineTo;
         while (!cmd.Stop())
         {
@@ -463,7 +597,7 @@ public sealed class PolygonStroker
                     // Normalize degenerate tail/head duplicates before any join math.
                     this.CloseVertexPath(this.closed != 0);
 
-                    if (this.srcVertices.Length < 3)
+                    if (src.Length < 3)
                     {
                         // Very short contours cannot be treated as closed reliably.
                         this.closed = 0;
@@ -474,7 +608,7 @@ public sealed class PolygonStroker
 
                 case Status.Ready:
                     // Require enough vertices for either open (2) or closed (3+) processing.
-                    if (this.srcVertices.Length < 2 + (this.closed != 0 ? 1 : 0))
+                    if (src.Length < 2 + (this.closed != 0 ? 1 : 0))
                     {
                         cmd = PathCommand.Stop;
                         break;
@@ -488,7 +622,9 @@ public sealed class PolygonStroker
 
                 case Status.Cap1:
                     // Open path: emit start cap first.
-                    this.CalcCap(ref this.srcVertices[0], ref this.srcVertices[1], this.srcVertices[0].Distance);
+                    ref StrokeVertexDistance start = ref src[0];
+                    ref StrokeVertexDistance startNext = ref src[1];
+                    this.CalcCap(ref start, ref startNext, start.Distance);
                     this.srcVertex = 1;
                     this.prevStatus = Status.Outline1;
                     this.status = Status.OutVertices;
@@ -497,16 +633,20 @@ public sealed class PolygonStroker
 
                 case Status.Cap2:
                     // Open path: emit terminal cap before reversing through side 2.
-                    this.CalcCap(ref this.srcVertices[^1], ref this.srcVertices[^2], this.srcVertices[^2].Distance);
+                    int lastIndex = src.Length - 1;
+                    ref StrokeVertexDistance end = ref src[lastIndex];
+                    ref StrokeVertexDistance endPrev = ref src[lastIndex - 1];
+                    this.CalcCap(ref end, ref endPrev, endPrev.Distance);
                     this.prevStatus = Status.Outline2;
                     this.status = Status.OutVertices;
                     this.outVertex = 0;
                     break;
 
                 case Status.Outline1:
+                    int srcLength = src.Length;
                     if (this.closed != 0)
                     {
-                        if (this.srcVertex >= this.srcVertices.Length)
+                        if (this.srcVertex >= srcLength)
                         {
                             // Closed path switches to second side through an explicit endpoly.
                             this.prevStatus = Status.CloseFirst;
@@ -514,19 +654,26 @@ public sealed class PolygonStroker
                             break;
                         }
                     }
-                    else if (this.srcVertex >= this.srcVertices.Length - 1)
+                    else if (this.srcVertex >= srcLength - 1)
                     {
                         this.status = Status.Cap2;
                         break;
                     }
 
                     // Emit join vertices for side 1 (forward traversal).
+                    int index = this.srcVertex;
+                    int prevIndex = index == 0 ? srcLength - 1 : index - 1;
+                    int nextIndex = index + 1 == srcLength ? 0 : index + 1;
+
+                    ref StrokeVertexDistance prev = ref src[prevIndex];
+                    ref StrokeVertexDistance curr = ref src[index];
+                    ref StrokeVertexDistance next = ref src[nextIndex];
                     this.CalcJoin(
-                        ref this.srcVertices[(this.srcVertex + this.srcVertices.Length - 1) % this.srcVertices.Length],
-                        ref this.srcVertices[this.srcVertex],
-                        ref this.srcVertices[(this.srcVertex + 1) % this.srcVertices.Length],
-                        this.srcVertices[(this.srcVertex + this.srcVertices.Length - 1) % this.srcVertices.Length].Distance,
-                        this.srcVertices[this.srcVertex].Distance);
+                        ref prev,
+                        ref curr,
+                        ref next,
+                        prev.Distance,
+                        curr.Distance);
 
                     this.srcVertex++;
                     this.prevStatus = this.status;
@@ -541,6 +688,7 @@ public sealed class PolygonStroker
                     break;
 
                 case Status.Outline2:
+                    int srcLength2 = src.Length;
                     if (this.srcVertex <= (this.closed == 0 ? 1 : 0))
                     {
                         this.status = Status.EndPoly2;
@@ -551,12 +699,19 @@ public sealed class PolygonStroker
                     this.srcVertex--;
 
                     // Emit join vertices for side 2 (reverse traversal).
+                    int reverseIndex = this.srcVertex;
+                    int reverseNextIndex = reverseIndex + 1 == srcLength2 ? 0 : reverseIndex + 1;
+                    int reversePrevIndex = reverseIndex == 0 ? srcLength2 - 1 : reverseIndex - 1;
+
+                    ref StrokeVertexDistance reverseNext = ref src[reverseNextIndex];
+                    ref StrokeVertexDistance reverseCurr = ref src[reverseIndex];
+                    ref StrokeVertexDistance reversePrev = ref src[reversePrevIndex];
                     this.CalcJoin(
-                        ref this.srcVertices[(this.srcVertex + 1) % this.srcVertices.Length],
-                        ref this.srcVertices[this.srcVertex],
-                        ref this.srcVertices[(this.srcVertex + this.srcVertices.Length - 1) % this.srcVertices.Length],
-                        this.srcVertices[this.srcVertex].Distance,
-                        this.srcVertices[(this.srcVertex + this.srcVertices.Length - 1) % this.srcVertices.Length].Distance);
+                        ref reverseNext,
+                        ref reverseCurr,
+                        ref reversePrev,
+                        reverseCurr.Distance,
+                        reversePrev.Distance);
 
                     this.prevStatus = this.status;
                     this.status = Status.OutVertices;
@@ -665,6 +820,7 @@ public sealed class PolygonStroker
     /// <param name="dy2">Second offset vector Y.</param>
     private void CalcArc(double x, double y, double dx1, double dy1, double dx2, double dy2)
     {
+        double strokeWidth = this.strokeWidth;
         double a1 = Math.Atan2(dy1 * this.widthSign, dx1 * this.widthSign);
         double a2 = Math.Atan2(dy2 * this.widthSign, dx2 * this.widthSign);
 
@@ -685,7 +841,7 @@ public sealed class PolygonStroker
             a1 += da;
             for (int i = 0; i < n; i++)
             {
-                this.AddPoint(x + (Math.Cos(a1) * this.strokeWidth), y + (Math.Sin(a1) * this.strokeWidth));
+                this.AddPoint(x + (Math.Cos(a1) * strokeWidth), y + (Math.Sin(a1) * strokeWidth));
                 a1 += da;
             }
         }
@@ -702,7 +858,7 @@ public sealed class PolygonStroker
             a1 -= da;
             for (int i = 0; i < n; i++)
             {
-                this.AddPoint(x + (Math.Cos(a1) * this.strokeWidth), y + (Math.Sin(a1) * this.strokeWidth));
+                this.AddPoint(x + (Math.Cos(a1) * strokeWidth), y + (Math.Sin(a1) * strokeWidth));
                 a1 -= da;
             }
         }
@@ -735,6 +891,12 @@ public sealed class PolygonStroker
         double miterLimit,
         double bevelDistance)
     {
+        Vertex p0 = new(v0.X, v0.Y);
+        Vertex p1 = new(v1.X, v1.Y);
+        Vertex p2 = new(v2.X, v2.Y);
+        Vertex offset1 = new(dx1, -dy1);
+        Vertex offset2 = new(dx2, -dy2);
+
         double xi = v1.X;
         double yi = v1.Y;
         double intersectionDistance = 1D;
@@ -744,15 +906,15 @@ public sealed class PolygonStroker
 
         // Intersect the two offset support lines to obtain the geometric miter apex.
         if (TryCalcIntersection(
-                new Vertex(v0.X + dx1, v0.Y - dy1),
-                new Vertex(v1.X + dx1, v1.Y - dy1),
-                new Vertex(v1.X + dx2, v1.Y - dy2),
-                new Vertex(v2.X + dx2, v2.Y - dy2),
+                p0 + offset1,
+                p1 + offset1,
+                p1 + offset2,
+                p2 + offset2,
                 out Vertex intersection))
         {
             xi = intersection.X;
             yi = intersection.Y;
-            intersectionDistance = Vertex.Distance(new Vertex(v1.X, v1.Y), intersection);
+            intersectionDistance = Vertex.Distance(p1, intersection);
             if (intersectionDistance <= limit)
             {
                 this.AddPoint(xi, yi);
@@ -825,6 +987,7 @@ public sealed class PolygonStroker
     private void CalcCap(ref StrokeVertexDistance v0, ref StrokeVertexDistance v1, double len)
     {
         this.outVertices.Clear();
+        double strokeWidth = this.strokeWidth;
         if (len < VertexDistanceEpsilon)
         {
             this.AddPoint(v0.X, v0.Y);
@@ -837,8 +1000,8 @@ public sealed class PolygonStroker
         double dx2 = 0D;
         double dy2 = 0D;
 
-        dx1 *= this.strokeWidth;
-        dy1 *= this.strokeWidth;
+        dx1 *= strokeWidth;
+        dy1 *= strokeWidth;
 
         if (this.LineCap != LineCap.Round)
         {
@@ -865,7 +1028,7 @@ public sealed class PolygonStroker
                 double a1 = Math.Atan2(dy1, -dx1) + da;
                 for (int i = 0; i < n; i++)
                 {
-                    this.AddPoint(v0.X + (Math.Cos(a1) * this.strokeWidth), v0.Y + (Math.Sin(a1) * this.strokeWidth));
+                    this.AddPoint(v0.X + (Math.Cos(a1) * strokeWidth), v0.Y + (Math.Sin(a1) * strokeWidth));
                     a1 += da;
                 }
             }
@@ -874,7 +1037,7 @@ public sealed class PolygonStroker
                 double a1 = Math.Atan2(-dy1, dx1) - da;
                 for (int i = 0; i < n; i++)
                 {
-                    this.AddPoint(v0.X + (Math.Cos(a1) * this.strokeWidth), v0.Y + (Math.Sin(a1) * this.strokeWidth));
+                    this.AddPoint(v0.X + (Math.Cos(a1) * strokeWidth), v0.Y + (Math.Sin(a1) * strokeWidth));
                     a1 -= da;
                 }
             }
@@ -894,6 +1057,8 @@ public sealed class PolygonStroker
     private void CalcJoin(ref StrokeVertexDistance v0, ref StrokeVertexDistance v1, ref StrokeVertexDistance v2, double len1, double len2)
     {
         const double eps = VertexDistanceEpsilon;
+        double strokeWidth = this.strokeWidth;
+        double widthAbs = this.widthAbs;
         if (len1 < eps || len2 < eps)
         {
             this.outVertices.Clear();
@@ -901,28 +1066,44 @@ public sealed class PolygonStroker
             // Degenerate neighborhood: use best available segment direction for both offsets.
             double l1 = len1 >= eps ? len1 : len2;
             double l2 = len2 >= eps ? len2 : len1;
-            double offX1 = this.strokeWidth * (v1.Y - v0.Y) / l1;
-            double offY1 = this.strokeWidth * (v1.X - v0.X) / l1;
-            double offX2 = this.strokeWidth * (v2.Y - v1.Y) / l2;
-            double offY2 = this.strokeWidth * (v2.X - v1.X) / l2;
+            double invL1 = strokeWidth / l1;
+            double invL2 = strokeWidth / l2;
+
+            Vertex p0 = new(v0.X, v0.Y);
+            Vertex p1 = new(v1.X, v1.Y);
+            Vertex p2 = new(v2.X, v2.Y);
+            Vertex seg1 = p1 - p0;
+            Vertex seg2 = p2 - p1;
+
+            double offX1 = seg1.Y * invL1;
+            double offY1 = seg1.X * invL1;
+            double offX2 = seg2.Y * invL2;
+            double offY2 = seg2.X * invL2;
 
             this.AddPoint(v1.X + offX1, v1.Y - offY1);
             this.AddPoint(v1.X + offX2, v1.Y - offY2);
             return;
         }
 
-        double dx1 = this.strokeWidth * (v1.Y - v0.Y) / len1;
-        double dy1 = this.strokeWidth * (v1.X - v0.X) / len1;
-        double dx2 = this.strokeWidth * (v2.Y - v1.Y) / len2;
-        double dy2 = this.strokeWidth * (v2.X - v1.X) / len2;
+        Vertex v0Vertex = new(v0.X, v0.Y);
+        Vertex v1Vertex = new(v1.X, v1.Y);
+        Vertex v2Vertex = new(v2.X, v2.Y);
+        Vertex segForward = v1Vertex - v0Vertex;
+        Vertex segNext = v2Vertex - v1Vertex;
+        double invLen1 = strokeWidth / len1;
+        double invLen2 = strokeWidth / len2;
+        double dx1 = segForward.Y * invLen1;
+        double dy1 = segForward.X * invLen1;
+        double dx2 = segNext.Y * invLen2;
+        double dy2 = segNext.X * invLen2;
         this.outVertices.Clear();
 
         // Cross-product sign classifies whether we are on an inner corner or outer corner
         // relative to stroke direction.
-        double cp = CrossProduct(v0, v1, new Vertex(v2.X, v2.Y));
-        if (Math.Abs(cp) > double.Epsilon && (cp > 0D) == (this.strokeWidth > 0D))
+        double cp = Vertex.Cross(segNext, segForward);
+        if (Math.Abs(cp) > double.Epsilon && (cp > 0D) == (strokeWidth > 0D))
         {
-            double limit = (len1 < len2 ? len1 : len2) / this.widthAbs;
+            double limit = Math.Min(len1, len2) / widthAbs;
             if (limit < this.InnerMiterLimit)
             {
                 limit = this.InnerMiterLimit;
@@ -943,8 +1124,10 @@ public sealed class PolygonStroker
                 case InnerJoin.Jag:
                 case InnerJoin.Round:
                     // If offsets are close enough, miter produces cleaner inner-corner output.
-                    cp = ((dx1 - dx2) * (dx1 - dx2)) + ((dy1 - dy2) * (dy1 - dy2));
-                    if (cp < len1 * len1 && cp < len2 * len2)
+                    Vertex offset1 = new(dx1, dy1);
+                    Vertex offset2 = new(dx2, dy2);
+                    double offsetDeltaSquared = Vertex.DistanceSquared(offset1, offset2);
+                    if (offsetDeltaSquared < len1 * len1 && offsetDeltaSquared < len2 * len2)
                     {
                         this.CalcMiter(ref v0, ref v1, ref v2, dx1, dy1, dx2, dy2, LineJoin.MiterRevert, limit, 0D);
                     }
@@ -971,24 +1154,23 @@ public sealed class PolygonStroker
         else
         {
             // Outer join path.
-            double dx = (dx1 + dx2) / 2D;
-            double dy = (dy1 + dy2) / 2D;
-            double bevelDistance = new Vertex(dx, dy).Length();
+            Vertex averageOffset = new Vertex(dx1 + dx2, dy1 + dy2) * 0.5D;
+            double bevelDistance = averageOffset.Length();
 
             if (this.LineJoin is LineJoin.Round or LineJoin.Bevel &&
                 this.ArcDetailScale * (this.widthAbs - bevelDistance) < this.widthEps)
             {
                 // Near-collinear optimization: collapse to single intersection point when possible.
+                Vertex outerOffset1 = new(dx1, -dy1);
+                Vertex outerOffset2 = new(dx2, -dy2);
                 if (TryCalcIntersection(
-                        new Vertex(v0.X + dx1, v0.Y - dy1),
-                        new Vertex(v1.X + dx1, v1.Y - dy1),
-                        new Vertex(v1.X + dx2, v1.Y - dy2),
-                        new Vertex(v2.X + dx2, v2.Y - dy2),
+                        v0Vertex + outerOffset1,
+                        v1Vertex + outerOffset1,
+                        v1Vertex + outerOffset2,
+                        v2Vertex + outerOffset2,
                         out Vertex intersection))
                 {
-                    dx = intersection.X;
-                    dy = intersection.Y;
-                    this.AddPoint(dx, dy);
+                    this.AddPoint(intersection.X, intersection.Y);
                 }
                 else
                 {

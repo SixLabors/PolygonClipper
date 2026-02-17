@@ -30,6 +30,11 @@ internal sealed class ActiveEdgeList
     public ActiveEdge? Head { get; private set; }
 
     /// <summary>
+    /// Gets the number of retained pooled edge objects.
+    /// </summary>
+    public int RetainedPoolCount => this.pool.Count;
+
+    /// <summary>
     /// Clears all active edges and returns them to the pool.
     /// </summary>
     public void ClearActiveEdges()

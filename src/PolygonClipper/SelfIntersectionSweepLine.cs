@@ -64,6 +64,19 @@ internal sealed class SelfIntersectionSweepLine
     public OutputPointPoolList OutputPoints { get; }
 
     /// <summary>
+    /// Gets a retained-capacity score used by caller-side pooling policy.
+    /// </summary>
+    public int RetainedCapacityScore =>
+        this.scanlineSchedule.RetainedCapacityScore +
+        this.intersectionList.Capacity +
+        this.vertexList.Capacity +
+        this.horizontalSegments.Capacity +
+        this.horizontalJoins.Capacity +
+        this.OutputRecords.Capacity +
+        this.OutputPoints.Capacity +
+        this.activeEdges.RetainedPoolCount;
+
+    /// <summary>
     /// Swaps two active edge references.
     /// </summary>
     /// <param name="edge1">The first active edge.</param>
@@ -415,9 +428,9 @@ internal sealed class SelfIntersectionSweepLine
     /// Registers a local minima vertex once for the sweep.
     /// </summary>
     /// <param name="vertex">The vertex that marks a local minima.</param>
-    /// <param name="localMinimaList">The list collecting minima.</param>
+    /// <param name="scanlineSchedule">The schedule collecting minima.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void RegisterLocalMinima(SweepVertex vertex, List<LocalMinima> localMinimaList)
+    private static void RegisterLocalMinima(SweepVertex vertex, ScanlineSchedule scanlineSchedule)
     {
         // Guard against registering the same vertex twice.
         if ((vertex.Flags & VertexFlags.LocalMin) != VertexFlags.None)
@@ -426,7 +439,7 @@ internal sealed class SelfIntersectionSweepLine
         }
 
         vertex.Flags |= VertexFlags.LocalMin;
-        localMinimaList.Add(new LocalMinima(vertex));
+        scanlineSchedule.AddLocalMinima(new LocalMinima(vertex));
     }
 
     /// <summary>
@@ -493,7 +506,7 @@ internal sealed class SelfIntersectionSweepLine
             if (prevVertex == v0)
             {
                 // Flat closed rings still contribute when they touch other contours.
-                if (!RegisterFlatRingExtrema(v0, this.scanlineSchedule.LocalMinima))
+                if (!RegisterFlatRingExtrema(v0, this.scanlineSchedule))
                 {
                     continue;
                 }
@@ -516,7 +529,7 @@ internal sealed class SelfIntersectionSweepLine
                 else if (currVertex.Point.Y < prevVertex.Point.Y && !goingUp)
                 {
                     goingUp = true;
-                    RegisterLocalMinima(prevVertex, this.scanlineSchedule.LocalMinima);
+                    RegisterLocalMinima(prevVertex, this.scanlineSchedule);
                 }
 
                 prevVertex = currVertex;
@@ -527,7 +540,7 @@ internal sealed class SelfIntersectionSweepLine
             {
                 if (goingUp0)
                 {
-                    RegisterLocalMinima(prevVertex, this.scanlineSchedule.LocalMinima);
+                    RegisterLocalMinima(prevVertex, this.scanlineSchedule);
                 }
                 else
                 {
@@ -538,7 +551,7 @@ internal sealed class SelfIntersectionSweepLine
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool RegisterFlatRingExtrema(SweepVertex start, List<LocalMinima> localMinimaList)
+    private static bool RegisterFlatRingExtrema(SweepVertex start, ScanlineSchedule scanlineSchedule)
     {
         // For a fully flat closed ring, derive synthetic extrema by scanning once
         // for left/right-most vertices: O(m) in ring vertex count.
@@ -566,7 +579,7 @@ internal sealed class SelfIntersectionSweepLine
         }
 
         rightMost.Flags |= VertexFlags.LocalMax;
-        RegisterLocalMinima(leftMost, localMinimaList);
+        RegisterLocalMinima(leftMost, scanlineSchedule);
         return true;
     }
 

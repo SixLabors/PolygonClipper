@@ -14,6 +14,9 @@ namespace SixLabors.PolygonClipper;
 /// </remarks>
 internal sealed class ScanlineSchedule
 {
+    private static readonly LocalMinimaComparer LocalMinimaComparerInstance = new();
+
+    private ArrayBuilder<LocalMinima> localMinima;
     private readonly List<double> scanlines;
     private int localMinimaIndex;
     private bool isLocalMinimaSorted;
@@ -23,14 +26,30 @@ internal sealed class ScanlineSchedule
     /// </summary>
     public ScanlineSchedule()
     {
-        this.LocalMinima = [];
+        this.localMinima = new ArrayBuilder<LocalMinima>(16);
         this.scanlines = [];
     }
 
     /// <summary>
-    /// Gets the local minima list for population by the caller.
+    /// Gets the number of registered local minima.
     /// </summary>
-    public List<LocalMinima> LocalMinima { get; }
+    public int LocalMinimaCount => this.localMinima.Length;
+
+    /// <summary>
+    /// Gets a retained-capacity score used to decide pooling reuse.
+    /// </summary>
+    public int RetainedCapacityScore => this.localMinima.Capacity + this.scanlines.Capacity;
+
+    /// <summary>
+    /// Adds a local minima to the schedule.
+    /// </summary>
+    /// <param name="localMinima">The minima to append.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void AddLocalMinima(in LocalMinima localMinima)
+    {
+        this.localMinima.Add(localMinima);
+        this.isLocalMinimaSorted = false;
+    }
 
     /// <summary>
     /// Marks the local minima list as unsorted.
@@ -43,7 +62,7 @@ internal sealed class ScanlineSchedule
     /// </summary>
     public void Clear()
     {
-        this.LocalMinima.Clear();
+        this.localMinima.Clear();
         this.scanlines.Clear();
         this.localMinimaIndex = 0;
         this.isLocalMinimaSorted = false;
@@ -62,15 +81,16 @@ internal sealed class ScanlineSchedule
     {
         if (!this.isLocalMinimaSorted)
         {
-            this.LocalMinima.Sort(new LocalMinimaComparer());
+            this.localMinima.Sort(LocalMinimaComparerInstance);
             this.isLocalMinimaSorted = true;
         }
 
         this.scanlines.Clear();
-        this.scanlines.EnsureCapacity(this.LocalMinima.Count);
-        for (int i = this.LocalMinima.Count - 1; i >= 0; i--)
+        int localMinimaCount = this.localMinima.Length;
+        this.scanlines.EnsureCapacity(localMinimaCount);
+        for (int i = localMinimaCount - 1; i >= 0; i--)
         {
-            this.scanlines.Add(this.LocalMinima[i].Vertex.Point.Y);
+            this.scanlines.Add(this.localMinima[i].Vertex.Point.Y);
         }
 
         this.localMinimaIndex = 0;
@@ -83,15 +103,15 @@ internal sealed class ScanlineSchedule
     /// <returns><see langword="true"/> if a minima exists at this Y.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool HasLocalMinimaAtY(double y)
-        => this.localMinimaIndex < this.LocalMinima.Count &&
-           this.LocalMinima[this.localMinimaIndex].Vertex.Point.Y == y;
+        => this.localMinimaIndex < this.localMinima.Length &&
+           this.localMinima[this.localMinimaIndex].Vertex.Point.Y == y;
 
     /// <summary>
     /// Pops the next local minima from the schedule.
     /// </summary>
     /// <returns>The next local minima.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public LocalMinima PopLocalMinima() => this.LocalMinima[this.localMinimaIndex++];
+    public LocalMinima PopLocalMinima() => this.localMinima[this.localMinimaIndex++];
 
     /// <summary>
     /// Inserts a scanline value into the ordered list.

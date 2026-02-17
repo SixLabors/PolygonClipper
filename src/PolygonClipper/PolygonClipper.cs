@@ -23,6 +23,14 @@ namespace SixLabors.PolygonClipper;
 /// It uses a sweep-line with an event queue to process segment intersections and robustly
 /// handles special cases, including overlapping edges and trivial non-overlapping inputs.
 /// </para>
+/// <para>
+/// The static boolean methods are the recommended entry points. They route work through
+/// an internal thread-local pool of reusable clipper instances and automatically reset
+/// temporary state between calls.
+/// </para>
+/// <para>
+/// Instance members are not thread-safe for concurrent use.
+/// </para>
 /// <para>The high-level workflow has three stages:</para>
 /// <list type="number">
 /// <item><description>Preprocessing: Handles trivial operations and prepares segments for processing.</description></item>
@@ -32,9 +40,25 @@ namespace SixLabors.PolygonClipper;
 /// </remarks>
 public class PolygonClipper
 {
-    private readonly Polygon subject;
-    private readonly Polygon clipping;
-    private readonly BooleanOperation operation;
+    // Keep a small per-thread hot set of clipper instances. Depth 4 covers common
+    // burst usage without retaining many heavyweight buffers per thread.
+    private const int MaxClipperPoolDepth = 4;
+
+    // Upper bound for retained event/status capacities when returning to the pool.
+    // 131_072 (~128K) keeps normal workloads warm while dropping pathological runs.
+    private const int MaxRetainedEventCapacityScore = 131_072;
+
+    [ThreadStatic]
+    private static Stack<PolygonClipper>? clipperPool;
+
+    private readonly SweepEventComparer comparer = new();
+    private readonly List<SweepEvent> unorderedEventQueue = [];
+    private readonly SweepEventPoolList sortedEvents = [];
+    private readonly StatusLine statusLine = new();
+
+    private Polygon? subject;
+    private Polygon? clipping;
+    private BooleanOperation operation;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PolygonClipper"/> class.
@@ -42,11 +66,16 @@ public class PolygonClipper
     /// <param name="subject">The polygon used as the left-hand operand.</param>
     /// <param name="clip">The polygon used as the right-hand operand.</param>
     /// <param name="operation">The boolean operation to execute.</param>
+    /// <remarks>
+    /// This constructor is intended for advanced/manual execution flows.
+    /// For typical usage, prefer the static methods to take advantage of
+    /// internal pooling and automatic lifecycle management.
+    /// </remarks>
     public PolygonClipper(Polygon subject, Polygon clip, BooleanOperation operation)
+        => this.Configure(subject, clip, operation);
+
+    private PolygonClipper()
     {
-        this.subject = subject;
-        this.clipping = clip;
-        this.operation = operation;
     }
 
     /// <summary>
@@ -55,10 +84,18 @@ public class PolygonClipper
     /// <param name="subject">The polygon used as the left-hand operand.</param>
     /// <param name="clip">The polygon used as the right-hand operand.</param>
     /// <returns>A polygon containing regions common to both inputs.</returns>
+    /// <remarks>Preferred entry point. Uses internal thread-local reusable instances.</remarks>
     public static Polygon Intersection(Polygon subject, Polygon clip)
     {
-        PolygonClipper clipper = new(subject, clip, BooleanOperation.Intersection);
-        return clipper.Run();
+        PolygonClipper clipper = Rent(subject, clip, BooleanOperation.Intersection);
+        try
+        {
+            return clipper.Run();
+        }
+        finally
+        {
+            Return(clipper);
+        }
     }
 
     /// <summary>
@@ -67,10 +104,18 @@ public class PolygonClipper
     /// <param name="subject">The polygon used as the left-hand operand.</param>
     /// <param name="clip">The polygon used as the right-hand operand.</param>
     /// <returns>A polygon containing regions from either input.</returns>
+    /// <remarks>Preferred entry point. Uses internal thread-local reusable instances.</remarks>
     public static Polygon Union(Polygon subject, Polygon clip)
     {
-        PolygonClipper clipper = new(subject, clip, BooleanOperation.Union);
-        return clipper.Run();
+        PolygonClipper clipper = Rent(subject, clip, BooleanOperation.Union);
+        try
+        {
+            return clipper.Run();
+        }
+        finally
+        {
+            Return(clipper);
+        }
     }
 
     /// <summary>
@@ -79,10 +124,18 @@ public class PolygonClipper
     /// <param name="subject">The polygon used as the left-hand operand.</param>
     /// <param name="clip">The polygon used as the right-hand operand.</param>
     /// <returns>A polygon containing regions from <paramref name="subject"/> not covered by <paramref name="clip"/>.</returns>
+    /// <remarks>Preferred entry point. Uses internal thread-local reusable instances.</remarks>
     public static Polygon Difference(Polygon subject, Polygon clip)
     {
-        PolygonClipper clipper = new(subject, clip, BooleanOperation.Difference);
-        return clipper.Run();
+        PolygonClipper clipper = Rent(subject, clip, BooleanOperation.Difference);
+        try
+        {
+            return clipper.Run();
+        }
+        finally
+        {
+            Return(clipper);
+        }
     }
 
     /// <summary>
@@ -91,10 +144,18 @@ public class PolygonClipper
     /// <param name="subject">The polygon used as the left-hand operand.</param>
     /// <param name="clip">The polygon used as the right-hand operand.</param>
     /// <returns>A polygon containing regions that belong to exactly one input.</returns>
+    /// <remarks>Preferred entry point. Uses internal thread-local reusable instances.</remarks>
     public static Polygon Xor(Polygon subject, Polygon clip)
     {
-        PolygonClipper clipper = new(subject, clip, BooleanOperation.Xor);
-        return clipper.Run();
+        PolygonClipper clipper = Rent(subject, clip, BooleanOperation.Xor);
+        try
+        {
+            return clipper.Run();
+        }
+        finally
+        {
+            Return(clipper);
+        }
     }
 
     /// <summary>
@@ -105,6 +166,7 @@ public class PolygonClipper
     /// A new polygon with self-intersections resolved. Output contours are implicitly closed
     /// (no duplicated terminal closing vertex is appended).
     /// </returns>
+    /// <remarks>Preferred entry point. Uses internal thread-local reusable builders.</remarks>
     public static Polygon RemoveSelfIntersections(Polygon polygon)
         => SelfIntersectionRemover.Process(polygon, null);
 
@@ -117,19 +179,69 @@ public class PolygonClipper
     /// A new polygon with self-intersections resolved. Output contours are implicitly closed
     /// (no duplicated terminal closing vertex is appended).
     /// </returns>
+    /// <remarks>Preferred entry point. Uses internal thread-local reusable builders.</remarks>
     [EditorBrowsable(EditorBrowsableState.Advanced)]
     public static Polygon RemoveSelfIntersections(Polygon polygon, FillRule fillRule)
         => SelfIntersectionRemover.Process(polygon, fillRule);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static PolygonClipper Rent(Polygon subject, Polygon clip, BooleanOperation operation)
+    {
+        Stack<PolygonClipper>? pool = clipperPool;
+        if (pool != null && pool.Count > 0)
+        {
+            PolygonClipper clipper = pool.Pop();
+            clipper.Configure(subject, clip, operation);
+            return clipper;
+        }
+
+        return new PolygonClipper(subject, clip, operation);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void Return(PolygonClipper clipper)
+    {
+        clipper.subject = null;
+        clipper.clipping = null;
+        clipper.unorderedEventQueue.Clear();
+        clipper.sortedEvents.Clear();
+        clipper.statusLine.Reset(0);
+
+        // Avoid keeping very large event buffers alive in thread-static pools.
+        if (clipper.GetRetainedEventCapacityScore() > MaxRetainedEventCapacityScore)
+        {
+            return;
+        }
+
+        Stack<PolygonClipper> pool = clipperPool ??= new Stack<PolygonClipper>(MaxClipperPoolDepth);
+        if (pool.Count < MaxClipperPoolDepth)
+        {
+            pool.Push(clipper);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void Configure(Polygon subject, Polygon clip, BooleanOperation operation)
+    {
+        this.subject = subject;
+        this.clipping = clip;
+        this.operation = operation;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private int GetRetainedEventCapacityScore()
+        => this.unorderedEventQueue.Capacity + this.sortedEvents.Capacity + this.statusLine.RetainedCapacity;
 
     /// <summary>
     /// Executes the configured boolean operation for the current subject and clipping polygons.
     /// </summary>
     /// <returns>The operation result.</returns>
+    /// <remarks>Instance execution is not thread-safe for concurrent use.</remarks>
     public Polygon Run()
     {
         // Compute bounding boxes for optimization steps 1 and 2
-        Polygon subject = this.subject;
-        Polygon clipping = this.clipping;
+        Polygon subject = this.subject ?? throw new InvalidOperationException("Polygon clipper subject is not configured.");
+        Polygon clipping = this.clipping ?? throw new InvalidOperationException("Polygon clipper clipping polygon is not configured.");
         BooleanOperation operation = this.operation;
 
         // Check for trivial cases that can be resolved without sweeping
@@ -150,8 +262,14 @@ public class PolygonClipper
         int clippingVertexCount = clipping.VertexCount;
         int eventCount = (subjectVertexCount + clippingVertexCount) * 2;
 
-        SweepEventComparer comparer = new();
-        List<SweepEvent> unorderedEventQueue = new(eventCount);
+        SweepEventComparer comparer = this.comparer;
+        List<SweepEvent> unorderedEventQueue = this.unorderedEventQueue;
+        unorderedEventQueue.Clear();
+        if (eventCount > unorderedEventQueue.Capacity)
+        {
+            unorderedEventQueue.EnsureCapacity(eventCount);
+        }
+
         int contourId = 0;
 
         for (int i = 0; i < subject.Count; i++)
@@ -203,13 +321,19 @@ public class PolygonClipper
 
         // Sweep line algorithm: process events in the priority queue
         StablePriorityQueue<SweepEvent, SweepEventComparer> eventQueue = new(comparer, unorderedEventQueue);
-        List<SweepEvent> sortedEvents = new(eventCount);
+        SweepEventPoolList sortedEvents = this.sortedEvents;
+        sortedEvents.Clear();
+        if (eventCount > sortedEvents.Capacity)
+        {
+            sortedEvents.EnsureCapacity(eventCount);
+        }
 
         // Heuristic capacity for the sweep line status structure.
         // At any given point during the sweep, only a subset of segments
         // are active, so we preallocate half the subject's vertex count
         // to reduce resizing without overcommitting memory.
-        StatusLine statusLine = new(subjectVertexCount >> 1);
+        StatusLine statusLine = this.statusLine;
+        statusLine.Reset(subjectVertexCount >> 1);
         double subjectMaxX = subjectBB.Max.X;
         double minMaxX = Vertex.Min(subjectBB.Max, clippingBB.Max).X;
 
@@ -819,7 +943,7 @@ public class PolygonClipper
     /// <param name="sortedEvents">The sorted list of sweep events.</param>
     /// <param name="comparer">The comparer used to sort the events.</param>
     /// <returns>The resulting <see cref="Polygon"/>.</returns>
-    private static Polygon ConnectEdges(List<SweepEvent> sortedEvents, SweepEventComparer comparer)
+    private static Polygon ConnectEdges(SweepEventPoolList sortedEvents, SweepEventComparer comparer)
     {
         // Copy the events in the result polygon to resultEvents list
         List<SweepEvent> resultEvents = new(sortedEvents.Count);

@@ -33,6 +33,16 @@ namespace SixLabors.PolygonClipper;
 /// </remarks>
 internal static class SelfIntersectionRemover
 {
+    // Mirror PolygonClipper pooling policy: keep a tiny hot set per thread.
+    private const int MaxOutputBuilderPoolDepth = 4;
+
+    // Retain builders only while their pooled internal capacity stays in a
+    // bounded range. Oversized builders are dropped after heavy/pathological inputs.
+    private const int MaxRetainedOutputBuilderCapacityScore = 131_072;
+
+    [ThreadStatic]
+    private static Stack<OutputBuilder>? outputBuilderPool;
+
     /// <summary>
     /// Processes a polygon to remove self-intersections.
     /// </summary>
@@ -68,7 +78,15 @@ internal static class SelfIntersectionRemover
             effectiveFillRule = reverseSolution ? FillRule.Negative : FillRule.Positive;
         }
 
-        return UnionWithClipper(subject, effectiveFillRule, polygon.Count, reverseSolution);
+        OutputBuilder builder = RentOutputBuilder();
+        try
+        {
+            return UnionWithClipper(subject, effectiveFillRule, polygon.Count, reverseSolution, builder);
+        }
+        finally
+        {
+            ReturnOutputBuilder(builder);
+        }
     }
 
     /// <summary>
@@ -78,20 +96,50 @@ internal static class SelfIntersectionRemover
     /// <param name="fillRule">The fill rule used to resolve inside/outside.</param>
     /// <param name="resultCapacity">The initial contour capacity for the output polygon.</param>
     /// <param name="reverseSolution">Whether output contour orientation should be reversed.</param>
+    /// <param name="builder">The reusable output builder instance.</param>
     /// <returns>A polygon containing the unioned contours.</returns>
     private static Polygon UnionWithClipper(
         List<List<Vertex>> subject,
         FillRule fillRule,
         int resultCapacity,
-        bool reverseSolution)
+        bool reverseSolution,
+        OutputBuilder builder)
     {
-        OutputBuilder builder = new()
-        {
-            PreserveCollinear = true,
-            ReverseSolution = reverseSolution
-        };
+        builder.ResetForReuse();
+        builder.PreserveCollinear = true;
+        builder.ReverseSolution = reverseSolution;
         builder.AddSubject(subject);
         return builder.Execute(fillRule, resultCapacity);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static OutputBuilder RentOutputBuilder()
+    {
+        Stack<OutputBuilder>? pool = outputBuilderPool;
+        if (pool != null && pool.Count > 0)
+        {
+            return pool.Pop();
+        }
+
+        return new OutputBuilder();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void ReturnOutputBuilder(OutputBuilder builder)
+    {
+        builder.ResetForReuse();
+
+        // Drop oversized builders to prevent long-lived thread-local memory spikes.
+        if (builder.RetainedCapacityScore > MaxRetainedOutputBuilderCapacityScore)
+        {
+            return;
+        }
+
+        Stack<OutputBuilder> pool = outputBuilderPool ??= new Stack<OutputBuilder>(MaxOutputBuilderPoolDepth);
+        if (pool.Count < MaxOutputBuilderPoolDepth)
+        {
+            pool.Push(builder);
+        }
     }
 
     /// <summary>
@@ -562,9 +610,25 @@ internal static class SelfIntersectionRemover
         public bool ReverseSolution { get; set; }
 
         /// <summary>
+        /// Gets a retained-capacity score used by caller-side pooling policy.
+        /// </summary>
+        public int RetainedCapacityScore => this.sweepLine.RetainedCapacityScore;
+
+        /// <summary>
         /// Clears all cached input and output data.
         /// </summary>
         public void Clear() => this.sweepLine.Clear();
+
+        /// <summary>
+        /// Resets mutable state so this instance can be safely reused.
+        /// </summary>
+        public void ResetForReuse()
+        {
+            this.buildHierarchy = false;
+            this.ReverseSolution = false;
+            this.PreserveCollinear = true;
+            this.Clear();
+        }
 
         /// <summary>
         /// Adds subject contours to the sweep-line clipper.

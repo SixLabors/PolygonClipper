@@ -65,6 +65,11 @@ internal sealed class StatusLine
     }
 
     /// <summary>
+    /// Gets the retained list capacity.
+    /// </summary>
+    public int RetainedCapacity => this.sortedEvents.Capacity;
+
+    /// <summary>
     /// Gets the event at the specified index.
     /// </summary>
     /// <param name="index">The index of the event.</param>
@@ -73,6 +78,20 @@ internal sealed class StatusLine
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => this.sortedEvents[index];
+    }
+
+    /// <summary>
+    /// Clears active events and ensures the desired capacity.
+    /// </summary>
+    /// <param name="capacity">Desired minimum capacity.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void Reset(int capacity)
+    {
+        this.sortedEvents.Clear();
+        if (capacity > this.sortedEvents.Capacity)
+        {
+            this.sortedEvents.EnsureCapacity(capacity);
+        }
     }
 
     /// <summary>
