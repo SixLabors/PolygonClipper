@@ -104,6 +104,7 @@ public class PolygonStrokerTests
     public void ProcessPolygonAndClip_FoldBackOpenPath_ProducesValidStroke()
     {
         const double width = 12D;
+        StrokeOptions options = new() { NormalizeOutput = true };
 
         Contour inputContour = CreateFoldBackPolyline();
         if (inputContour[0] != inputContour[^1])
@@ -112,7 +113,7 @@ public class PolygonStrokerTests
         }
 
         Polygon input = [inputContour];
-        Polygon actual = PolygonStroker.Stroke(input, width);
+        Polygon actual = PolygonStroker.Stroke(input, width, options);
 
         AssertPolygonIsValid(actual);
         AssertStrokeCoversInputCenterline(input, actual, samplesPerSegment: 3);
@@ -122,6 +123,7 @@ public class PolygonStrokerTests
     public void ProcessPolygonAndClip_FigureNinePath_ProducesValidStroke()
     {
         const double width = 10D;
+        StrokeOptions options = new() { NormalizeOutput = true };
 
         Contour inputContour = CreateFigureNinePolyline(72);
         if (inputContour[0] != inputContour[^1])
@@ -130,7 +132,7 @@ public class PolygonStrokerTests
         }
 
         Polygon input = [inputContour];
-        Polygon actual = PolygonStroker.Stroke(input, width);
+        Polygon actual = PolygonStroker.Stroke(input, width, options);
 
         AssertPolygonIsValid(actual);
         AssertStrokeCoversInputCenterline(input, actual, samplesPerSegment: 3);

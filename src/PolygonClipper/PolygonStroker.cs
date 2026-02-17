@@ -14,7 +14,10 @@ namespace SixLabors.PolygonClipper;
 /// This type performs two phases:
 /// <list type="number">
 /// <item><description>Expand each source contour into one or two stroke-side outlines with joins/caps.</description></item>
-/// <item><description>Resolve generated overlaps/self-intersections using <see cref="SelfIntersectionRemover"/> with positive fill semantics.</description></item>
+/// <item><description>
+/// Optionally resolve generated overlaps/self-intersections using
+/// <see cref="SelfIntersectionRemover"/> with positive fill semantics.
+/// </description></item>
 /// </list>
 /// The emitted contours are implicitly closed (first vertex is not duplicated at the end).
 /// <para>
@@ -74,6 +77,7 @@ public sealed class PolygonStroker
     public PolygonStroker(StrokeOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        this.NormalizeOutput = options.NormalizeOutput;
         this.LineJoin = options.LineJoin;
         this.InnerJoin = options.InnerJoin;
         this.LineCap = options.LineCap;
@@ -125,6 +129,7 @@ public sealed class PolygonStroker
     {
         public StrokeOptionsKey(StrokeOptions options)
         {
+            this.NormalizeOutput = options.NormalizeOutput;
             this.LineJoin = options.LineJoin;
             this.InnerJoin = options.InnerJoin;
             this.LineCap = options.LineCap;
@@ -132,6 +137,8 @@ public sealed class PolygonStroker
             this.InnerMiterLimit = options.InnerMiterLimit;
             this.ArcDetailScale = options.ArcDetailScale;
         }
+
+        public bool NormalizeOutput { get; }
 
         public LineJoin LineJoin { get; }
 
@@ -146,7 +153,8 @@ public sealed class PolygonStroker
         public double ArcDetailScale { get; }
 
         public bool Equals(StrokeOptionsKey other)
-            => this.LineJoin == other.LineJoin &&
+            => this.NormalizeOutput == other.NormalizeOutput &&
+               this.LineJoin == other.LineJoin &&
                this.InnerJoin == other.InnerJoin &&
                this.LineCap == other.LineCap &&
                this.MiterLimit == other.MiterLimit &&
@@ -157,6 +165,7 @@ public sealed class PolygonStroker
 
         public override int GetHashCode()
             => HashCode.Combine(
+                this.NormalizeOutput,
                 this.LineJoin,
                 this.InnerJoin,
                 this.LineCap,
@@ -167,8 +176,7 @@ public sealed class PolygonStroker
 
     /// <summary>
     /// Strokes <paramref name="polygon"/> with <paramref name="width"/> using optional
-    /// <paramref name="options"/> and resolves overlaps via <see cref="SelfIntersectionRemover"/>
-    /// with <see cref="FillRule.Positive"/>.
+    /// <paramref name="options"/>.
     /// </summary>
     /// <param name="polygon">Input polygon to stroke.</param>
     /// <param name="width">Stroke width.</param>
@@ -176,7 +184,7 @@ public sealed class PolygonStroker
     /// Stroke options controlling joins, caps and approximation behavior.
     /// When null, default <see cref="StrokeOptions"/> are used.
     /// </param>
-    /// <returns>Self-intersection resolved stroke polygon.</returns>
+    /// <returns>The stroked polygon contours.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="polygon"/> is null.</exception>
     /// <remarks>Preferred entry point. Uses internal thread-local reusable instances.</remarks>
     public static Polygon Stroke(Polygon polygon, double width, StrokeOptions? options = null)
@@ -199,7 +207,7 @@ public sealed class PolygonStroker
     /// Strokes <paramref name="polygon"/> using this instance's configured options and width.
     /// </summary>
     /// <param name="polygon">Input polygon to stroke.</param>
-    /// <returns>Self-intersection resolved stroke polygon.</returns>
+    /// <returns>The stroked polygon contours.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="polygon"/> is null.</exception>
     /// <remarks>Instance execution is not thread-safe for concurrent use.</remarks>
     public Polygon Stroke(Polygon polygon)
@@ -230,6 +238,11 @@ public sealed class PolygonStroker
             return [];
         }
 
+        if (!this.NormalizeOutput)
+        {
+            return allContours;
+        }
+
         // Positive fill normalization resolves all overlaps from join/cap emission
         // and produces final render-ready stroke contours.
         return SelfIntersectionRemover.Process(allContours, FillRule.Positive);
@@ -240,7 +253,7 @@ public sealed class PolygonStroker
     /// </summary>
     /// <param name="polygon">Input polygon to stroke.</param>
     /// <param name="width">Stroke width.</param>
-    /// <returns>Self-intersection resolved stroke polygon.</returns>
+    /// <returns>The stroked polygon contours.</returns>
     /// <remarks>Instance execution is not thread-safe for concurrent use.</remarks>
     public Polygon Stroke(Polygon polygon, double width)
     {
@@ -278,6 +291,12 @@ public sealed class PolygonStroker
     /// Gets the join style used for sharp interior angles.
     /// </summary>
     public InnerJoin InnerJoin { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether generated contours should be normalized by resolving
+    /// self-intersections and overlaps.
+    /// </summary>
+    public bool NormalizeOutput { get; }
 
     /// <summary>
     /// Gets or sets the stroke width.
