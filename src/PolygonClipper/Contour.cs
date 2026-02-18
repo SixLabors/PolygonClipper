@@ -251,6 +251,33 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     /// <param name="index">The index of the hole to add.</param>
     public void AddHoleIndex(int index) => this.holeIndices.Add(index);
 
+    /// <summary>
+    /// Creates a deep copy of this contour.
+    /// </summary>
+    /// <param name="contourIndexOffset">
+    /// Offset applied to parent and hole contour indices so copied topology remains valid
+    /// when inserted into another polygon.
+    /// </param>
+    /// <returns>A detached contour copy.</returns>
+    internal Contour DeepClone(int contourIndexOffset = 0)
+    {
+        Contour clone = new(this.vertices.Count)
+        {
+            ParentIndex = this.ParentIndex is int parentIndex ? parentIndex + contourIndexOffset : null,
+            Depth = this.Depth,
+            hasCachedOrientation = this.hasCachedOrientation,
+            cachedCounterClockwise = this.cachedCounterClockwise
+        };
+
+        clone.vertices.AddRange(this.vertices);
+        for (int i = 0; i < this.holeIndices.Count; i++)
+        {
+            clone.holeIndices.Add(this.holeIndices[i] + contourIndexOffset);
+        }
+
+        return clone;
+    }
+
     /// <inheritdoc/>
     public IEnumerator<Vertex> GetEnumerator()
         => ((IEnumerable<Vertex>)this.vertices).GetEnumerator();

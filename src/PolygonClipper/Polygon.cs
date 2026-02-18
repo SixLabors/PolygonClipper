@@ -76,17 +76,13 @@ public sealed class Polygon : IReadOnlyCollection<Contour>
     /// <param name="polygon">The polygon to join.</param>
     public void Join(Polygon polygon)
     {
-        int size = this.Count;
-        for (int i = 0; i < polygon.contours.Count; ++i)
-        {
-            Contour contour = polygon.contours[i];
-            this.Add(contour);
-            this.GetLastContour().ClearHoles();
+        ArgumentNullException.ThrowIfNull(polygon);
 
-            for (int j = 0; j < contour.HoleCount; ++j)
-            {
-                this.GetLastContour().AddHoleIndex(contour.GetHoleIndex(j) + size);
-            }
+        int sourceCount = polygon.contours.Count;
+        int contourIndexOffset = this.contours.Count;
+        for (int i = 0; i < sourceCount; ++i)
+        {
+            this.contours.Add(polygon.contours[i].DeepClone(contourIndexOffset));
         }
     }
 
@@ -140,6 +136,21 @@ public sealed class Polygon : IReadOnlyCollection<Contour>
     /// Clears all contours from the polygon.
     /// </summary>
     public void Clear() => this.contours.Clear();
+
+    /// <summary>
+    /// Creates a deep copy of this polygon and all of its contours.
+    /// </summary>
+    /// <returns>A detached polygon copy.</returns>
+    internal Polygon DeepClone()
+    {
+        Polygon clone = new(this.contours.Count);
+        for (int i = 0; i < this.contours.Count; i++)
+        {
+            clone.contours.Add(this.contours[i].DeepClone());
+        }
+
+        return clone;
+    }
 
     /// <inheritdoc/>
     public IEnumerator<Contour> GetEnumerator()

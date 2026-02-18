@@ -229,7 +229,12 @@ public sealed class PolygonStroker
             Polygon stroked = this.ProcessPathToPolygon(contour, isClosed);
             if (stroked.Count > 0)
             {
-                allContours.Join(stroked);
+                // Stroked contours are produced as fresh objects; append by reference
+                // here to avoid an unnecessary clone step in the hot path.
+                for (int j = 0; j < stroked.Count; j++)
+                {
+                    allContours.Add(stroked[j]);
+                }
             }
         }
 

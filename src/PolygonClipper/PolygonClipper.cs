@@ -455,13 +455,13 @@ public class PolygonClipper
 
             if (operation == BooleanOperation.Difference)
             {
-                result = subject;
+                result = subject.DeepClone();
                 return true;
             }
 
             if (operation is BooleanOperation.Union or BooleanOperation.Xor)
             {
-                result = subject.Count == 0 ? clipping : subject;
+                result = subject.Count == 0 ? clipping.DeepClone() : subject.DeepClone();
                 return true;
             }
         }
@@ -505,13 +505,14 @@ public class PolygonClipper
             // The bounding boxes do not overlap
             if (operation == BooleanOperation.Difference)
             {
-                result = subject;
+                result = subject.DeepClone();
                 return true;
             }
 
             if (operation is BooleanOperation.Union or BooleanOperation.Xor)
             {
-                result = subject;
+                result = new(subject.Count + clipping.Count);
+                result.Join(subject);
                 result.Join(clipping);
                 return true;
             }
