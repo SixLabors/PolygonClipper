@@ -16,7 +16,7 @@ namespace SixLabors.PolygonClipper;
 /// <item><description>Expand each source contour into one or two stroke-side outlines with joins/caps.</description></item>
 /// <item><description>
 /// Optionally resolve generated overlaps/self-intersections using
-/// <see cref="SelfIntersectionRemover"/> with positive fill semantics.
+/// <see cref="PolygonClipper.Normalize(Polygon)"/> with positive fill semantics.
 /// </description></item>
 /// </list>
 /// The emitted contours are implicitly closed (first vertex is not duplicated at the end).
