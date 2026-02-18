@@ -512,8 +512,8 @@ public class PolygonClipper
             if (operation is BooleanOperation.Union or BooleanOperation.Xor)
             {
                 result = new(subject.Count + clipping.Count);
-                result.Join(subject);
-                result.Join(clipping);
+                result.Join(subject.DeepClone());
+                result.Join(clipping.DeepClone());
                 return true;
             }
         }
