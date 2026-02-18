@@ -81,7 +81,7 @@ This project draws on the following algorithm and implementation references:
 > 21re, *rust-geo-booleanop* (Rust Martínez-Rueda implementation reference).  
 > https://github.com/21re/rust-geo-booleanop
 
-> Angus Johnson, *Clipper2* polygon clipping library (reference implementation for the self-intersection pipeline).  
+> Angus Johnson, *Clipper2* polygon clipping library (reference implementation for the normalization pipeline).  
 > https://github.com/AngusJohnson/Clipper2
 
 ## License
