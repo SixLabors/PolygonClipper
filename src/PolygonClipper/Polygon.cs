@@ -3,6 +3,7 @@
 
 using System.Collections;
 using System.Runtime.CompilerServices;
+using System.Text;
 
 namespace SixLabors.PolygonClipper;
 
@@ -16,7 +17,20 @@ public sealed class Polygon : IReadOnlyCollection<Contour>
     /// <summary>
     /// The collection of contours that make up the polygon.
     /// </summary>
-    private readonly List<Contour> contours = [];
+    private readonly List<Contour> contours;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Polygon"/> class.
+    /// </summary>
+    public Polygon()
+        => this.contours = [];
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Polygon"/> class with a contour capacity.
+    /// </summary>
+    /// <param name="capacity">The initial contour capacity.</param>
+    public Polygon(int capacity)
+        => this.contours = new List<Contour>(capacity);
 
     /// <summary>
     /// Gets the number of contours in the polygon.
@@ -127,6 +141,21 @@ public sealed class Polygon : IReadOnlyCollection<Contour>
     /// </summary>
     public void Clear() => this.contours.Clear();
 
+    /// <summary>
+    /// Creates a deep copy of this polygon and all of its contours.
+    /// </summary>
+    /// <returns>A detached polygon copy.</returns>
+    public Polygon DeepClone()
+    {
+        Polygon clone = new(this.contours.Count);
+        for (int i = 0; i < this.contours.Count; i++)
+        {
+            clone.contours.Add(this.contours[i].DeepClone());
+        }
+
+        return clone;
+    }
+
     /// <inheritdoc/>
     public IEnumerator<Contour> GetEnumerator()
         => ((IEnumerable<Contour>)this.contours).GetEnumerator();
@@ -134,4 +163,29 @@ public sealed class Polygon : IReadOnlyCollection<Contour>
     /// <inheritdoc/>
     IEnumerator IEnumerable.GetEnumerator()
         => ((IEnumerable)this.contours).GetEnumerator();
+
+    /// <summary>
+    /// Creates a string useful for debugging.
+    /// </summary>
+    /// <returns>The <see cref="string"/>.</returns>
+    public string ToDebugString()
+    {
+        StringBuilder stringBuilder = new();
+        stringBuilder.AppendLine("[");
+
+        foreach (Contour contour in this.contours)
+        {
+            stringBuilder.AppendLine("    [");
+            foreach (Vertex vertex in contour)
+            {
+                stringBuilder.AppendLine("        new Vertex(" + vertex.X + ", " + vertex.Y + "),");
+            }
+
+            stringBuilder.AppendLine("    ],");
+        }
+
+        stringBuilder.AppendLine("];");
+
+        return stringBuilder.ToString();
+    }
 }

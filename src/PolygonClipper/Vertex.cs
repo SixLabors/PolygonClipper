@@ -13,6 +13,18 @@ namespace SixLabors.PolygonClipper;
 public readonly struct Vertex : IEquatable<Vertex>
 {
     /// <summary>
+    /// Gets the X-coordinate of the vertex.
+    /// </summary>
+#pragma warning disable CA1051 // Do not declare visible instance fields
+    public readonly double X;
+
+    /// <summary>
+    /// Gets the Y-coordinate of the vertex.
+    /// </summary>
+    public readonly double Y;
+#pragma warning restore CA1051 // Do not declare visible instance fields
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="Vertex"/> struct.
     /// </summary>
     /// <param name="xy">The X and Y coordinates of the vertex.</param>
@@ -32,16 +44,6 @@ public readonly struct Vertex : IEquatable<Vertex>
         this.X = x;
         this.Y = y;
     }
-
-    /// <summary>
-    /// Gets the X-coordinate of the vertex.
-    /// </summary>
-    public double X { get; }
-
-    /// <summary>
-    /// Gets the Y-coordinate of the vertex.
-    /// </summary>
-    public double Y { get; }
 
     /// <summary>
     /// Adds two vectors together.
@@ -99,7 +101,8 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <param name="right">The second vertex.</param>
     /// <returns>The vertex that results from dividing <paramref name="left" /> by <paramref name="right" />.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Vertex operator /(in Vertex left, in Vertex right) => AsVertexUnsafe(AsVector128Unsafe(left) / AsVector128Unsafe(right));
+    public static Vertex operator /(in Vertex left, in Vertex right)
+        => AsVertexUnsafe(AsVector128Unsafe(left) / AsVector128Unsafe(right));
 
     /// <summary>
     /// Divides the specified vertex by a specified scalar value.
@@ -108,7 +111,8 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <param name="right">The scalar value.</param>
     /// <returns>The result of the division.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Vertex operator /(in Vertex left, double right) => AsVertexUnsafe(AsVector128Unsafe(left) / right);
+    public static Vertex operator /(in Vertex left, double right)
+        => AsVertexUnsafe(AsVector128Unsafe(left) / right);
 
     /// <summary>
     /// Divides the specified vertex by the specified scalar value.
@@ -141,6 +145,7 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <param name="a">The first vertex.</param>
     /// <param name="b">The second vertex.</param>
     /// <returns>The <see cref="double"/> dot product.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static double Dot(in Vertex a, in Vertex b)
     {
         Vector128<double> a128 = AsVector128Unsafe(a);
@@ -154,15 +159,16 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <param name="a">The first vertex.</param>
     /// <param name="b">The second vertex.</param>
     /// <returns>The <see cref="double"/> cross product.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static double Cross(in Vertex a, in Vertex b)
         => (a.X * b.Y) - (a.Y * b.X);
 
     /// <summary>Computes the Euclidean distance between the two given vertices.</summary>
-    /// <param name="value1">The first vertex.</param>
-    /// <param name="value2">The second vertex.</param>
+    /// <param name="a">The first vertex.</param>
+    /// <param name="b">The second vertex.</param>
     /// <returns>The distance.</returns>
-    public static double Distance(in Vertex value1, in Vertex value2)
-        => double.Sqrt(DistanceSquared(value1, value2));
+    public static double Distance(in Vertex a, in Vertex b)
+        => double.Sqrt(DistanceSquared(a, b));
 
     /// <summary>Returns the Euclidean distance squared between two specified vertices.</summary>
     /// <param name="a">The first vertex.</param>
@@ -206,6 +212,17 @@ public readonly struct Vertex : IEquatable<Vertex>
     public static Vertex Max(in Vertex a, in Vertex b)
         => AsVertexUnsafe(Vector128.Max(AsVector128Unsafe(a), AsVector128Unsafe(b)));
 
+    /// <summary>
+    /// Computes the absolute value of each element in a specified vertex.
+    /// </summary>
+    /// <param name="value">The vertex that will have its absolute value computed.</param>
+    /// <returns>
+    /// A vertex with the absolute value of each of the elements in <paramref name="value"/>.
+    /// </returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vertex Abs(in Vertex value)
+        => AsVertexUnsafe(Vector128.Abs(AsVector128Unsafe(value)));
+
     /// <inheritdoc/>
     public bool Equals(Vertex other)
         => this.X == other.X && this.Y == other.Y;
@@ -220,9 +237,11 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <inheritdoc/>
     public override string ToString() => $"Vertex [ X={this.X}, Y={this.Y} ]";
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Vector128<double> AsVector128Unsafe(in Vertex value)
         => Unsafe.BitCast<Vertex, Vector128<double>>(value);
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Vertex AsVertexUnsafe(Vector128<double> value)
         => Unsafe.BitCast<Vector128<double>, Vertex>(value);
 }

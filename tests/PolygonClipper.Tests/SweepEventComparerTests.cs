@@ -12,7 +12,7 @@ public class SweepEventComparerTests
     {
         StablePriorityQueue<SweepEvent, SweepEventComparer> queue = new(this.comparer);
         SweepEvent e1 = new(new Vertex(0, 0), true);
-        SweepEvent e2 = new(new Vertex(.5F, .5F), true);
+        SweepEvent e2 = new(new Vertex(1, 1), true);
 
         queue.Enqueue(e1);
         queue.Enqueue(e2);
@@ -26,7 +26,7 @@ public class SweepEventComparerTests
     {
         StablePriorityQueue<SweepEvent, SweepEventComparer> queue = new(this.comparer);
         SweepEvent e1 = new(new Vertex(0, 0), true);
-        SweepEvent e2 = new(new Vertex(0, .5F), true);
+        SweepEvent e2 = new(new Vertex(0, 1), true);
 
         queue.Enqueue(e1);
         queue.Enqueue(e2);
@@ -53,7 +53,7 @@ public class SweepEventComparerTests
     public void SweepEventComparison_XCoordinates()
     {
         SweepEvent e1 = new(new Vertex(0, 0), true);
-        SweepEvent e2 = new(new Vertex(.5F, .5F), true);
+        SweepEvent e2 = new(new Vertex(1, 1), true);
 
         SweepEventComparer comparer = new();
         Assert.True(comparer.Compare(e1, e2) < 0);
@@ -64,7 +64,7 @@ public class SweepEventComparerTests
     public void SweepEventComparison_YCoordinates()
     {
         SweepEvent e1 = new(new Vertex(0, 0), true);
-        SweepEvent e2 = new(new Vertex(0, .5F), true);
+        SweepEvent e2 = new(new Vertex(0, 1), true);
 
         SweepEventComparer comparer = new();
         Assert.True(comparer.Compare(e1, e2) < 0);
@@ -85,8 +85,8 @@ public class SweepEventComparerTests
     [Fact]
     public void SweepEventComparison_SharedStartPoint_NotCollinearEdges()
     {
-        SweepEvent e1 = new(new Vertex(0, 0), true, new SweepEvent(new Vertex(1, 1), false));
-        SweepEvent e2 = new(new Vertex(0, 0), true, new SweepEvent(new Vertex(2, 3), false));
+        SweepEvent e1 = new(new Vertex(0, 0), true, new SweepEvent(new Vertex(2, 2), false));
+        SweepEvent e2 = new(new Vertex(0, 0), true, new SweepEvent(new Vertex(4, 6), false));
 
         SweepEventComparer comparer = new();
         Assert.True(comparer.Compare(e1, e2) < 0);
@@ -96,8 +96,8 @@ public class SweepEventComparerTests
     [Fact]
     public void SweepEventComparison_CollinearEdges()
     {
-        SweepEvent e1 = new(new Vertex(0, 0), true, new SweepEvent(new Vertex(1, 1), false), PolygonType.Clipping);
-        SweepEvent e2 = new(new Vertex(0, 0), true, new SweepEvent(new Vertex(2, 2), false));
+        SweepEvent e1 = new(new Vertex(0, 0), true, new SweepEvent(new Vertex(2, 2), false), PolygonType.Clipping);
+        SweepEvent e2 = new(new Vertex(0, 0), true, new SweepEvent(new Vertex(4, 4), false));
 
         SweepEventComparer comparer = new();
 

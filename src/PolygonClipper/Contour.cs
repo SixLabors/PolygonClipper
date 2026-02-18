@@ -8,8 +8,13 @@ using System.Runtime.CompilerServices;
 namespace SixLabors.PolygonClipper;
 
 /// <summary>
-/// Represents a simple polygon. The edges of the contours are interior disjoint.
+/// Represents a single polygon ring (outer contour or hole).
 /// </summary>
+/// <remarks>
+/// A contour is treated as implicitly closed: an edge is always considered between the last
+/// vertex and the first vertex. A duplicated terminal closing vertex is optional on input
+/// but not required.
+/// </remarks>
 [DebuggerDisplay("Count = {Count}")]
 #pragma warning disable CA1710 // Identifiers should have correct suffix
 public sealed class Contour : IReadOnlyCollection<Vertex>
@@ -30,7 +35,20 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     private readonly List<int> holeIndices = [];
 
     /// <summary>
-    /// Gets the number of vertices.
+    /// Initializes a new instance of the <see cref="Contour"/> class.
+    /// </summary>
+    public Contour()
+        => this.vertices = [];
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Contour"/> class with a vertex capacity.
+    /// </summary>
+    /// <param name="capacity">The initial vertex capacity.</param>
+    public Contour(int capacity)
+        => this.vertices = new List<Vertex>(capacity);
+
+    /// <summary>
+    /// Gets the number of stored vertices.
     /// </summary>
     public int Count
     {
@@ -80,7 +98,7 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     /// Gets the segment at the specified index of the contour.
     /// </summary>
     /// <param name="index">The index of the segment.</param>
-    /// <returns>The <see cref="Segment"/>.</returns>
+    /// <returns>The <see cref="Segment"/>. The final segment wraps from last vertex to first vertex.</returns>
     internal Segment GetSegment(int index)
         => (index == this.Count - 1)
         ? new Segment(this.vertices[^1], this.vertices[0])
@@ -198,7 +216,7 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     /// </summary>
     /// <param name="vertex">The vertex to add.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void AddVertex(in Vertex vertex) => this.vertices.Add(vertex);
+    public void Add(in Vertex vertex) => this.vertices.Add(vertex);
 
     /// <summary>
     /// Removes the vertex at the specified index from the contour.
@@ -232,6 +250,26 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     /// </summary>
     /// <param name="index">The index of the hole to add.</param>
     public void AddHoleIndex(int index) => this.holeIndices.Add(index);
+
+    /// <summary>
+    /// Creates a deep copy of this contour.
+    /// </summary>
+    /// <returns>A detached contour copy.</returns>
+    public Contour DeepClone()
+    {
+        Contour clone = new(this.vertices.Count)
+        {
+            ParentIndex = this.ParentIndex,
+            Depth = this.Depth,
+            hasCachedOrientation = this.hasCachedOrientation,
+            cachedCounterClockwise = this.cachedCounterClockwise
+        };
+
+        clone.vertices.AddRange(this.vertices);
+        clone.holeIndices.AddRange(this.holeIndices);
+
+        return clone;
+    }
 
     /// <inheritdoc/>
     public IEnumerator<Vertex> GetEnumerator()

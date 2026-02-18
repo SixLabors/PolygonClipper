@@ -5,7 +5,7 @@
     <AssemblyTitle>SixLabors.PolygonClipper</AssemblyTitle>
     <RootNamespace>SixLabors.PolygonClipper</RootNamespace>
     <PackageId>SixLabors.PolygonClipper</PackageId>
-<!--    <PackageIcon>sixlabors.polygonclipper.128.png</PackageIcon>-->
+    <PackageIcon>sixlabors.polygonclipper.128.png</PackageIcon>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <RepositoryUrl Condition="'$(RepositoryUrl)' == ''">https://github.com/SixLabors/PolygonClipper/</RepositoryUrl>
     <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
