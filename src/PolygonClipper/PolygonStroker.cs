@@ -8,7 +8,7 @@ namespace SixLabors.PolygonClipper;
 #pragma warning disable SA1201 // Elements should appear in the correct order
 
 /// <summary>
-/// Generates polygonal stroke geometry for contours using AGG-style joins and caps.
+/// Generates polygonal stroke geometry for contours with configurable joins and caps.
 /// </summary>
 /// <remarks>
 /// This type performs two phases:
