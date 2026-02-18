@@ -1,11 +1,9 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System;
 using System.Collections;
-using System.Collections.Generic;
 
-namespace PolygonClipper;
+namespace SixLabors.PolygonClipper;
 
 /// <summary>
 /// Compares two <see cref="SweepEvent"/> instances for sorting in the event queue.
@@ -52,7 +50,7 @@ internal sealed class SweepEventComparer : IComparer<SweepEvent>, IComparer
         double area = PolygonUtilities.SignedArea(x.Point, x.OtherEvent.Point, y.OtherEvent.Point);
         if (area != 0)
         {
-            return x.Below(y.OtherEvent.Point) ? -1 : 1;
+            return x.IsBelow(y.OtherEvent.Point) ? -1 : 1;
         }
 
         // Compare by polygon type: subject polygons have higher priority

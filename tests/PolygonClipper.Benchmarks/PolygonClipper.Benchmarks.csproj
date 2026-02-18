@@ -1,0 +1,49 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>PolygonClipper.Benchmarks</AssemblyName>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>SixLabors.PolygonClipper.Benchmarks</RootNamespace>
+    <GenerateProgramFile>false</GenerateProgramFile>
+    <DebugType>portable</DebugType>
+    <!--Used to hide test project from dotnet test-->
+    <IsTestProject>false</IsTestProject>
+    <Configurations>Debug;Release</Configurations>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!--BenchmarkDotNet cannot run static benchmarks-->
+    <!--Mark members as static-->
+    <NoWarn>CA1822</NoWarn>
+  </PropertyGroup>
+
+  <Choose>
+    <When Condition="$(SIXLABORS_TESTING_PREVIEW) == true">
+      <PropertyGroup>
+        <TargetFrameworks>net9.0;net8.0</TargetFrameworks>
+      </PropertyGroup>
+    </When>
+    <Otherwise>
+      <PropertyGroup>
+        <TargetFrameworks>net8.0</TargetFrameworks>
+      </PropertyGroup>
+    </Otherwise>
+  </Choose>
+
+  <ItemGroup>
+    <Compile Include="..\PolygonClipper.Tests\TestData.cs" Link="TestData.cs" />
+    <Compile Include="..\PolygonClipper.Tests\TestEnvironment.cs" Link="TestEnvironment.cs" />
+    <Compile Include="..\PolygonClipper.Tests\TestPolygonUtilities.cs" Link="TestPolygonUtilities.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageReference Include="Clipper2" Version="2.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PolygonClipper\PolygonClipper.csproj" />
+    <ProjectReference Include="..\GeoJson\GeoJson.csproj" />
+  </ItemGroup>
+
+</Project>

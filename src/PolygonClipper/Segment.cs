@@ -1,10 +1,9 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System;
 using System.Runtime.CompilerServices;
 
-namespace PolygonClipper;
+namespace SixLabors.PolygonClipper;
 
 /// <summary>
 /// Represents a line segment on a plane.
@@ -17,7 +16,7 @@ internal readonly struct Segment : IEquatable<Segment>
     /// <param name="source">The segment source.</param>
     /// <param name="target">The segment target.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Segment(Vertex source, Vertex target)
+    public Segment(in Vertex source, in Vertex target)
     {
         this.Source = source;
         this.Target = target;
@@ -46,11 +45,11 @@ internal readonly struct Segment : IEquatable<Segment>
     public Vertex Max { get; }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator ==(Segment left, Segment right)
+    public static bool operator ==(in Segment left, in Segment right)
         => left.Equals(right);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool operator !=(Segment left, Segment right)
+    public static bool operator !=(in Segment left, in Segment right)
         => !(left == right);
 
     /// <summary>

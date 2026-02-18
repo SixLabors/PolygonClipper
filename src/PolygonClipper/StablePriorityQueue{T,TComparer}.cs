@@ -1,11 +1,11 @@
-﻿// Copyright (c) Six Labors.
+// Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
-namespace PolygonClipper;
+namespace SixLabors.PolygonClipper;
 
 /// <summary>
 /// Represents a stable priority queue that maintains the order of items with the same priority.
@@ -16,19 +16,55 @@ namespace PolygonClipper;
 internal sealed class StablePriorityQueue<T, TComparer>
     where TComparer : IComparer<T>
 {
-    private readonly List<T> heap = [];
+    private const int Log2Arity = 2;
+    private const int DefaultCapacity = 16;
+    private readonly List<T> heap;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="StablePriorityQueue{T, TComparer}"/> class with a specified comparer.
     /// </summary>
     /// <param name="comparer">The comparer to determine the priority of the elements.</param>
     public StablePriorityQueue(TComparer comparer)
-        => this.Comparer = comparer ?? throw new ArgumentNullException(nameof(comparer));
+       : this(comparer, DefaultCapacity)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StablePriorityQueue{T, TComparer}"/> class with a specified comparer.
+    /// </summary>
+    /// <param name="comparer">The comparer to determine the priority of the elements.</param>
+    /// <param name="capacity">The initial capacity of the priority queue.</param>
+    public StablePriorityQueue(TComparer comparer, int capacity)
+    {
+        this.Comparer = comparer ?? throw new ArgumentNullException(nameof(comparer));
+        this.heap = new List<T>(capacity > 0 ? capacity : DefaultCapacity);
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StablePriorityQueue{T, TComparer}"/> class
+    /// with a specified comparer and an initial collection of unordered elements.
+    /// The heap property is established in linear time.
+    /// </summary>
+    /// <param name="comparer">The comparer to determine the priority of the elements.</param>
+    /// <param name="items">
+    /// The initial collection of elements to heapify.
+    /// Note: The collection is modified to establish the heap property.
+    /// </param>
+    public StablePriorityQueue(TComparer comparer, List<T> items)
+    {
+        this.Comparer = comparer ?? throw new ArgumentNullException(nameof(comparer));
+        this.heap = items ?? throw new ArgumentNullException(nameof(items));
+        this.Heapify(this.heap);
+    }
 
     /// <summary>
     /// Gets the number of elements in the priority queue.
     /// </summary>
-    public int Count => this.heap.Count;
+    public int Count
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => this.heap.Count;
+    }
 
     /// <summary>
     /// Gets the comparer used to determine the priority of the elements.
@@ -41,8 +77,9 @@ internal sealed class StablePriorityQueue<T, TComparer>
     /// <param name="item">The item to add.</param>
     public void Enqueue(T item)
     {
-        this.heap.Add(item);
-        this.Up(this.heap.Count - 1);
+        List<T> data = this.heap;
+        data.Add(item);
+        this.Up((uint)data.Count - 1, data);
     }
 
     /// <summary>
@@ -52,19 +89,20 @@ internal sealed class StablePriorityQueue<T, TComparer>
     /// <exception cref="InvalidOperationException">Thrown if the priority queue is empty.</exception>
     public T Dequeue()
     {
-        if (this.heap.Count == 0)
-        {
-            throw new InvalidOperationException("Queue is empty.");
-        }
+        List<T> data = this.heap;
+        int count = data.Count;
+        ThrowIfEmpty(count);
+        ref T dRef = ref MemoryMarshal.GetReference(CollectionsMarshal.AsSpan(data));
 
-        T top = this.heap[0];
-        T bottom = this.heap[^1];
-        this.heap.RemoveAt(this.heap.Count - 1);
+        int maxIndex = count - 1;
+        T top = Unsafe.Add(ref dRef, 0u);
+        T bottom = Unsafe.Add(ref dRef, (uint)maxIndex);
+        data.RemoveAt(maxIndex);
 
-        if (this.heap.Count > 0)
+        if (--count > 0)
         {
-            this.heap[0] = bottom;
-            this.Down(0);
+            Unsafe.Add(ref dRef, 0u) = bottom;
+            this.Down(0u, data);
         }
 
         return top;
@@ -77,70 +115,104 @@ internal sealed class StablePriorityQueue<T, TComparer>
     /// <exception cref="InvalidOperationException">Thrown if the priority queue is empty.</exception>
     public T Peek()
     {
-        if (this.heap.Count == 0)
-        {
-            throw new InvalidOperationException("Queue is empty.");
-        }
-
+        ThrowIfEmpty(this.Count);
         return this.heap[0];
     }
 
     /// <summary>
-    /// Restores the heap property by moving the item at the specified index upward.
+    /// Restores the min-heap property by moving the item at the specified index upward
+    /// through the heap until it is in the correct position. This is called after insertion.
     /// </summary>
-    /// <param name="index">The index of the item to move upward.</param>
-    private void Up(int index)
+    /// <param name="index">The index of the newly added item to sift upward.</param>
+    /// <param name="heap">The heap to operate on.</param>
+    private void Up(uint index, List<T> heap)
     {
-        List<T> data = this.heap;
-        T item = data[index];
+        ref T dRef = ref MemoryMarshal.GetReference(CollectionsMarshal.AsSpan(heap));
+        T item = Unsafe.Add(ref dRef, index);
         TComparer comparer = this.Comparer;
 
         while (index > 0)
         {
-            int parent = (index - 1) >> 1;
-            T current = data[parent];
+            uint parent = (index - 1u) >> Log2Arity;
+            T current = Unsafe.Add(ref dRef, parent);
             if (comparer.Compare(item, current) >= 0)
             {
                 break;
             }
 
-            data[index] = current;
+            Unsafe.Add(ref dRef, index) = current;
             index = parent;
         }
 
-        data[index] = item;
+        Unsafe.Add(ref dRef, index) = item;
     }
 
     /// <summary>
-    /// Restores the heap property by moving the item at the specified index downward.
+    /// Restores the min-heap property by moving the item at the specified index downward
+    /// through the heap until it is in the correct position. This is called after removal of the root.
     /// </summary>
-    /// <param name="index">The index of the item to move downward.</param>
-    private void Down(int index)
+    /// <param name="index">The index of the item to sift downward (typically the root).</param>
+    /// <param name="heap">The heap to operate on.</param>
+    private void Down(uint index, List<T> heap)
     {
-        List<T> data = this.heap;
-        int halfLength = data.Count >> 1;
-        T item = data[index];
+        Span<T> data = CollectionsMarshal.AsSpan(heap);
+        ref T dRef = ref MemoryMarshal.GetReference(data);
+
+        uint length = (uint)data.Length;
+        T item = Unsafe.Add(ref dRef, index);
         TComparer comparer = this.Comparer;
 
-        while (index < halfLength)
+        while ((index << Log2Arity) + 1u < length)
         {
-            int bestChild = (index << 1) + 1; // Initially left child
-            int right = bestChild + 1;
+            uint firstChild = (index << Log2Arity) + 1u;
+            uint bestChild = firstChild;
+            uint maxChild = Math.Min(firstChild + (1u << Log2Arity), length);
 
-            if (right < data.Count && comparer.Compare(data[right], data[bestChild]) < 0)
+            for (uint i = firstChild + 1u; i < maxChild; i++)
             {
-                bestChild = right;
+                if (comparer.Compare(Unsafe.Add(ref dRef, i), Unsafe.Add(ref dRef, bestChild)) < 0)
+                {
+                    bestChild = i;
+                }
             }
 
-            if (comparer.Compare(data[bestChild], item) >= 0)
+            if (comparer.Compare(Unsafe.Add(ref dRef, bestChild), item) >= 0)
             {
                 break;
             }
 
-            data[index] = data[bestChild];
+            Unsafe.Add(ref dRef, index) = Unsafe.Add(ref dRef, bestChild);
             index = bestChild;
         }
 
-        data[index] = item;
+        Unsafe.Add(ref dRef, index) = item;
+    }
+
+    /// <summary>
+    /// Heapifies the given list to establish the min-heap property.
+    /// </summary>
+    /// <param name="heap">The list to heapify.</param>
+    private void Heapify(List<T> heap)
+    {
+        int count = heap.Count;
+        if (count <= 1)
+        {
+            return;
+        }
+
+        int lastParent = (count - 2) >> Log2Arity;
+        for (int i = lastParent; i >= 0; i--)
+        {
+            this.Down((uint)i, heap);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ThrowIfEmpty(int count)
+    {
+        if (count == 0)
+        {
+            throw new InvalidOperationException("Queue is empty.");
+        }
     }
 }

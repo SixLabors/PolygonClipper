@@ -1,0 +1,2592 @@
+// Copyright (c) Six Labors.
+// Licensed under the Six Labors Split License.
+
+using Clipper2Lib;
+
+namespace SixLabors.PolygonClipper.Tests;
+
+public class NormalizationTests
+{
+    /// <summary>
+    /// Tests that a simple rectangle (single contour, no holes) is preserved.
+    /// </summary>
+    [Fact]
+    public void SimpleRectangle_NoSelfIntersections_PreservesStructure()
+    {
+        // Arrange: Simple rectangle with explicitly closed input
+        Contour outer =
+        [
+            new Vertex(0, 0),
+            new Vertex(10, 0),
+            new Vertex(10, 10),
+            new Vertex(0, 10),
+            new Vertex(0, 0) // Explicitly closes the input contour
+        ];
+
+        Polygon input = [outer];
+
+        // Act
+        Polygon result = PolygonClipper.Normalize(input);
+
+        // Assert
+        Assert.Equal(1, result.Count);
+        Assert.Equal(GetImplicitVertexCount(outer), GetImplicitVertexCount(result[0]));
+        Assert.True(result[0].IsExternal);
+    }
+
+    /// <summary>
+    /// Tests that a rectangle with a rectangular hole (2 contours) is preserved.
+    /// </summary>
+    [Fact]
+    public void RectangleWithHole_NoSelfIntersections_PreservesStructure()
+    {
+        // Arrange: Outer rectangle
+        Contour outer =
+        [
+            new Vertex(0, 0),
+            new Vertex(20, 0),
+            new Vertex(20, 20),
+            new Vertex(0, 20),
+            new Vertex(0, 0) // Closing vertex
+
+            // Inner rectangle (hole) - smaller, centered
+        ];
+
+        // Inner rectangle (hole) - smaller, centered
+        Contour inner =
+        [
+            new Vertex(5, 5),
+            new Vertex(15, 5),
+            new Vertex(15, 15),
+            new Vertex(5, 15),
+            new Vertex(5, 5) // Closing vertex
+        ];
+
+        Polygon input = [outer, inner];
+
+        // Act
+        Polygon result = PolygonClipper.Normalize(input);
+
+        // Assert
+        Assert.Equal(2, result.Count);
+
+        // First contour should be external (outer)
+        Assert.True(result[0].IsExternal);
+        Assert.Equal(GetImplicitVertexCount(outer), GetImplicitVertexCount(result[0]));
+
+        // Second contour should be a hole (inner)
+        Assert.False(result[1].IsExternal);
+        Assert.Equal(GetImplicitVertexCount(inner), GetImplicitVertexCount(result[1]));
+    }
+
+    /// <summary>
+    /// Tests a more complex shape similar to a stroked "O" - two concentric circles approximated as octagons.
+    /// This tests that separate contours don't get incorrectly merged during reconstruction.
+    /// </summary>
+    [Fact]
+    public void ConcentricOctagons_NoSelfIntersections_PreservesStructure()
+    {
+        // Arrange: Outer octagon (approximating outer circle)
+        Contour outer = CreateOctagon(10, 10, 8);
+
+        // Inner octagon (approximating inner circle/hole)
+        Contour inner = CreateOctagon(10, 10, 4);
+
+        Polygon input = [outer, inner];
+
+        // Act
+        Polygon result = PolygonClipper.Normalize(input);
+
+        // Assert: Must have exactly 2 contours
+        Assert.Equal(2, result.Count);
+        Assert.True(result[0].IsExternal);
+        Assert.False(result[1].IsExternal);
+    }
+
+    /// <summary>
+    /// Tests concentric circles with many vertices to ensure no vertex matching issues.
+    /// </summary>
+    [Fact]
+    public void ConcentricCircles_ManyVertices_PreservesStructure()
+    {
+        // Arrange: Create circles with 32 vertices each
+        Contour outer = CreateRegularPolygon(0, 0, 100, 32);
+        Contour inner = CreateRegularPolygon(0, 0, 50, 32);
+
+        Polygon input = [outer, inner];
+
+        // Act
+        Polygon result = PolygonClipper.Normalize(input);
+
+        // Assert: Must have exactly 2 contours
+        Assert.Equal(2, result.Count);
+        Assert.True(result[0].IsExternal);
+        Assert.False(result[1].IsExternal);
+
+        // Vertex counts should be preserved.
+        Assert.Equal(GetImplicitVertexCount(outer), GetImplicitVertexCount(result[0]));
+        Assert.Equal(GetImplicitVertexCount(inner), GetImplicitVertexCount(result[1]));
+    }
+
+    /// <summary>
+    /// Tests concentric circles with vertex counts similar to real stroked text (283 outer, 305 inner).
+    /// This simulates a stroked "O" character with high detail.
+    /// </summary>
+    [Fact]
+    public void ConcentricCircles_StrokedTextScale_PreservesStructure()
+    {
+        // Arrange: Create circles matching real stroked text vertex counts
+        const int outerVertices = 283;
+        const int innerVertices = 305;
+
+        Contour outer = CreateRegularPolygon(100, 100, 50, outerVertices);
+        Contour inner = CreateRegularPolygon(100, 100, 45, innerVertices);
+
+        Polygon input = [outer, inner];
+
+        // Act
+        Polygon result = PolygonClipper.Normalize(input);
+
+        // Assert: Must have exactly 2 contours
+        Assert.Equal(2, result.Count);
+        Assert.True(result[0].IsExternal);
+        Assert.False(result[1].IsExternal);
+
+        // Vertex counts should be preserved
+        Assert.Equal(GetImplicitVertexCount(outer), GetImplicitVertexCount(result[0]));
+        Assert.Equal(GetImplicitVertexCount(inner), GetImplicitVertexCount(result[1]));
+    }
+
+    /// <summary>
+    /// Tests real stroked text "O" shape data.
+    /// Note: The input contours are compound paths - each contains two loops that share a vertex.
+    /// This is typical of font glyph data where outer and inner boundaries are combined into single paths.
+    /// The algorithm correctly separates these into distinct contours.
+    /// </summary>
+    [Fact]
+    public void Stroked_Text_O_Shape()
+    {
+        // Arrange: Create circles matching real stroked text vertex counts
+        // Note: These contours are compound paths - they contain two loops each that share a vertex
+        // The outer contour goes around the outer edge, returns to start, then goes around inner edge
+        Contour outer =
+        [
+            new Vertex(1204.40380859375F, 717.1976928710938F),
+            new Vertex(1204.3563232421875F, 720.1414794921875F),
+            new Vertex(1204.2144775390625F, 723.016845703125F),
+            new Vertex(1203.9774169921875F, 725.8305053710938F),
+            new Vertex(1203.644775390625F, 728.5823364257812F),
+            new Vertex(1203.21630859375F, 731.2721557617188F),
+            new Vertex(1202.6915283203125F, 733.8997192382812F),
+            new Vertex(1202.0701904296875F, 736.464599609375F),
+            new Vertex(1201.3516845703125F, 738.9671020507812F),
+            new Vertex(1200.536865234375F, 741.3987426757812F),
+            new Vertex(1199.626708984375F, 743.7500610351562F),
+            new Vertex(1198.6209716796875F, 746.0198364257812F),
+            new Vertex(1197.5194091796875F, 748.2072143554688F),
+            new Vertex(1196.3218994140625F, 750.311279296875F),
+            new Vertex(1195.0283203125F, 752.3309936523438F),
+            new Vertex(1193.638916015625F, 754.265380859375F),
+            new Vertex(1192.1529541015625F, 756.1148071289062F),
+            new Vertex(1190.5697021484375F, 757.8731689453125F),
+            new Vertex(1188.891357421875F, 759.5310668945312F),
+            new Vertex(1187.1202392578125F, 761.0853881835938F),
+            new Vertex(1185.2579345703125F, 762.53564453125F),
+            new Vertex(1183.30517578125F, 763.8809204101562F),
+            new Vertex(1181.263671875F, 765.12060546875F),
+            new Vertex(1179.134521484375F, 766.254638671875F),
+            new Vertex(1176.9151611328125F, 767.2847290039062F),
+            new Vertex(1174.602783203125F, 768.2029418945312F),
+            new Vertex(1172.2027587890625F, 768.9976196289062F),
+            new Vertex(1169.7203369140625F, 769.6678466796875F),
+            new Vertex(1167.1568603515625F, 770.2142944335938F),
+            new Vertex(1164.5128173828125F, 770.6377563476562F),
+            new Vertex(1161.7890625F, 770.9391479492188F),
+            new Vertex(1158.98583984375F, 771.1194458007812F),
+            new Vertex(1156.103271484375F, 771.1792602539062F),
+            new Vertex(1153.140380859375F, 771.1195068359375F),
+            new Vertex(1150.265625F, 770.9395751953125F),
+            new Vertex(1147.477294921875F, 770.6387939453125F),
+            new Vertex(1144.77587890625F, 770.2160034179688F),
+            new Vertex(1142.1617431640625F, 769.67041015625F),
+            new Vertex(1139.6356201171875F, 769.0009765625F),
+            new Vertex(1137.1983642578125F, 768.2068481445312F),
+            new Vertex(1134.85546875F, 767.2889404296875F),
+            new Vertex(1132.611083984375F, 766.258056640625F),
+            new Vertex(1130.4617919921875F, 765.1215209960938F),
+            new Vertex(1128.4049072265625F, 763.8776245117188F),
+            new Vertex(1126.442138671875F, 762.5265502929688F),
+            new Vertex(1124.5745849609375F, 761.0687255859375F),
+            new Vertex(1122.8040771484375F, 759.5046997070312F),
+            new Vertex(1121.1318359375F, 757.8358764648438F),
+            new Vertex(1119.560791015625F, 756.0654907226562F),
+            new Vertex(1118.092041015625F, 754.2050170898438F),
+            new Vertex(1116.7218017578125F, 752.2606811523438F),
+            new Vertex(1115.448486328125F, 750.23095703125F),
+            new Vertex(1114.2724609375F, 748.1168823242188F),
+            new Vertex(1113.193603515625F, 745.9197998046875F),
+            new Vertex(1112.211669921875F, 743.640380859375F),
+            new Vertex(1111.326416015625F, 741.279541015625F),
+            new Vertex(1110.5380859375F, 738.8394165039062F),
+            new Vertex(1109.8455810546875F, 736.3314208984375F),
+            new Vertex(1109.24658203125F, 733.762939453125F),
+            new Vertex(1108.7410888671875F, 731.1329956054688F),
+            new Vertex(1108.3280029296875F, 728.4418334960938F),
+            new Vertex(1108.00732421875F, 725.6895751953125F),
+            new Vertex(1107.7786865234375F, 722.8762817382812F),
+            new Vertex(1107.6419677734375F, 720.0023803710938F),
+            new Vertex(1107.5963134765625F, 717.0606079101562F),
+            new Vertex(1107.6773681640625F, 713.190673828125F),
+            new Vertex(1107.921875F, 709.4261474609375F),
+            new Vertex(1108.330322265625F, 705.7728271484375F),
+            new Vertex(1108.90380859375F, 702.231201171875F),
+            new Vertex(1109.6431884765625F, 698.802001953125F),
+            new Vertex(1110.5491943359375F, 695.486083984375F),
+            new Vertex(1111.622802734375F, 692.284423828125F),
+            new Vertex(1112.8580322265625F, 689.2141723632812F),
+            new Vertex(1113.553466796875F, 687.6968994140625F),
+            new Vertex(1114.2864990234375F, 686.2340698242188F),
+            new Vertex(1115.064208984375F, 684.8114013671875F),
+            new Vertex(1115.8861083984375F, 683.4287719726562F),
+            new Vertex(1116.7529296875F, 682.086669921875F),
+            new Vertex(1117.6640625F, 680.7855834960938F),
+            new Vertex(1118.6197509765625F, 679.5257568359375F),
+            new Vertex(1119.6195068359375F, 678.3076782226562F),
+            new Vertex(1120.663330078125F, 677.1317138671875F),
+            new Vertex(1121.7508544921875F, 675.9981079101562F),
+            new Vertex(1122.8819580078125F, 674.9072875976562F),
+            new Vertex(1124.0562744140625F, 673.8594970703125F),
+            new Vertex(1125.273193359375F, 672.8551025390625F),
+            new Vertex(1126.5325927734375F, 671.89404296875F),
+            new Vertex(1127.8341064453125F, 670.9766235351562F),
+            new Vertex(1129.18017578125F, 670.1010131835938F),
+            new Vertex(1130.5740966796875F, 669.2708740234375F),
+            new Vertex(1132.0125732421875F, 668.4935913085938F),
+            new Vertex(1133.4925537109375F, 667.7711181640625F),
+            new Vertex(1135.0128173828125F, 667.1034545898438F),
+            new Vertex(1136.57373046875F, 666.4904174804688F),
+            new Vertex(1138.1741943359375F, 665.9320678710938F),
+            new Vertex(1139.81396484375F, 665.427978515625F),
+            new Vertex(1141.4927978515625F, 664.9780883789062F),
+            new Vertex(1143.2105712890625F, 664.58203125F),
+            new Vertex(1144.9669189453125F, 664.2398071289062F),
+            new Vertex(1146.7615966796875F, 663.9508666992188F),
+            new Vertex(1148.6126708984375F, 663.7127075195312F),
+            new Vertex(1152.37353515625F, 663.4010009765625F),
+            new Vertex(1156.3087158203125F, 663.2969360351562F),
+            new Vertex(1160.0836181640625F, 663.4000854492188F),
+            new Vertex(1163.7022705078125F, 663.709228515625F),
+            new Vertex(1165.4892578125F, 663.945556640625F),
+            new Vertex(1167.223388671875F, 664.2321166992188F),
+            new Vertex(1168.9228515625F, 664.571533203125F),
+            new Vertex(1170.5877685546875F, 664.964111328125F),
+            new Vertex(1172.2178955078125F, 665.4100341796875F),
+            new Vertex(1173.812744140625F, 665.9094848632812F),
+            new Vertex(1175.3719482421875F, 666.4625854492188F),
+            new Vertex(1176.895263671875F, 667.0695190429688F),
+            new Vertex(1178.3822021484375F, 667.7303466796875F),
+            new Vertex(1179.8323974609375F, 668.4451293945312F),
+            new Vertex(1181.2452392578125F, 669.2137451171875F),
+            new Vertex(1182.6177978515625F, 670.0346069335938F),
+            new Vertex(1183.94677734375F, 670.9011840820312F),
+            new Vertex(1185.23388671875F, 671.8099365234375F),
+            new Vertex(1186.4813232421875F, 672.7622680664062F),
+            new Vertex(1187.6885986328125F, 673.7582397460938F),
+            new Vertex(1188.8551025390625F, 674.7974853515625F),
+            new Vertex(1189.9810791015625F, 675.879638671875F),
+            new Vertex(1191.0657958984375F, 677.004638671875F),
+            new Vertex(1192.109130859375F, 678.1719970703125F),
+            new Vertex(1193.111083984375F, 679.381591796875F),
+            new Vertex(1194.0711669921875F, 680.6329345703125F),
+            new Vertex(1194.9891357421875F, 681.925537109375F),
+            new Vertex(1195.8653564453125F, 683.2590942382812F),
+            new Vertex(1196.69970703125F, 684.633544921875F),
+            new Vertex(1197.4918212890625F, 686.0482788085938F),
+            new Vertex(1198.2420654296875F, 687.5028686523438F),
+            new Vertex(1198.958740234375F, 689.0149536132812F),
+            new Vertex(1200.237060546875F, 692.0859375F),
+            new Vertex(1201.3487548828125F, 695.3023071289062F),
+            new Vertex(1202.2864990234375F, 698.6441040039062F),
+            new Vertex(1203.0516357421875F, 702.1101684570312F),
+            new Vertex(1203.644775390625F, 705.6995849609375F),
+            new Vertex(1204.0672607421875F, 709.4118041992188F),
+            new Vertex(1204.31982421875F, 713.246337890625F),
+            new Vertex(1204.40380859375F, 717.1976928710938F),
+            new Vertex(1199.3232421875F, 713.4638671875F),
+            new Vertex(1199.0858154296875F, 709.8590698242188F),
+            new Vertex(1198.691162109375F, 706.3902587890625F),
+            new Vertex(1198.1402587890625F, 703.0573120117188F),
+            new Vertex(1197.4344482421875F, 699.8593139648438F),
+            new Vertex(1196.5748291015625F, 696.7957153320312F),
+            new Vertex(1195.561767578125F, 693.8651123046875F),
+            new Vertex(1194.388916015625F, 691.0475463867188F),
+            new Vertex(1193.7598876953125F, 689.7202758789062F),
+            new Vertex(1193.0872802734375F, 688.4163208007812F),
+            new Vertex(1192.3798828125F, 687.1529541015625F),
+            new Vertex(1191.6375732421875F, 685.9299926757812F),
+            new Vertex(1190.8602294921875F, 684.746826171875F),
+            new Vertex(1190.0479736328125F, 683.603271484375F),
+            new Vertex(1189.200927734375F, 682.4991455078125F),
+            new Vertex(1188.318603515625F, 681.4339599609375F),
+            new Vertex(1187.4007568359375F, 680.4071044921875F),
+            new Vertex(1186.4476318359375F, 679.4185791015625F),
+            new Vertex(1185.4586181640625F, 678.4678955078125F),
+            new Vertex(1184.4334716796875F, 677.5547485351562F),
+            new Vertex(1183.3721923828125F, 676.6792602539062F),
+            new Vertex(1182.27392578125F, 675.8406982421875F),
+            new Vertex(1181.138427734375F, 675.0390014648438F),
+            new Vertex(1179.9681396484375F, 674.2759399414062F),
+            new Vertex(1178.7662353515625F, 673.55712890625F),
+            new Vertex(1177.5316162109375F, 672.8854370117188F),
+            new Vertex(1176.2608642578125F, 672.2591552734375F),
+            new Vertex(1174.953857421875F, 671.6782836914062F),
+            new Vertex(1173.6102294921875F, 671.1428833007812F),
+            new Vertex(1172.229248046875F, 670.6530151367188F),
+            new Vertex(1170.8106689453125F, 670.208740234375F),
+            new Vertex(1169.3541259765625F, 669.810302734375F),
+            new Vertex(1167.859130859375F, 669.4578857421875F),
+            new Vertex(1166.325927734375F, 669.1516723632812F),
+            new Vertex(1164.753662109375F, 668.891845703125F),
+            new Vertex(1163.1614990234375F, 668.6812744140625F),
+            new Vertex(1159.8023681640625F, 668.3942260742188F),
+            new Vertex(1156.3065185546875F, 668.2987670898438F),
+            new Vertex(1152.646240234375F, 668.3955078125F),
+            new Vertex(1149.1385498046875F, 668.6862182617188F),
+            new Vertex(1147.4781494140625F, 668.8998413085938F),
+            new Vertex(1145.8426513671875F, 669.1631469726562F),
+            new Vertex(1144.2508544921875F, 669.473388671875F),
+            new Vertex(1142.7020263671875F, 669.8305053710938F),
+            new Vertex(1141.196044921875F, 670.2340087890625F),
+            new Vertex(1139.7327880859375F, 670.6837768554688F),
+            new Vertex(1138.311767578125F, 671.1796264648438F),
+            new Vertex(1136.9327392578125F, 671.7212524414062F),
+            new Vertex(1135.5953369140625F, 672.30859375F),
+            new Vertex(1134.2987060546875F, 672.9415893554688F),
+            new Vertex(1133.0428466796875F, 673.6201171875F),
+            new Vertex(1131.82373046875F, 674.3462524414062F),
+            new Vertex(1130.6385498046875F, 675.1171264648438F),
+            new Vertex(1129.4906005859375F, 675.92626953125F),
+            new Vertex(1128.38232421875F, 676.7720947265625F),
+            new Vertex(1127.3131103515625F, 677.6544189453125F),
+            new Vertex(1126.2830810546875F, 678.5735473632812F),
+            new Vertex(1125.2916259765625F, 679.5297241210938F),
+            new Vertex(1124.33837890625F, 680.5233154296875F),
+            new Vertex(1123.4229736328125F, 681.5546264648438F),
+            new Vertex(1122.5452880859375F, 682.6239013671875F),
+            new Vertex(1121.705078125F, 683.7315063476562F),
+            new Vertex(1120.90234375F, 684.8780517578125F),
+            new Vertex(1120.1365966796875F, 686.0635375976562F),
+            new Vertex(1119.408203125F, 687.288818359375F),
+            new Vertex(1118.7166748046875F, 688.5540161132812F),
+            new Vertex(1118.0625F, 689.8592529296875F),
+            new Vertex(1117.4525146484375F, 691.1901245117188F),
+            new Vertex(1116.31640625F, 694.0137939453125F),
+            new Vertex(1115.3350830078125F, 696.94091796875F),
+            new Vertex(1114.5023193359375F, 699.98876953125F),
+            new Vertex(1113.81884765625F, 703.158447265625F),
+            new Vertex(1113.28564453125F, 706.45068359375F),
+            new Vertex(1112.90380859375F, 709.8662109375F),
+            new Vertex(1112.6739501953125F, 713.4051513671875F),
+            new Vertex(1112.5970458984375F, 717.0741577148438F),
+            new Vertex(1112.6400146484375F, 719.8446655273438F),
+            new Vertex(1112.7691650390625F, 722.5548706054688F),
+            new Vertex(1112.98388671875F, 725.1976318359375F),
+            new Vertex(1113.2838134765625F, 727.7730102539062F),
+            new Vertex(1113.6688232421875F, 730.2814331054688F),
+            new Vertex(1114.13818359375F, 732.7227783203125F),
+            new Vertex(1114.6920166015625F, 735.09765625F),
+            new Vertex(1115.3291015625F, 737.4047241210938F),
+            new Vertex(1116.048828125F, 739.63232421875F),
+            new Vertex(1116.851318359375F, 741.7724609375F),
+            new Vertex(1117.736572265625F, 743.8275146484375F),
+            new Vertex(1118.7041015625F, 745.7981567382812F),
+            new Vertex(1119.75390625F, 747.685302734375F),
+            new Vertex(1120.8861083984375F, 749.4899291992188F),
+            new Vertex(1122.100830078125F, 751.2135620117188F),
+            new Vertex(1123.396240234375F, 752.8544311523438F),
+            new Vertex(1124.77099609375F, 754.4037475585938F),
+            new Vertex(1126.2283935546875F, 755.8580932617188F),
+            new Vertex(1127.7711181640625F, 757.2208251953125F),
+            new Vertex(1129.400634765625F, 758.4929809570312F),
+            new Vertex(1131.1185302734375F, 759.6754760742188F),
+            new Vertex(1132.9261474609375F, 760.7686157226562F),
+            new Vertex(1134.824951171875F, 761.772705078125F),
+            new Vertex(1136.8125F, 762.6856689453125F),
+            new Vertex(1138.8863525390625F, 763.4981079101562F),
+            new Vertex(1141.0516357421875F, 764.20361328125F),
+            new Vertex(1143.3138427734375F, 764.8031005859375F),
+            new Vertex(1145.673828125F, 765.2957153320312F),
+            new Vertex(1148.13232421875F, 765.680419921875F),
+            new Vertex(1150.690185546875F, 765.9564208984375F),
+            new Vertex(1153.346923828125F, 766.1226806640625F),
+            new Vertex(1156.101806640625F, 766.1781616210938F),
+            new Vertex(1158.7734375F, 766.1227416992188F),
+            new Vertex(1161.353515625F, 765.9568481445312F),
+            new Vertex(1163.8421630859375F, 765.6814575195312F),
+            new Vertex(1166.2396240234375F, 765.2974243164062F),
+            new Vertex(1168.5467529296875F, 764.8056640625F),
+            new Vertex(1170.7640380859375F, 764.2069702148438F),
+            new Vertex(1172.892822265625F, 763.5021362304688F),
+            new Vertex(1174.9383544921875F, 762.6898803710938F),
+            new Vertex(1176.905029296875F, 761.777099609375F),
+            new Vertex(1178.788818359375F, 760.773681640625F),
+            new Vertex(1180.587158203125F, 759.6818237304688F),
+            new Vertex(1182.3011474609375F, 758.5009765625F),
+            new Vertex(1183.9324951171875F, 757.2306518554688F),
+            new Vertex(1185.482421875F, 755.8703002929688F),
+            new Vertex(1186.9517822265625F, 754.4188232421875F),
+            new Vertex(1188.3431396484375F, 752.8734741210938F),
+            new Vertex(1189.65673828125F, 751.23876953125F),
+            new Vertex(1190.8896484375F, 749.5222778320312F),
+            new Vertex(1192.0408935546875F, 747.724609375F),
+            new Vertex(1193.1109619140625F, 745.8445434570312F),
+            new Vertex(1194.0997314453125F, 743.8812866210938F),
+            new Vertex(1195.007080078125F, 741.8336791992188F),
+            new Vertex(1195.83251953125F, 739.7011108398438F),
+            new Vertex(1196.5760498046875F, 737.4821166992188F),
+            new Vertex(1197.2354736328125F, 735.185546875F),
+            new Vertex(1197.8082275390625F, 732.8211059570312F),
+            new Vertex(1198.2939453125F, 730.3889770507812F),
+            new Vertex(1198.692138671875F, 727.8888549804688F),
+            new Vertex(1199.0025634765625F, 725.3204956054688F),
+            new Vertex(1199.2247314453125F, 722.68359375F),
+            new Vertex(1199.3582763671875F, 719.9779052734375F),
+            new Vertex(1199.40283203125F, 717.2105102539062F),
+            new Vertex(1199.3232421875F, 713.4638671875F),
+            new Vertex(1204.40380859375F, 717.1976928710938F),
+        ];
+
+        Contour inner =
+        [
+            new Vertex(1124.8333740234375F, 717.2041625976562F),
+            new Vertex(1124.888427734375F, 720.2365112304688F),
+            new Vertex(1125.0526123046875F, 723.1566772460938F),
+            new Vertex(1125.3255615234375F, 725.9636840820312F),
+            new Vertex(1125.7060546875F, 728.657470703125F),
+            new Vertex(1126.193359375F, 731.2381591796875F),
+            new Vertex(1126.7864990234375F, 733.7061767578125F),
+            new Vertex(1127.484375F, 736.0621948242188F),
+            new Vertex(1128.2916259765625F, 738.3222045898438F),
+            new Vertex(1128.72265625F, 739.3775024414062F),
+            new Vertex(1129.1865234375F, 740.4131469726562F),
+            new Vertex(1129.676513671875F, 741.4146118164062F),
+            new Vertex(1130.1932373046875F, 742.38232421875F),
+            new Vertex(1130.736083984375F, 743.3167724609375F),
+            new Vertex(1131.30517578125F, 744.2178344726562F),
+            new Vertex(1131.9005126953125F, 745.08642578125F),
+            new Vertex(1132.5220947265625F, 745.9226684570312F),
+            new Vertex(1133.170166015625F, 746.7271728515625F),
+            new Vertex(1133.8447265625F, 747.5003051757812F),
+            new Vertex(1134.5458984375F, 748.2423095703125F),
+            new Vertex(1135.2742919921875F, 748.9536743164062F),
+            new Vertex(1136.0299072265625F, 749.6348266601562F),
+            new Vertex(1136.8131103515625F, 750.2860107421875F),
+            new Vertex(1137.624755859375F, 750.907470703125F),
+            new Vertex(1138.4619140625F, 751.4976806640625F),
+            new Vertex(1139.3226318359375F, 752.0517578125F),
+            new Vertex(1140.2109375F, 752.5693969726562F),
+            new Vertex(1141.1298828125F, 753.0524291992188F),
+            new Vertex(1142.08056640625F, 753.5009765625F),
+            new Vertex(1143.0633544921875F, 753.9150390625F),
+            new Vertex(1144.0787353515625F, 754.2945556640625F),
+            new Vertex(1145.1270751953125F, 754.63916015625F),
+            new Vertex(1146.2091064453125F, 754.94873046875F),
+            new Vertex(1147.3250732421875F, 755.2230834960938F),
+            new Vertex(1148.4752197265625F, 755.4618530273438F),
+            new Vertex(1149.65966796875F, 755.6646118164062F),
+            new Vertex(1150.8592529296875F, 755.82861328125F),
+            new Vertex(1153.42236328125F, 756.0538940429688F),
+            new Vertex(1156.1026611328125F, 756.12890625F),
+            new Vertex(1158.7982177734375F, 756.0538330078125F),
+            new Vertex(1161.3724365234375F, 755.8284912109375F),
+            new Vertex(1162.57568359375F, 755.6644897460938F),
+            new Vertex(1163.7626953125F, 755.461669921875F),
+            new Vertex(1164.9140625F, 755.2229614257812F),
+            new Vertex(1166.0301513671875F, 754.94873046875F),
+            new Vertex(1167.1109619140625F, 754.6393432617188F),
+            new Vertex(1168.156982421875F, 754.2950439453125F),
+            new Vertex(1169.168701171875F, 753.916015625F),
+            new Vertex(1170.1466064453125F, 753.5025634765625F),
+            new Vertex(1171.09130859375F, 753.0547485351562F),
+            new Vertex(1172.003173828125F, 752.5726928710938F),
+            new Vertex(1172.8829345703125F, 752.0562744140625F),
+            new Vertex(1173.734619140625F, 751.50341796875F),
+            new Vertex(1174.562744140625F, 750.9142456054688F),
+            new Vertex(1175.365478515625F, 750.29345703125F),
+            new Vertex(1176.1400146484375F, 749.6431274414062F),
+            new Vertex(1176.8870849609375F, 748.9627075195312F),
+            new Vertex(1177.6068115234375F, 748.252197265625F),
+            new Vertex(1178.299560546875F, 747.5107421875F),
+            new Vertex(1178.9659423828125F, 746.7383422851562F),
+            new Vertex(1179.60546875F, 745.9346313476562F),
+            new Vertex(1180.21875F, 745.0989379882812F),
+            new Vertex(1180.805908203125F, 744.2308959960938F),
+            new Vertex(1181.366943359375F, 743.3301391601562F),
+            new Vertex(1181.901611328125F, 742.3961791992188F),
+            new Vertex(1182.4102783203125F, 741.4287719726562F),
+            new Vertex(1182.892333984375F, 740.427734375F),
+            new Vertex(1183.347900390625F, 739.392333984375F),
+            new Vertex(1183.7713623046875F, 738.336669921875F),
+            new Vertex(1184.5635986328125F, 736.0755004882812F),
+            new Vertex(1185.248779296875F, 733.7176513671875F),
+            new Vertex(1185.831298828125F, 731.2474975585938F),
+            new Vertex(1186.309814453125F, 728.6649169921875F),
+            new Vertex(1186.6834716796875F, 725.9691772460938F),
+            new Vertex(1186.951416015625F, 723.1602172851562F),
+            new Vertex(1187.1126708984375F, 720.23828125F),
+            new Vertex(1187.1663818359375F, 717.2155151367188F),
+            new Vertex(1187.0433349609375F, 712.6398315429688F),
+            new Vertex(1186.6748046875F, 708.3317260742188F),
+            new Vertex(1186.4039306640625F, 706.3126220703125F),
+            new Vertex(1186.0704345703125F, 704.3439331054688F),
+            new Vertex(1185.677978515625F, 702.4451904296875F),
+            new Vertex(1185.2266845703125F, 700.6165161132812F),
+            new Vertex(1184.7171630859375F, 698.8571166992188F),
+            new Vertex(1184.1500244140625F, 697.1669921875F),
+            new Vertex(1183.5257568359375F, 695.5458374023438F),
+            new Vertex(1182.8446044921875F, 693.9927368164062F),
+            new Vertex(1182.1072998046875F, 692.507080078125F),
+            new Vertex(1181.3138427734375F, 691.0883178710938F),
+            new Vertex(1180.4644775390625F, 689.7352294921875F),
+            new Vertex(1179.5513916015625F, 688.4357299804688F),
+            new Vertex(1179.0928955078125F, 687.8388061523438F),
+            new Vertex(1178.6114501953125F, 687.2518920898438F),
+            new Vertex(1178.11474609375F, 686.68505859375F),
+            new Vertex(1177.6029052734375F, 686.1383666992188F),
+            new Vertex(1177.0760498046875F, 685.6116333007812F),
+            new Vertex(1176.53369140625F, 685.1045532226562F),
+            new Vertex(1175.975341796875F, 684.6165771484375F),
+            new Vertex(1175.4012451171875F, 684.1477661132812F),
+            new Vertex(1174.811279296875F, 683.6981811523438F),
+            new Vertex(1174.2049560546875F, 683.2673950195312F),
+            new Vertex(1173.5819091796875F, 682.855224609375F),
+            new Vertex(1172.9422607421875F, 682.4617309570312F),
+            new Vertex(1172.285400390625F, 682.0867919921875F),
+            new Vertex(1171.6287841796875F, 681.7395629882812F),
+            new Vertex(1170.20947265625F, 681.0736694335938F),
+            new Vertex(1168.736328125F, 680.4906005859375F),
+            new Vertex(1167.189453125F, 679.9822387695312F),
+            new Vertex(1165.5675048828125F, 679.5494384765625F),
+            new Vertex(1163.869384765625F, 679.1930541992188F),
+            new Vertex(1162.0948486328125F, 678.9140625F),
+            new Vertex(1160.2427978515625F, 678.7136840820312F),
+            new Vertex(1158.3134765625F, 678.5927734375F),
+            new Vertex(1156.316650390625F, 678.5524291992188F),
+            new Vertex(1153.6082763671875F, 678.6268310546875F),
+            new Vertex(1151.0269775390625F, 678.849365234375F),
+            new Vertex(1149.818359375F, 679.011474609375F),
+            new Vertex(1148.625244140625F, 679.2117919921875F),
+            new Vertex(1147.4669189453125F, 679.44775390625F),
+            new Vertex(1146.3431396484375F, 679.71875F),
+            new Vertex(1145.2535400390625F, 680.0247192382812F),
+            new Vertex(1144.1978759765625F, 680.3651733398438F),
+            new Vertex(1143.17578125F, 680.7400512695312F),
+            new Vertex(1142.1866455078125F, 681.1491088867188F),
+            new Vertex(1141.2301025390625F, 681.5921630859375F),
+            new Vertex(1140.305419921875F, 682.0693359375F),
+            new Vertex(1139.4122314453125F, 682.580322265625F),
+            new Vertex(1138.5469970703125F, 683.1272583007812F),
+            new Vertex(1137.70556640625F, 683.709716796875F),
+            new Vertex(1136.8900146484375F, 684.3231811523438F),
+            new Vertex(1136.102783203125F, 684.9659423828125F),
+            new Vertex(1135.3433837890625F, 685.6384887695312F),
+            new Vertex(1134.611328125F, 686.3408203125F),
+            new Vertex(1133.9063720703125F, 687.073486328125F),
+            new Vertex(1133.228271484375F, 687.8366088867188F),
+            new Vertex(1132.5770263671875F, 688.6307983398438F),
+            new Vertex(1131.951904296875F, 689.456787109375F),
+            new Vertex(1131.3531494140625F, 690.3143310546875F),
+            new Vertex(1130.78076171875F, 691.2041625976562F),
+            new Vertex(1130.2344970703125F, 692.1268310546875F),
+            new Vertex(1129.714599609375F, 693.0824584960938F),
+            new Vertex(1129.220947265625F, 694.0714721679688F),
+            new Vertex(1128.75390625F, 695.09423828125F),
+            new Vertex(1128.31982421875F, 696.1355590820312F),
+            new Vertex(1127.5064697265625F, 698.369873046875F),
+            new Vertex(1126.8033447265625F, 700.7049560546875F),
+            new Vertex(1126.205322265625F, 703.157958984375F),
+            new Vertex(1125.7138671875F, 705.7295532226562F),
+            new Vertex(1125.3299560546875F, 708.4199829101562F),
+            new Vertex(1125.0546875F, 711.2294921875F),
+            new Vertex(1124.8887939453125F, 714.1577758789062F),
+            new Vertex(1124.8333740234375F, 717.2041625976562F),
+            new Vertex(1119.8914794921875F, 713.9708862304688F),
+            new Vertex(1120.068603515625F, 710.8441162109375F),
+            new Vertex(1120.3646240234375F, 707.8226928710938F),
+            new Vertex(1120.78076171875F, 704.9066772460938F),
+            new Vertex(1121.31787109375F, 702.095947265625F),
+            new Vertex(1121.9771728515625F, 699.39111328125F),
+            new Vertex(1122.7596435546875F, 696.7926025390625F),
+            new Vertex(1123.66064453125F, 694.3175659179688F),
+            new Vertex(1124.1708984375F, 693.09326171875F),
+            new Vertex(1124.708740234375F, 691.9158325195312F),
+            new Vertex(1125.2802734375F, 690.7705688476562F),
+            new Vertex(1125.8858642578125F, 689.657470703125F),
+            new Vertex(1126.525634765625F, 688.5770874023438F),
+            new Vertex(1127.1993408203125F, 687.5296630859375F),
+            new Vertex(1127.9072265625F, 686.5157470703125F),
+            new Vertex(1128.6490478515625F, 685.5357055664062F),
+            new Vertex(1129.4248046875F, 684.5896606445312F),
+            new Vertex(1130.2344970703125F, 683.67822265625F),
+            new Vertex(1131.07763671875F, 682.802001953125F),
+            new Vertex(1131.9537353515625F, 681.9613647460938F),
+            new Vertex(1132.863037109375F, 681.15625F),
+            new Vertex(1133.8048095703125F, 680.3872680664062F),
+            new Vertex(1134.77880859375F, 679.6546630859375F),
+            new Vertex(1135.7869873046875F, 678.9567260742188F),
+            new Vertex(1136.8336181640625F, 678.2950439453125F),
+            new Vertex(1137.91650390625F, 677.675537109375F),
+            new Vertex(1139.0321044921875F, 677.0999755859375F),
+            new Vertex(1140.1795654296875F, 676.5684204101562F),
+            new Vertex(1141.35888671875F, 676.0807495117188F),
+            new Vertex(1142.5689697265625F, 675.6369018554688F),
+            new Vertex(1143.8099365234375F, 675.2367553710938F),
+            new Vertex(1145.0806884765625F, 674.8798828125F),
+            new Vertex(1146.3814697265625F, 674.566162109375F),
+            new Vertex(1147.7119140625F, 674.295166015625F),
+            new Vertex(1149.07177734375F, 674.0667724609375F),
+            new Vertex(1150.4796142578125F, 673.8780517578125F),
+            new Vertex(1153.3245849609375F, 673.6326904296875F),
+            new Vertex(1156.298583984375F, 673.5510864257812F),
+            new Vertex(1158.5205078125F, 673.595947265625F),
+            new Vertex(1160.6683349609375F, 673.7305297851562F),
+            new Vertex(1162.7523193359375F, 673.9560546875F),
+            new Vertex(1164.771728515625F, 674.2734985351562F),
+            new Vertex(1166.7264404296875F, 674.6837158203125F),
+            new Vertex(1168.61572265625F, 675.1878051757812F),
+            new Vertex(1170.4384765625F, 675.786865234375F),
+            new Vertex(1172.193359375F, 676.4815063476562F),
+            new Vertex(1173.8607177734375F, 677.2637329101562F),
+            new Vertex(1174.694091796875F, 677.7044677734375F),
+            new Vertex(1175.4920654296875F, 678.1599731445312F),
+            new Vertex(1176.2718505859375F, 678.6396484375F),
+            new Vertex(1177.0330810546875F, 679.1432495117188F),
+            new Vertex(1177.775390625F, 679.6707153320312F),
+            new Vertex(1178.4986572265625F, 680.2218627929688F),
+            new Vertex(1179.20263671875F, 680.7967529296875F),
+            new Vertex(1179.886962890625F, 681.3948364257812F),
+            new Vertex(1180.5518798828125F, 682.0162963867188F),
+            new Vertex(1181.1966552734375F, 682.6609497070312F),
+            new Vertex(1181.821044921875F, 683.3280029296875F),
+            new Vertex(1182.4254150390625F, 684.0176391601562F),
+            new Vertex(1183.0096435546875F, 684.7296752929688F),
+            new Vertex(1183.5814208984375F, 685.4744262695312F),
+            new Vertex(1184.6302490234375F, 686.966796875F),
+            new Vertex(1185.6160888671875F, 688.5372924804688F),
+            new Vertex(1186.5313720703125F, 690.174072265625F),
+            new Vertex(1187.3760986328125F, 691.8760375976562F),
+            new Vertex(1188.1507568359375F, 693.6423950195312F),
+            new Vertex(1188.8553466796875F, 695.4725341796875F),
+            new Vertex(1189.4906005859375F, 697.3656616210938F),
+            new Vertex(1190.0570068359375F, 699.3214721679688F),
+            new Vertex(1190.55517578125F, 701.3397216796875F),
+            new Vertex(1190.9852294921875F, 703.4201049804688F),
+            new Vertex(1191.3480224609375F, 705.5623779296875F),
+            new Vertex(1191.646484375F, 707.7859497070312F),
+            new Vertex(1192.0374755859375F, 712.3593139648438F),
+            new Vertex(1192.1676025390625F, 717.1926879882812F),
+            new Vertex(1192.1102294921875F, 720.4205322265625F),
+            new Vertex(1191.938232421875F, 723.5355834960938F),
+            new Vertex(1191.6507568359375F, 726.5501098632812F),
+            new Vertex(1191.246826171875F, 729.4639892578125F),
+            new Vertex(1190.7255859375F, 732.2774047851562F),
+            new Vertex(1190.0859375F, 734.9898681640625F),
+            new Vertex(1189.3272705078125F, 737.6008911132812F),
+            new Vertex(1188.4532470703125F, 740.094970703125F),
+            new Vertex(1187.957763671875F, 741.3304443359375F),
+            new Vertex(1187.434326171875F, 742.5198974609375F),
+            new Vertex(1186.8768310546875F, 743.6775512695312F),
+            new Vertex(1186.285400390625F, 744.8025512695312F),
+            new Vertex(1185.659912109375F, 745.8948364257812F),
+            new Vertex(1185.000244140625F, 746.9540405273438F),
+            new Vertex(1184.306640625F, 747.9797973632812F),
+            new Vertex(1183.57861328125F, 748.9716186523438F),
+            new Vertex(1182.8165283203125F, 749.9292602539062F),
+            new Vertex(1182.020751953125F, 750.851806640625F),
+            new Vertex(1181.1912841796875F, 751.739501953125F),
+            new Vertex(1180.3282470703125F, 752.5914916992188F),
+            new Vertex(1179.4324951171875F, 753.4074096679688F),
+            new Vertex(1178.503662109375F, 754.1873779296875F),
+            new Vertex(1177.54248046875F, 754.9304809570312F),
+            new Vertex(1176.546630859375F, 755.63916015625F),
+            new Vertex(1175.5111083984375F, 756.3114013671875F),
+            new Vertex(1174.438232421875F, 756.9411010742188F),
+            new Vertex(1173.33154296875F, 757.5260620117188F),
+            new Vertex(1172.1920166015625F, 758.0662841796875F),
+            new Vertex(1171.02001953125F, 758.561767578125F),
+            new Vertex(1169.81640625F, 759.0126953125F),
+            new Vertex(1168.5811767578125F, 759.4192504882812F),
+            new Vertex(1167.3150634765625F, 759.78173828125F),
+            new Vertex(1166.0185546875F, 760.1002807617188F),
+            new Vertex(1164.691650390625F, 760.3753662109375F),
+            new Vertex(1163.334716796875F, 760.6072387695312F),
+            new Vertex(1161.9283447265625F, 760.7989501953125F),
+            new Vertex(1159.0860595703125F, 761.0477294921875F),
+            new Vertex(1156.1024169921875F, 761.130859375F),
+            new Vertex(1153.13330078125F, 761.0477905273438F),
+            new Vertex(1150.3013916015625F, 760.798828125F),
+            new Vertex(1148.89892578125F, 760.6071166992188F),
+            new Vertex(1147.5447998046875F, 760.3753051757812F),
+            new Vertex(1146.2198486328125F, 760.1001586914062F),
+            new Vertex(1144.9241943359375F, 759.78173828125F),
+            new Vertex(1143.6580810546875F, 759.41943359375F),
+            new Vertex(1142.4222412109375F, 759.01318359375F),
+            new Vertex(1141.2166748046875F, 758.5626220703125F),
+            new Vertex(1140.042236328125F, 758.06787109375F),
+            new Vertex(1138.89892578125F, 757.5283813476562F),
+            new Vertex(1137.787841796875F, 756.9443969726562F),
+            new Vertex(1136.7093505859375F, 756.31591796875F),
+            new Vertex(1135.6669921875F, 755.6448974609375F),
+            new Vertex(1134.6630859375F, 754.937255859375F),
+            new Vertex(1133.6937255859375F, 754.19482421875F),
+            new Vertex(1132.7564697265625F, 753.4157104492188F),
+            new Vertex(1131.8521728515625F, 752.6005249023438F),
+            new Vertex(1130.980712890625F, 751.749267578125F),
+            new Vertex(1130.142578125F, 750.8623657226562F),
+            new Vertex(1129.338134765625F, 749.9404296875F),
+            new Vertex(1128.5672607421875F, 748.9835815429688F),
+            new Vertex(1127.8304443359375F, 747.9923095703125F),
+            new Vertex(1127.127685546875F, 746.9671020507812F),
+            new Vertex(1126.459228515625F, 745.9083251953125F),
+            new Vertex(1125.8248291015625F, 744.81640625F),
+            new Vertex(1125.224365234375F, 743.6917114257812F),
+            new Vertex(1124.657958984375F, 742.5344848632812F),
+            new Vertex(1124.12548828125F, 741.3452758789062F),
+            new Vertex(1123.6204833984375F, 740.1094360351562F),
+            new Vertex(1122.7294921875F, 737.6141967773438F),
+            new Vertex(1121.9554443359375F, 735.0013427734375F),
+            new Vertex(1121.302978515625F, 732.286865234375F),
+            new Vertex(1120.771484375F, 729.471435546875F),
+            new Vertex(1120.3594970703125F, 726.5556030273438F),
+            new Vertex(1120.0662841796875F, 723.5391235351562F),
+            new Vertex(1119.890869140625F, 720.4223022460938F),
+            new Vertex(1119.8326416015625F, 717.2040405273438F),
+            new Vertex(1119.8914794921875F, 713.9708862304688F),
+            new Vertex(1124.8333740234375F, 717.2041625976562F),
+        ];
+
+        Polygon input = [outer, inner];
+
+        // Assert: The input has 2 compound contours (each containing two loops connected by bridge segments).
+        // When processed with positive fill rule, this produces 4 contours.
+        // Only the contour and vertex counts are validated; vertex ordering may differ from Clipper2.
+        AssertMatchesClipperByCount(input);
+    }
+
+    [Fact]
+    public void Stroked_Text_9_Shape()
+    {
+        // Arrange:
+        Contour outer =
+        [
+            new Vertex(1305.3092041015625, 1010.9024047851562),
+            new Vertex(1304.96337890625, 1030.67041015625),
+            new Vertex(1303.9278564453125, 1050.128662109375),
+            new Vertex(1302.2010498046875, 1069.33740234375),
+            new Vertex(1299.776611328125, 1088.340087890625),
+            new Vertex(1296.4998779296875, 1107.0030517578125),
+            new Vertex(1292.22509765625, 1125.104248046875),
+            new Vertex(1286.9794921875, 1142.520263671875),
+            new Vertex(1283.9459228515625, 1151.109130859375),
+            new Vertex(1280.68017578125, 1159.4925537109375),
+            new Vertex(1277.117431640625, 1167.7198486328125),
+            new Vertex(1273.2362060546875, 1175.722900390625),
+            new Vertex(1269.04541015625, 1183.4781494140625),
+            new Vertex(1264.5447998046875, 1190.9832763671875),
+            new Vertex(1259.7352294921875, 1198.235107421875),
+            new Vertex(1254.6175537109375, 1205.231201171875),
+            new Vertex(1249.1927490234375, 1211.968994140625),
+            new Vertex(1243.443115234375, 1218.46875),
+            new Vertex(1237.31201171875, 1224.707275390625),
+            new Vertex(1230.7869873046875, 1230.6148681640625),
+            new Vertex(1223.8935546875, 1236.1673583984375),
+            new Vertex(1216.63720703125, 1241.3623046875),
+            new Vertex(1209.0233154296875, 1246.1986083984375),
+            new Vertex(1201.0567626953125, 1250.67626953125),
+            new Vertex(1192.741943359375, 1254.7962646484375),
+            new Vertex(1184.05419921875, 1258.572021484375),
+            new Vertex(1174.94091796875, 1261.9595947265625),
+            new Vertex(1165.4088134765625, 1264.8909912109375),
+            new Vertex(1155.491943359375, 1267.360107421875),
+            new Vertex(1145.192626953125, 1269.3709716796875),
+            new Vertex(1134.5130615234375, 1270.9281005859375),
+            new Vertex(1123.453125, 1272.035888671875),
+            new Vertex(1112.01318359375, 1272.69775390625),
+            new Vertex(1100.133056640625, 1272.9188232421875),
+            new Vertex(1086.167724609375, 1272.5013427734375),
+            new Vertex(1070.50927734375, 1271.25927734375),
+            new Vertex(1062.466064453125, 1270.33056640625),
+            new Vertex(1055.121337890625, 1269.218994140625),
+            new Vertex(1048.4228515625, 1267.9088134765625),
+            new Vertex(1042.6710205078125, 1266.4613037109375),
+            new Vertex(1035.111328125, 1256.763671875),
+            new Vertex(1035.111328125, 1214.576171875),
+            new Vertex(1048.1483154296875, 1205.0484619140625),
+            new Vertex(1053.5533447265625, 1206.7713623046875),
+            new Vertex(1059.204833984375, 1208.24755859375),
+            new Vertex(1065.3851318359375, 1209.5572509765625),
+            new Vertex(1072.0885009765625, 1210.6917724609375),
+            new Vertex(1079.0152587890625, 1211.6055908203125),
+            new Vertex(1085.8634033203125, 1212.25732421875),
+            new Vertex(1092.6279296875, 1212.6474609375),
+            new Vertex(1099.26953125, 1212.776611328125),
+            new Vertex(1112.0648193359375, 1212.4228515625),
+            new Vertex(1124.1187744140625, 1211.3651123046875),
+            new Vertex(1129.7255859375, 1210.593505859375),
+            new Vertex(1135.2127685546875, 1209.6414794921875),
+            new Vertex(1140.5015869140625, 1208.52197265625),
+            new Vertex(1145.5926513671875, 1207.2369384765625),
+            new Vertex(1150.487060546875, 1205.788330078125),
+            new Vertex(1155.1865234375, 1204.17822265625),
+            new Vertex(1159.692626953125, 1202.4083251953125),
+            new Vertex(1164.0081787109375, 1200.480224609375),
+            new Vertex(1168.135986328125, 1198.3951416015625),
+            new Vertex(1172.07958984375, 1196.153564453125),
+            new Vertex(1175.8424072265625, 1193.7562255859375),
+            new Vertex(1179.457275390625, 1191.1817626953125),
+            new Vertex(1182.97509765625, 1188.42724609375),
+            new Vertex(1186.3896484375, 1185.53271484375),
+            new Vertex(1189.67529296875, 1182.518310546875),
+            new Vertex(1192.8336181640625, 1179.3831787109375),
+            new Vertex(1195.865478515625, 1176.126220703125),
+            new Vertex(1198.7725830078125, 1172.7459716796875),
+            new Vertex(1201.5555419921875, 1169.240966796875),
+            new Vertex(1204.2152099609375, 1165.609619140625),
+            new Vertex(1206.75244140625, 1161.85009765625),
+            new Vertex(1209.1676025390625, 1157.9609375),
+            new Vertex(1211.460693359375, 1153.9405517578125),
+            new Vertex(1213.6319580078125, 1149.787353515625),
+            new Vertex(1215.680908203125, 1145.5),
+            new Vertex(1217.6070556640625, 1141.0772705078125),
+            new Vertex(1219.410400390625, 1136.5174560546875),
+            new Vertex(1221.0814208984375, 1131.84423828125),
+            new Vertex(1224.2177734375, 1121.9171142578125),
+            new Vertex(1226.9910888671875, 1111.689697265625),
+            new Vertex(1229.4083251953125, 1101.1351318359375),
+            new Vertex(1231.467529296875, 1090.2525634765625),
+            new Vertex(1233.1671142578125, 1079.0408935546875),
+            new Vertex(1234.505615234375, 1067.4996337890625),
+            new Vertex(1235.4813232421875, 1055.6282958984375),
+            new Vertex(1236.1004638671875, 1043.27490234375),
+            new Vertex(1246.087890625, 1053.775390625),
+            new Vertex(1242.572265625, 1053.775390625),
+            new Vertex(1250.935546875, 1049.2576904296875),
+            new Vertex(1248.5367431640625, 1052.9171142578125),
+            new Vertex(1245.8389892578125, 1056.673095703125),
+            new Vertex(1242.9630126953125, 1060.3426513671875),
+            new Vertex(1239.9117431640625, 1063.924560546875),
+            new Vertex(1236.6864013671875, 1067.4193115234375),
+            new Vertex(1233.289306640625, 1070.8262939453125),
+            new Vertex(1229.721923828125, 1074.1461181640625),
+            new Vertex(1225.956787109375, 1077.404296875),
+            new Vertex(1221.9515380859375, 1080.58251953125),
+            new Vertex(1217.72412109375, 1083.6109619140625),
+            new Vertex(1213.3084716796875, 1086.4659423828125),
+            new Vertex(1208.7073974609375, 1089.14794921875),
+            new Vertex(1203.923828125, 1091.6580810546875),
+            new Vertex(1198.9599609375, 1093.9974365234375),
+            new Vertex(1193.81787109375, 1096.167724609375),
+            new Vertex(1188.464111328125, 1098.1837158203125),
+            new Vertex(1182.853515625, 1100.0133056640625),
+            new Vertex(1177.0126953125, 1101.5992431640625),
+            new Vertex(1170.980712890625, 1102.932861328125),
+            new Vertex(1164.7587890625, 1104.017333984375),
+            new Vertex(1158.3482666015625, 1104.85595703125),
+            new Vertex(1151.749267578125, 1105.45166015625),
+            new Vertex(1144.961669921875, 1105.8072509765625),
+            new Vertex(1137.93701171875, 1105.926025390625),
+            new Vertex(1128.297119140625, 1105.67529296875),
+            new Vertex(1118.882568359375, 1104.9161376953125),
+            new Vertex(1109.7371826171875, 1103.644287109375),
+            new Vertex(1100.945068359375, 1101.8707275390625),
+            new Vertex(1096.5380859375, 1100.76123046875),
+            new Vertex(1092.2779541015625, 1099.5400390625),
+            new Vertex(1088.0894775390625, 1098.1875),
+            new Vertex(1083.97412109375, 1096.703369140625),
+            new Vertex(1079.9332275390625, 1095.087646484375),
+            new Vertex(1075.9677734375, 1093.340576171875),
+            new Vertex(1072.078857421875, 1091.4619140625),
+            new Vertex(1068.2674560546875, 1089.45166015625),
+            new Vertex(1064.543701171875, 1087.315185546875),
+            new Vertex(1060.91845703125, 1085.0570068359375),
+            new Vertex(1057.3934326171875, 1082.67822265625),
+            new Vertex(1053.969482421875, 1080.1787109375),
+            new Vertex(1050.6483154296875, 1077.5592041015625),
+            new Vertex(1047.43115234375, 1074.8204345703125),
+            new Vertex(1044.3193359375, 1071.963623046875),
+            new Vertex(1041.31396484375, 1068.989501953125),
+            new Vertex(1038.4161376953125, 1065.899658203125),
+            new Vertex(1035.6265869140625, 1062.6953125),
+            new Vertex(1032.9459228515625, 1059.377685546875),
+            new Vertex(1030.3746337890625, 1055.9481201171875),
+            new Vertex(1027.9132080078125, 1052.407958984375),
+            new Vertex(1025.5616455078125, 1048.7589111328125),
+            new Vertex(1023.3199462890625, 1045.0015869140625),
+            new Vertex(1021.1836547851562, 1041.129638671875),
+            new Vertex(1019.1608276367188, 1037.141357421875),
+            new Vertex(1017.2681274414062, 1033.05029296875),
+            new Vertex(1015.5099487304688, 1028.8662109375),
+            new Vertex(1013.8856201171875, 1024.590576171875),
+            new Vertex(1012.3949584960938, 1020.2240600585938),
+            new Vertex(1011.0142822265625, 1015.6920166015625),
+            new Vertex(1008.717041015625, 1006.59521484375),
+            new Vertex(1006.9246215820312, 997.0698852539062),
+            new Vertex(1005.6514892578125, 987.2000732421875),
+            new Vertex(1004.8917846679688, 976.988525390625),
+            new Vertex(1004.6397094726562, 966.4299926757812),
+            new Vertex(1004.9149169921875, 955.061279296875),
+            new Vertex(1005.743896484375, 944.0344848632812),
+            new Vertex(1007.1317749023438, 933.3487548828125),
+            new Vertex(1009.0836791992188, 923.0073852539062),
+            new Vertex(1011.5845336914062, 913.0930786132812),
+            new Vertex(1013.0822143554688, 908.1546630859375),
+            new Vertex(1014.7009887695312, 903.3806762695312),
+            new Vertex(1016.4635620117188, 898.697509765625),
+            new Vertex(1018.3701782226562, 894.1061401367188),
+            new Vertex(1020.4212036132812, 889.6074829101562),
+            new Vertex(1022.613525390625, 885.208740234375),
+            new Vertex(1024.931640625, 880.9257202148438),
+            new Vertex(1027.365966796875, 876.7637329101562),
+            new Vertex(1029.9197998046875, 872.7173461914062),
+            new Vertex(1032.5936279296875, 868.7880249023438),
+            new Vertex(1035.3865966796875, 864.9773559570312),
+            new Vertex(1038.2987060546875, 861.2862548828125),
+            new Vertex(1041.32958984375, 857.7160034179688),
+            new Vertex(1044.478515625, 854.2678833007812),
+            new Vertex(1047.7449951171875, 850.9430541992188),
+            new Vertex(1051.127685546875, 847.7430419921875),
+            new Vertex(1054.6256103515625, 844.6685180664062),
+            new Vertex(1058.238037109375, 841.7203979492188),
+            new Vertex(1061.9632568359375, 838.8995971679688),
+            new Vertex(1065.80029296875, 836.2067260742188),
+            new Vertex(1069.7476806640625, 833.6421508789062),
+            new Vertex(1073.808349609375, 831.203857421875),
+            new Vertex(1077.9759521484375, 828.9000854492188),
+            new Vertex(1082.2366943359375, 826.7444458007812),
+            new Vertex(1086.5853271484375, 824.739013671875),
+            new Vertex(1091.0208740234375, 822.8841552734375),
+            new Vertex(1095.5413818359375, 821.1802978515625),
+            new Vertex(1100.145751953125, 819.6268920898438),
+            new Vertex(1104.8330078125, 818.2240600585938),
+            new Vertex(1109.6014404296875, 816.971435546875),
+            new Vertex(1114.4505615234375, 815.8685302734375),
+            new Vertex(1119.4554443359375, 814.900146484375),
+            new Vertex(1129.46728515625, 813.4498291015625),
+            new Vertex(1139.86865234375, 812.5769653320312),
+            new Vertex(1150.5648193359375, 812.2877807617188),
+            new Vertex(1158.894287109375, 812.4874877929688),
+            new Vertex(1167.058837890625, 813.08740234375),
+            new Vertex(1175.0726318359375, 814.0903930664062),
+            new Vertex(1182.9322509765625, 815.4984130859375),
+            new Vertex(1190.63330078125, 817.3130493164062),
+            new Vertex(1198.1708984375, 819.534912109375),
+            new Vertex(1205.5399169921875, 822.163818359375),
+            new Vertex(1212.7408447265625, 825.2012939453125),
+            new Vertex(1219.7509765625, 828.6482543945312),
+            new Vertex(1226.536865234375, 832.5006713867188),
+            new Vertex(1233.0877685546875, 836.7532348632812),
+            new Vertex(1239.3994140625, 841.4021606445312),
+            new Vertex(1245.46728515625, 846.44287109375),
+            new Vertex(1251.2889404296875, 851.8701782226562),
+            new Vertex(1256.8623046875, 857.6793823242188),
+            new Vertex(1262.194091796875, 863.8740234375),
+            new Vertex(1267.2608642578125, 870.45263671875),
+            new Vertex(1272.025146484375, 877.3959350585938),
+            new Vertex(1276.4805908203125, 884.6907958984375),
+            new Vertex(1280.628173828125, 892.3328247070312),
+            new Vertex(1284.469970703125, 900.3185424804688),
+            new Vertex(1288.0076904296875, 908.6448974609375),
+            new Vertex(1291.2440185546875, 917.3096313476562),
+            new Vertex(1294.1865234375, 926.3262939453125),
+            new Vertex(1296.8092041015625, 935.7109375),
+            new Vertex(1299.0775146484375, 945.4490356445312),
+            new Vertex(1300.990478515625, 955.524658203125),
+            new Vertex(1302.5501708984375, 965.9371948242188),
+            new Vertex(1303.7593994140625, 976.6865234375),
+            new Vertex(1304.626953125, 987.8504028320312),
+            new Vertex(1305.3092041015625, 1010.9024047851562),
+            new Vertex(1284.64990234375, 988.9215698242188),
+            new Vertex(1283.8463134765625, 978.579833984375),
+            new Vertex(1282.7164306640625, 968.5374145507812),
+            new Vertex(1281.268798828125, 958.87255859375),
+            new Vertex(1279.5054931640625, 949.5846557617188),
+            new Vertex(1277.4298095703125, 940.6734619140625),
+            new Vertex(1275.0400390625, 932.1229248046875),
+            new Vertex(1272.3612060546875, 923.9138793945312),
+            new Vertex(1269.4268798828125, 916.0579833984375),
+            new Vertex(1266.244873046875, 908.5686645507812),
+            new Vertex(1262.817138671875, 901.4435424804688),
+            new Vertex(1259.1461181640625, 894.6796875),
+            new Vertex(1255.233642578125, 888.2737426757812),
+            new Vertex(1251.0806884765625, 882.22119140625),
+            new Vertex(1246.680908203125, 876.5087890625),
+            new Vertex(1242.056396484375, 871.1358032226562),
+            new Vertex(1237.2430419921875, 866.1188354492188),
+            new Vertex(1232.24755859375, 861.461669921875),
+            new Vertex(1227.068359375, 857.1593627929688),
+            new Vertex(1221.7022705078125, 853.2068481445312),
+            new Vertex(1216.145751953125, 849.5996704101562),
+            new Vertex(1210.393310546875, 846.3339233398438),
+            new Vertex(1204.4349365234375, 843.4041748046875),
+            new Vertex(1198.2874755859375, 840.8111572265625),
+            new Vertex(1191.978515625, 838.560302734375),
+            new Vertex(1185.508544921875, 836.6531372070312),
+            new Vertex(1178.8724365234375, 835.0894775390625),
+            new Vertex(1172.0653076171875, 833.8700561523438),
+            new Vertex(1165.082763671875, 832.99609375),
+            new Vertex(1157.921142578125, 832.4699096679688),
+            new Vertex(1150.5953369140625, 832.2942504882812),
+            new Vertex(1140.97607421875, 832.5543823242188),
+            new Vertex(1131.7392578125, 833.3294677734375),
+            new Vertex(1122.7906494140625, 834.625732421875),
+            new Vertex(1118.5692138671875, 835.4425048828125),
+            new Vertex(1114.3614501953125, 836.399658203125),
+            new Vertex(1110.242431640625, 837.4816284179688),
+            new Vertex(1106.21142578125, 838.6880493164062),
+            new Vertex(1102.2672119140625, 840.0186767578125),
+            new Vertex(1098.4083251953125, 841.4732666015625),
+            new Vertex(1094.6336669921875, 843.0516357421875),
+            new Vertex(1090.9417724609375, 844.7542114257812),
+            new Vertex(1087.3314208984375, 846.5808715820312),
+            new Vertex(1083.797119140625, 848.534423828125),
+            new Vertex(1080.3470458984375, 850.6061401367188),
+            new Vertex(1076.99658203125, 852.7830200195312),
+            new Vertex(1073.7484130859375, 855.0625610351562),
+            new Vertex(1070.6015625, 857.4453735351562),
+            new Vertex(1067.5545654296875, 859.9320678710938),
+            new Vertex(1064.606201171875, 862.5235595703125),
+            new Vertex(1061.7552490234375, 865.2205200195312),
+            new Vertex(1059.0009765625, 868.0241088867188),
+            new Vertex(1056.342041015625, 870.9356079101562),
+            new Vertex(1053.7779541015625, 873.9559326171875),
+            new Vertex(1051.3079833984375, 877.0867309570312),
+            new Vertex(1048.9315185546875, 880.3289184570312),
+            new Vertex(1046.6488037109375, 883.6836547851562),
+            new Vertex(1044.459228515625, 887.1527709960938),
+            new Vertex(1042.36279296875, 890.7371215820312),
+            new Vertex(1040.363037109375, 894.431884765625),
+            new Vertex(1038.4755859375, 898.2190551757812),
+            new Vertex(1036.7098388671875, 902.0918579101562),
+            new Vertex(1035.063232421875, 906.05712890625),
+            new Vertex(1033.53564453125, 910.1161499023438),
+            new Vertex(1032.127197265625, 914.2696533203125),
+            new Vertex(1030.8612060546875, 918.4441528320312),
+            new Vertex(1028.6243896484375, 927.3119506835938),
+            new Vertex(1026.8912353515625, 936.494140625),
+            new Vertex(1025.64697265625, 946.0736694335938),
+            new Vertex(1024.896728515625, 956.0535888671875),
+            new Vertex(1024.6455078125, 966.4332885742188),
+            new Vertex(1024.8740234375, 976.00732421875),
+            new Vertex(1025.5562744140625, 985.1773681640625),
+            new Vertex(1026.6864013671875, 993.9386596679688),
+            new Vertex(1028.258544921875, 1002.29345703125),
+            new Vertex(1030.287109375, 1010.326171875),
+            new Vertex(1031.4298095703125, 1014.0773315429688),
+            new Vertex(1032.7030029296875, 1017.8064575195312),
+            new Vertex(1034.0828857421875, 1021.438720703125),
+            new Vertex(1035.5687255859375, 1024.974853515625),
+            new Vertex(1037.1610107421875, 1028.416259765625),
+            new Vertex(1038.86328125, 1031.772705078125),
+            new Vertex(1040.6683349609375, 1035.0443115234375),
+            new Vertex(1042.5601806640625, 1038.2152099609375),
+            new Vertex(1044.5345458984375, 1041.279052734375),
+            new Vertex(1046.5911865234375, 1044.2369384765625),
+            new Vertex(1048.7303466796875, 1047.090087890625),
+            new Vertex(1050.9522705078125, 1049.840087890625),
+            new Vertex(1053.2576904296875, 1052.48828125),
+            new Vertex(1055.64697265625, 1055.035888671875),
+            new Vertex(1058.12109375, 1057.484130859375),
+            new Vertex(1060.680908203125, 1059.8343505859375),
+            new Vertex(1063.3277587890625, 1062.0875244140625),
+            new Vertex(1066.062744140625, 1064.24462890625),
+            new Vertex(1068.8873291015625, 1066.306640625),
+            new Vertex(1071.802978515625, 1068.2742919921875),
+            new Vertex(1074.810791015625, 1070.147705078125),
+            new Vertex(1077.9122314453125, 1071.92724609375),
+            new Vertex(1081.0966796875, 1073.606689453125),
+            new Vertex(1084.352294921875, 1075.179443359375),
+            new Vertex(1087.6800537109375, 1076.645751953125),
+            new Vertex(1091.081298828125, 1078.005615234375),
+            new Vertex(1094.5567626953125, 1079.259033203125),
+            new Vertex(1098.1080322265625, 1080.40576171875),
+            new Vertex(1101.736328125, 1081.44580078125),
+            new Vertex(1105.366455078125, 1082.3597412109375),
+            new Vertex(1113.0950927734375, 1083.918701171875),
+            new Vertex(1121.065673828125, 1085.0272216796875),
+            new Vertex(1129.36181640625, 1085.6962890625),
+            new Vertex(1138.02783203125, 1085.921630859375),
+            new Vertex(1144.269287109375, 1085.8160400390625),
+            new Vertex(1150.326416015625, 1085.498779296875),
+            new Vertex(1156.1512451171875, 1084.972900390625),
+            new Vertex(1161.7431640625, 1084.241455078125),
+            new Vertex(1167.102783203125, 1083.30712890625),
+            new Vertex(1172.23095703125, 1082.1734619140625),
+            new Vertex(1177.12939453125, 1080.8433837890625),
+            new Vertex(1181.836669921875, 1079.3084716796875),
+            new Vertex(1186.402587890625, 1077.589111328125),
+            new Vertex(1190.804931640625, 1075.7310791015625),
+            new Vertex(1195.010009765625, 1073.7491455078125),
+            new Vertex(1199.0201416015625, 1071.64501953125),
+            new Vertex(1202.8372802734375, 1069.4197998046875),
+            new Vertex(1206.464599609375, 1067.0745849609375),
+            new Vertex(1209.9046630859375, 1064.610107421875),
+            new Vertex(1213.191650390625, 1062.001953125),
+            new Vertex(1216.361572265625, 1059.2589111328125),
+            new Vertex(1219.390625, 1056.4400634765625),
+            new Vertex(1222.2510986328125, 1053.5711669921875),
+            new Vertex(1224.9447021484375, 1050.652587890625),
+            new Vertex(1227.4735107421875, 1047.6839599609375),
+            new Vertex(1229.8392333984375, 1044.66552734375),
+            new Vertex(1232.0438232421875, 1041.5960693359375),
+            new Vertex(1234.208984375, 1038.2930908203125),
+            new Vertex(1242.572265625, 1033.775390625),
+            new Vertex(1246.087890625, 1033.775390625),
+            new Vertex(1256.0753173828125, 1044.27587890625),
+            new Vertex(1255.4403076171875, 1056.9483642578125),
+            new Vertex(1254.410888671875, 1069.4713134765625),
+            new Vertex(1252.9935302734375, 1081.6925048828125),
+            new Vertex(1251.186767578125, 1093.6116943359375),
+            new Vertex(1248.9886474609375, 1105.2281494140625),
+            new Vertex(1246.3978271484375, 1116.541015625),
+            new Vertex(1243.412841796875, 1127.5491943359375),
+            new Vertex(1240.0396728515625, 1138.22607421875),
+            new Vertex(1238.130859375, 1143.5640869140625),
+            new Vertex(1236.0799560546875, 1148.7501220703125),
+            new Vertex(1233.877197265625, 1153.8076171875),
+            new Vertex(1231.5223388671875, 1158.735107421875),
+            new Vertex(1229.01513671875, 1163.5311279296875),
+            new Vertex(1226.3553466796875, 1168.194580078125),
+            new Vertex(1223.542724609375, 1172.7236328125),
+            new Vertex(1220.5777587890625, 1177.116943359375),
+            new Vertex(1217.4605712890625, 1181.372802734375),
+            new Vertex(1214.1917724609375, 1185.4896240234375),
+            new Vertex(1210.7724609375, 1189.465576171875),
+            new Vertex(1207.2034912109375, 1193.2994384765625),
+            new Vertex(1203.486083984375, 1196.989501953125),
+            new Vertex(1199.62158203125, 1200.53515625),
+            new Vertex(1195.611083984375, 1203.934814453125),
+            new Vertex(1191.429443359375, 1207.2088623046875),
+            new Vertex(1187.0242919921875, 1210.3463134765625),
+            new Vertex(1182.40087890625, 1213.2919921875),
+            new Vertex(1177.592041015625, 1216.0252685546875),
+            new Vertex(1172.6011962890625, 1218.54638671875),
+            new Vertex(1167.431884765625, 1220.8560791015625),
+            new Vertex(1162.0869140625, 1222.955322265625),
+            new Vertex(1156.569091796875, 1224.845947265625),
+            new Vertex(1150.8800048828125, 1226.5296630859375),
+            new Vertex(1145.0213623046875, 1228.00830078125),
+            new Vertex(1138.9942626953125, 1229.2840576171875),
+            new Vertex(1132.79931640625, 1230.35888671875),
+            new Vertex(1126.3577880859375, 1231.2454833984375),
+            new Vertex(1113.2164306640625, 1232.398681640625),
+            new Vertex(1099.3515625, 1232.781982421875),
+            new Vertex(1091.857421875, 1232.63623046875),
+            new Vertex(1084.3397216796875, 1232.20263671875),
+            new Vertex(1076.7591552734375, 1231.4813232421875),
+            new Vertex(1069.1107177734375, 1230.4722900390625),
+            new Vertex(1061.6417236328125, 1229.2081298828125),
+            new Vertex(1054.601806640625, 1227.71630859375),
+            new Vertex(1047.9852294921875, 1225.9879150390625),
+            new Vertex(1042.0743408203125, 1224.1038818359375),
+            new Vertex(1055.111328125, 1214.576171875),
+            new Vertex(1055.111328125, 1256.763671875),
+            new Vertex(1047.5516357421875, 1247.0660400390625),
+            new Vertex(1052.7861328125, 1248.3831787109375),
+            new Vertex(1058.538818359375, 1249.508544921875),
+            new Vertex(1065.110107421875, 1250.5029296875),
+            new Vertex(1072.44775390625, 1251.35009765625),
+            new Vertex(1087.258056640625, 1252.5250244140625),
+            new Vertex(1100.245849609375, 1252.9132080078125),
+            new Vertex(1111.249267578125, 1252.70849609375),
+            new Vertex(1121.878173828125, 1252.093505859375),
+            new Vertex(1132.0723876953125, 1251.0723876953125),
+            new Vertex(1141.831787109375, 1249.6495361328125),
+            new Vertex(1151.15673828125, 1247.828857421875),
+            new Vertex(1160.0494384765625, 1245.6148681640625),
+            new Vertex(1168.511962890625, 1243.0123291015625),
+            new Vertex(1176.57861328125, 1240.013916015625),
+            new Vertex(1184.310791015625, 1236.6531982421875),
+            new Vertex(1191.7110595703125, 1232.986572265625),
+            new Vertex(1198.7545166015625, 1229.0277099609375),
+            new Vertex(1205.44580078125, 1224.77734375),
+            new Vertex(1211.789794921875, 1220.2357177734375),
+            new Vertex(1217.7916259765625, 1215.4012451171875),
+            new Vertex(1223.456298828125, 1210.2724609375),
+            new Vertex(1228.810791015625, 1204.82421875),
+            new Vertex(1233.9053955078125, 1199.065185546875),
+            new Vertex(1238.7486572265625, 1193.049560546875),
+            new Vertex(1243.3216552734375, 1186.7978515625),
+            new Vertex(1247.6260986328125, 1180.3077392578125),
+            new Vertex(1251.662841796875, 1173.5762939453125),
+            new Vertex(1255.4322509765625, 1166.600830078125),
+            new Vertex(1258.934814453125, 1159.3785400390625),
+            new Vertex(1262.17919921875, 1151.8863525390625),
+            new Vertex(1265.1939697265625, 1144.147216796875),
+            new Vertex(1267.96484375, 1136.302490234375),
+            new Vertex(1272.89990234375, 1119.917236328125),
+            new Vertex(1276.9017333984375, 1102.9720458984375),
+            new Vertex(1279.996826171875, 1085.343505859375),
+            new Vertex(1282.3148193359375, 1067.17578125),
+            new Vertex(1283.9754638671875, 1048.701416015625),
+            new Vertex(1284.97265625, 1029.9638671875),
+            new Vertex(1285.3040771484375, 1011.0233764648438),
+            new Vertex(1284.64990234375, 988.9215698242188),
+            new Vertex(1305.3092041015625, 1010.9024047851562),
+        ];
+        Contour inner =
+        [
+            new Vertex(1150.547607421875, 873.6024169921875),
+            new Vertex(1146.1881103515625, 873.6925659179688),
+            new Vertex(1141.9278564453125, 873.9635009765625),
+            new Vertex(1137.8001708984375, 874.4119873046875),
+            new Vertex(1133.8031005859375, 875.0357666015625),
+            new Vertex(1129.9339599609375, 875.832763671875),
+            new Vertex(1126.189453125, 876.8011474609375),
+            new Vertex(1122.5660400390625, 877.9395141601562),
+            new Vertex(1119.059814453125, 879.2474975585938),
+            new Vertex(1115.6658935546875, 880.7247924804688),
+            new Vertex(1112.3798828125, 882.3726806640625),
+            new Vertex(1109.1968994140625, 884.1925659179688),
+            new Vertex(1106.113037109375, 886.1865844726562),
+            new Vertex(1103.12451171875, 888.35791015625),
+            new Vertex(1100.228271484375, 890.7100830078125),
+            new Vertex(1097.42138671875, 893.2470703125),
+            new Vertex(1094.7249755859375, 895.9498291015625),
+            new Vertex(1092.193115234375, 898.7931518554688),
+            new Vertex(1089.834716796875, 901.7977905273438),
+            new Vertex(1087.627197265625, 904.9926147460938),
+            new Vertex(1085.56982421875, 908.38427734375),
+            new Vertex(1083.6624755859375, 911.9788818359375),
+            new Vertex(1081.906494140625, 915.7816162109375),
+            new Vertex(1080.30419921875, 919.797119140625),
+            new Vertex(1078.85791015625, 924.0289916992188),
+            new Vertex(1077.571044921875, 928.4796142578125),
+            new Vertex(1076.4466552734375, 933.1513671875),
+            new Vertex(1075.4879150390625, 938.0451049804688),
+            new Vertex(1074.69775390625, 943.161376953125),
+            new Vertex(1074.0791015625, 948.500244140625),
+            new Vertex(1073.6409912109375, 953.98193359375),
+            new Vertex(1073.2777099609375, 965.9202270507812),
+            new Vertex(1073.35302734375, 970.7697143554688),
+            new Vertex(1073.580810546875, 975.5396118164062),
+            new Vertex(1073.958740234375, 980.1533203125),
+            new Vertex(1074.484619140625, 984.6111450195312),
+            new Vertex(1075.1566162109375, 988.9132080078125),
+            new Vertex(1075.9725341796875, 993.06005859375),
+            new Vertex(1076.9306640625, 997.0532836914062),
+            new Vertex(1078.02880859375, 1000.8941650390625),
+            new Vertex(1079.2652587890625, 1004.5848999023438),
+            new Vertex(1080.63818359375, 1008.1278076171875),
+            new Vertex(1082.146728515625, 1011.5261840820312),
+            new Vertex(1083.7899169921875, 1014.7835083007812),
+            new Vertex(1085.5675048828125, 1017.9031982421875),
+            new Vertex(1087.4801025390625, 1020.8893432617188),
+            new Vertex(1089.529052734375, 1023.7462158203125),
+            new Vertex(1091.7490234375, 1026.51904296875),
+            new Vertex(1092.82421875, 1027.750244140625),
+            new Vertex(1093.96923828125, 1028.9788818359375),
+            new Vertex(1095.1502685546875, 1030.1663818359375),
+            new Vertex(1096.3668212890625, 1031.3125),
+            new Vertex(1097.6204833984375, 1032.4183349609375),
+            new Vertex(1098.9117431640625, 1033.4847412109375),
+            new Vertex(1100.2418212890625, 1034.51220703125),
+            new Vertex(1101.6116943359375, 1035.5015869140625),
+            new Vertex(1103.021240234375, 1036.4525146484375),
+            new Vertex(1104.4068603515625, 1037.3243408203125),
+            new Vertex(1107.50634765625, 1039.077392578125),
+            new Vertex(1110.712890625, 1040.6409912109375),
+            new Vertex(1114.10205078125, 1042.05322265625),
+            new Vertex(1117.6795654296875, 1043.3118896484375),
+            new Vertex(1121.44970703125, 1044.4141845703125),
+            new Vertex(1125.415771484375, 1045.3564453125),
+            new Vertex(1129.580322265625, 1046.13525390625),
+            new Vertex(1133.9443359375, 1046.7467041015625),
+            new Vertex(1138.5089111328125, 1047.187255859375),
+            new Vertex(1143.2740478515625, 1047.4537353515625),
+            new Vertex(1148.1988525390625, 1047.5426025390625),
+            new Vertex(1155.057373046875, 1047.367431640625),
+            new Vertex(1161.5980224609375, 1046.84814453125),
+            new Vertex(1167.8568115234375, 1045.9896240234375),
+            new Vertex(1173.9168701171875, 1044.781494140625),
+            new Vertex(1176.7286376953125, 1044.08056640625),
+            new Vertex(1179.54931640625, 1043.279052734375),
+            new Vertex(1182.3035888671875, 1042.396484375),
+            new Vertex(1184.99267578125, 1041.4327392578125),
+            new Vertex(1187.6177978515625, 1040.388427734375),
+            new Vertex(1190.180419921875, 1039.2633056640625),
+            new Vertex(1192.681640625, 1038.0576171875),
+            new Vertex(1195.085205078125, 1036.790771484375),
+            new Vertex(1199.9547119140625, 1033.9398193359375),
+            new Vertex(1204.4710693359375, 1030.9482421875),
+            new Vertex(1208.673583984375, 1027.7984619140625),
+            new Vertex(1212.62939453125, 1024.439697265625),
+            new Vertex(1214.4068603515625, 1022.7803344726562),
+            new Vertex(1216.1671142578125, 1021.0281372070312),
+            new Vertex(1217.8541259765625, 1019.2360229492188),
+            new Vertex(1219.468994140625, 1017.4035034179688),
+            new Vertex(1221.0125732421875, 1015.5298461914062),
+            new Vertex(1222.4857177734375, 1013.6146240234375),
+            new Vertex(1223.8890380859375, 1011.6570434570312),
+            new Vertex(1225.1866455078125, 1009.711669921875),
+            new Vertex(1227.7244873046875, 1005.4883422851562),
+            new Vertex(1228.78662109375, 1003.515380859375),
+            new Vertex(1229.79833984375, 1001.479736328125),
+            new Vertex(1230.723876953125, 999.4503173828125),
+            new Vertex(1231.5638427734375, 997.4268798828125),
+            new Vertex(1232.3197021484375, 995.4078369140625),
+            new Vertex(1232.992919921875, 993.392578125),
+            new Vertex(1233.584228515625, 991.3806762695312),
+            new Vertex(1234.0948486328125, 989.3704223632812),
+            new Vertex(1234.5255126953125, 987.3609008789062),
+            new Vertex(1234.8768310546875, 985.3513793945312),
+            new Vertex(1235.1495361328125, 983.339111328125),
+            new Vertex(1235.3443603515625, 981.3223266601562),
+            new Vertex(1235.4610595703125, 979.3004760742188),
+            new Vertex(1235.5001220703125, 977.2675170898438),
+            new Vertex(1235.4178466796875, 972.7955932617188),
+            new Vertex(1235.1700439453125, 968.2975463867188),
+            new Vertex(1234.7564697265625, 963.775634765625),
+            new Vertex(1234.1763916015625, 959.2286987304688),
+            new Vertex(1233.428955078125, 954.6553955078125),
+            new Vertex(1232.5135498046875, 950.0548095703125),
+            new Vertex(1231.4293212890625, 945.4265747070312),
+            new Vertex(1230.1802978515625, 940.789306640625),
+            new Vertex(1228.771240234375, 936.2233276367188),
+            new Vertex(1227.197509765625, 931.771240234375),
+            new Vertex(1225.4525146484375, 927.4127197265625),
+            new Vertex(1223.536865234375, 923.145751953125),
+            new Vertex(1221.449462890625, 918.9689331054688),
+            new Vertex(1219.189208984375, 914.8795166015625),
+            new Vertex(1216.75537109375, 910.876220703125),
+            new Vertex(1214.1641845703125, 906.9841918945312),
+            new Vertex(1211.438720703125, 903.2816772460938),
+            new Vertex(1208.5673828125, 899.7935791015625),
+            new Vertex(1205.530029296875, 896.4912719726562),
+            new Vertex(1202.3240966796875, 893.3707885742188),
+            new Vertex(1198.9459228515625, 890.4285278320312),
+            new Vertex(1195.39111328125, 887.6614990234375),
+            new Vertex(1191.6553955078125, 885.0673828125),
+            new Vertex(1187.702392578125, 882.6251831054688),
+            new Vertex(1185.7999267578125, 881.5645751953125),
+            new Vertex(1183.81787109375, 880.5534057617188),
+            new Vertex(1181.78857421875, 879.6102294921875),
+            new Vertex(1179.7110595703125, 878.734619140625),
+            new Vertex(1177.5838623046875, 877.9268188476562),
+            new Vertex(1175.405517578125, 877.1865844726562),
+            new Vertex(1173.1748046875, 876.5143432617188),
+            new Vertex(1170.890380859375, 875.91015625),
+            new Vertex(1168.5511474609375, 875.3746948242188),
+            new Vertex(1166.2332763671875, 874.9232788085938),
+            new Vertex(1161.19287109375, 874.1887817382812),
+            new Vertex(1156.001708984375, 873.7506713867188),
+            new Vertex(1150.547607421875, 873.6024169921875),
+            new Vertex(1157.115234375, 853.7734985351562),
+            new Vertex(1163.47802734375, 854.3104858398438),
+            new Vertex(1169.5887451171875, 855.2009887695312),
+            new Vertex(1172.6954345703125, 855.8059692382812),
+            new Vertex(1175.679931640625, 856.4892578125),
+            new Vertex(1178.61865234375, 857.2664184570312),
+            new Vertex(1181.51025390625, 858.1378784179688),
+            new Vertex(1184.3536376953125, 859.1040649414062),
+            new Vertex(1187.1473388671875, 860.1650390625),
+            new Vertex(1189.889892578125, 861.32080078125),
+            new Vertex(1192.580322265625, 862.5713500976562),
+            new Vertex(1195.2169189453125, 863.91650390625),
+            new Vertex(1197.832763671875, 865.3748168945312),
+            new Vertex(1202.6229248046875, 868.334228515625),
+            new Vertex(1207.24609375, 871.5445556640625),
+            new Vertex(1211.6656494140625, 874.9848022460938),
+            new Vertex(1215.8770751953125, 878.6526489257812),
+            new Vertex(1219.876220703125, 882.5451049804688),
+            new Vertex(1223.659423828125, 886.6585693359375),
+            new Vertex(1227.224365234375, 890.9889526367188),
+            new Vertex(1230.5506591796875, 895.5079956054688),
+            new Vertex(1233.631103515625, 900.135009765625),
+            new Vertex(1236.493408203125, 904.8428955078125),
+            new Vertex(1239.154296875, 909.6570434570312),
+            new Vertex(1241.612548828125, 914.575927734375),
+            new Vertex(1243.8668212890625, 919.5970458984375),
+            new Vertex(1245.917236328125, 924.71875),
+            new Vertex(1247.7626953125, 929.9392700195312),
+            new Vertex(1249.3978271484375, 935.238037109375),
+            new Vertex(1250.8267822265625, 940.5433959960938),
+            new Vertex(1252.0633544921875, 945.8211669921875),
+            new Vertex(1253.111572265625, 951.090087890625),
+            new Vertex(1253.9710693359375, 956.3494262695312),
+            new Vertex(1254.6407470703125, 961.5986328125),
+            new Vertex(1255.1197509765625, 966.8362426757812),
+            new Vertex(1255.4075927734375, 972.0610961914062),
+            new Vertex(1255.5037841796875, 977.2754516601562),
+            new Vertex(1255.4500732421875, 980.0696411132812),
+            new Vertex(1255.2886962890625, 982.8611450195312),
+            new Vertex(1255.0198974609375, 985.64404296875),
+            new Vertex(1254.6441650390625, 988.4176635742188),
+            new Vertex(1254.1610107421875, 991.1803588867188),
+            new Vertex(1253.5718994140625, 993.9291381835938),
+            new Vertex(1252.87744140625, 996.6637573242188),
+            new Vertex(1252.078369140625, 999.3828125),
+            new Vertex(1251.1756591796875, 1002.0848388671875),
+            new Vertex(1250.1705322265625, 1004.769287109375),
+            new Vertex(1249.063720703125, 1007.4356689453125),
+            new Vertex(1247.85693359375, 1010.082275390625),
+            new Vertex(1246.55126953125, 1012.7088623046875),
+            new Vertex(1245.1109619140625, 1015.3845825195312),
+            new Vertex(1242.0867919921875, 1020.417236328125),
+            new Vertex(1240.3402099609375, 1023.0358276367188),
+            new Vertex(1238.5438232421875, 1025.5413818359375),
+            new Vertex(1236.6614990234375, 1027.988525390625),
+            new Vertex(1234.694091796875, 1030.3768310546875),
+            new Vertex(1232.6422119140625, 1032.7054443359375),
+            new Vertex(1230.5069580078125, 1034.9736328125),
+            new Vertex(1228.2891845703125, 1037.18115234375),
+            new Vertex(1225.93310546875, 1039.380615234375),
+            new Vertex(1221.15478515625, 1043.4376220703125),
+            new Vertex(1216.0006103515625, 1047.30078125),
+            new Vertex(1210.5377197265625, 1050.9193115234375),
+            new Vertex(1204.805419921875, 1054.275634765625),
+            new Vertex(1201.689453125, 1055.91796875),
+            new Vertex(1198.54541015625, 1057.4334716796875),
+            new Vertex(1195.3367919921875, 1058.84228515625),
+            new Vertex(1192.064697265625, 1060.1439208984375),
+            new Vertex(1188.7305908203125, 1061.338623046875),
+            new Vertex(1185.3359375, 1062.426513671875),
+            new Vertex(1181.8819580078125, 1063.407958984375),
+            new Vertex(1178.2930908203125, 1064.302490234375),
+            new Vertex(1171.1739501953125, 1065.7218017578125),
+            new Vertex(1163.7503662109375, 1066.740234375),
+            new Vertex(1156.10498046875, 1067.34716796875),
+            new Vertex(1148.2738037109375, 1067.5472412109375),
+            new Vertex(1142.5350341796875, 1067.4437255859375),
+            new Vertex(1136.9891357421875, 1067.133544921875),
+            new Vertex(1131.594970703125, 1066.6129150390625),
+            new Vertex(1126.352783203125, 1065.87841796875),
+            new Vertex(1121.263671875, 1064.9267578125),
+            new Vertex(1116.32861328125, 1063.7542724609375),
+            new Vertex(1111.5499267578125, 1062.3570556640625),
+            new Vertex(1106.93115234375, 1060.73193359375),
+            new Vertex(1102.4765625, 1058.8758544921875),
+            new Vertex(1098.191650390625, 1056.786376953125),
+            new Vertex(1094.1524658203125, 1054.5018310546875),
+            new Vertex(1092.100830078125, 1053.2108154296875),
+            new Vertex(1090.1612548828125, 1051.9027099609375),
+            new Vertex(1088.2701416015625, 1050.53662109375),
+            new Vertex(1086.4273681640625, 1049.1131591796875),
+            new Vertex(1084.6339111328125, 1047.6319580078125),
+            new Vertex(1082.8909912109375, 1046.094482421875),
+            new Vertex(1081.1990966796875, 1044.5006103515625),
+            new Vertex(1079.5595703125, 1042.8521728515625),
+            new Vertex(1077.97216796875, 1041.14892578125),
+            new Vertex(1076.4033203125, 1039.35205078125),
+            new Vertex(1073.585693359375, 1035.8328857421875),
+            new Vertex(1070.9217529296875, 1032.11865234375),
+            new Vertex(1068.4466552734375, 1028.2542724609375),
+            new Vertex(1066.1617431640625, 1024.244384765625),
+            new Vertex(1064.0673828125, 1020.0927124023438),
+            new Vertex(1062.1630859375, 1015.8028564453125),
+            new Vertex(1060.4486083984375, 1011.3784790039062),
+            new Vertex(1058.92236328125, 1006.8226318359375),
+            new Vertex(1057.5830078125, 1002.1377563476562),
+            new Vertex(1056.4283447265625, 997.32568359375),
+            new Vertex(1055.4569091796875, 992.388427734375),
+            new Vertex(1054.666259765625, 987.3268432617188),
+            new Vertex(1054.0546875, 982.141845703125),
+            new Vertex(1053.619873046875, 976.8335571289062),
+            new Vertex(1053.3603515625, 971.4021606445312),
+            new Vertex(1053.2730712890625, 965.7711791992188),
+            new Vertex(1053.6651611328125, 952.88037109375),
+            new Vertex(1054.171142578125, 946.5517578125),
+            new Vertex(1054.874267578125, 940.483154296875),
+            new Vertex(1055.7835693359375, 934.5947875976562),
+            new Vertex(1056.9019775390625, 928.8868408203125),
+            new Vertex(1058.232177734375, 923.3594970703125),
+            new Vertex(1059.77783203125, 918.0139770507812),
+            new Vertex(1061.541748046875, 912.8525390625),
+            new Vertex(1063.527099609375, 907.8775634765625),
+            new Vertex(1065.7364501953125, 903.0927734375),
+            new Vertex(1068.172119140625, 898.50244140625),
+            new Vertex(1070.83544921875, 894.1121215820312),
+            new Vertex(1073.726318359375, 889.9279174804688),
+            new Vertex(1076.843994140625, 885.9561157226562),
+            new Vertex(1080.1656494140625, 882.2259521484375),
+            new Vertex(1083.62744140625, 878.755859375),
+            new Vertex(1087.209716796875, 875.5181884765625),
+            new Vertex(1090.93359375, 872.493896484375),
+            new Vertex(1094.796875, 869.6869506835938),
+            new Vertex(1098.7957763671875, 867.1011352539062),
+            new Vertex(1102.9267578125, 864.7393798828125),
+            new Vertex(1107.1856689453125, 862.6035766601562),
+            new Vertex(1111.568115234375, 860.6958618164062),
+            new Vertex(1116.0692138671875, 859.0169067382812),
+            new Vertex(1120.6845703125, 857.5667724609375),
+            new Vertex(1125.4097900390625, 856.3447265625),
+            new Vertex(1130.2415771484375, 855.3494873046875),
+            new Vertex(1135.1766357421875, 854.579345703125),
+            new Vertex(1140.2122802734375, 854.0322265625),
+            new Vertex(1145.3463134765625, 853.7057495117188),
+            new Vertex(1150.612548828125, 853.5968017578125),
+            new Vertex(1157.115234375, 853.7734985351562),
+            new Vertex(1150.547607421875, 873.6024169921875),
+        ];
+
+        Polygon input = [outer, inner];
+
+        // Assert: The "9" shape is more complex than the "O" shape. The input contours contain
+        // self-intersections that, when resolved with positive fill rule, produce 4 contours.
+        // Validate count parity with Clipper2 and exact geometry parity between both remover paths.
+        AssertMatchesClipperByCount(input);
+    }
+
+    [Fact]
+    public void Stroked_Dashed_Complex_Polygon()
+    {
+        Contour outer0 =
+        [
+            new Vertex(198.73223876953125, 148.73223876953125),
+            new Vertex(202.26776123046875, 152.26776123046875),
+            new Vertex(191.66116333007812, 162.87435913085938),
+            new Vertex(188.12564086914062, 159.33883666992188),
+            new Vertex(198.73223876953125, 148.73223876953125),
+        ];
+        Contour outer1 =
+        [
+            new Vertex(184.59010314941406, 162.87437438964844),
+            new Vertex(188.12562561035156, 166.40989685058594),
+            new Vertex(177.51902770996094, 177.01649475097656),
+            new Vertex(173.98350524902344, 173.48097229003906),
+            new Vertex(184.59010314941406, 162.87437438964844),
+        ];
+        Contour outer2 =
+        [
+            new Vertex(170.44796752929688, 177.01651000976562),
+            new Vertex(173.98348999023438, 180.55203247070312),
+            new Vertex(163.37689208984375, 191.15863037109375),
+            new Vertex(159.84136962890625, 187.62310791015625),
+            new Vertex(170.44796752929688, 177.01651000976562),
+        ];
+        Contour outer3 =
+        [
+            new Vertex(156.3058319091797, 191.1586456298828),
+            new Vertex(159.8413543701172, 194.6941680908203),
+            new Vertex(149.23475646972656, 205.30076599121094),
+            new Vertex(145.69923400878906, 201.76524353027344),
+            new Vertex(156.3058319091797, 191.1586456298828),
+        ];
+        Contour outer4 =
+        [
+            new Vertex(142.1636962890625, 205.30078125),
+            new Vertex(145.69921875, 208.8363037109375),
+            new Vertex(135.09262084960938, 219.44290161132812),
+            new Vertex(131.55709838867188, 215.90737915039062),
+            new Vertex(142.1636962890625, 205.30078125),
+        ];
+        Contour outer5 =
+        [
+            new Vertex(128.0215606689453, 219.4429168701172),
+            new Vertex(131.5570831298828, 222.9784393310547),
+            new Vertex(120.95049285888672, 233.5850372314453),
+            new Vertex(117.41495513916016, 230.0495147705078),
+            new Vertex(128.0215606689453, 219.4429168701172),
+        ];
+        Contour outer6 =
+        [
+            new Vertex(113.8794174194336, 233.58505249023438),
+            new Vertex(117.41495513916016, 237.12057495117188),
+            new Vertex(106.80835723876953, 247.7271728515625),
+            new Vertex(103.27281951904297, 244.191650390625),
+            new Vertex(113.8794174194336, 233.58505249023438),
+        ];
+        Contour outer7 =
+        [
+            new Vertex(99.7372817993164, 247.72718811035156),
+            new Vertex(103.27281951904297, 251.26271057128906),
+            new Vertex(92.66622161865234, 261.86932373046875),
+            new Vertex(89.13068389892578, 258.33380126953125),
+            new Vertex(99.7372817993164, 247.72718811035156),
+        ];
+        Contour outer8 =
+        [
+            new Vertex(85.59514617919922, 261.86932373046875),
+            new Vertex(89.13068389892578, 265.40484619140625),
+            new Vertex(78.52408599853516, 276.0114440917969),
+            new Vertex(74.9885482788086, 272.4759216308594),
+            new Vertex(85.59514617919922, 261.86932373046875),
+        ];
+        Contour outer9 =
+        [
+            new Vertex(71.45301055908203, 276.0114440917969),
+            new Vertex(74.9885482788086, 279.5469665527344),
+            new Vertex(64.38195037841797, 290.153564453125),
+            new Vertex(60.846412658691406, 286.6180419921875),
+            new Vertex(71.45301055908203, 276.0114440917969),
+        ];
+        Contour outer10 =
+        [
+            new Vertex(57.310882568359375, 290.153564453125),
+            new Vertex(60.84642028808594, 293.6890869140625),
+            new Vertex(52.26776885986328, 302.26776123046875),
+            new Vertex(48.0234489440918, 300.8415832519531),
+            new Vertex(47.6315803527832, 298.00054931640625),
+            new Vertex(52.58468246459961, 297.3173828125),
+            new Vertex(52.9765510559082, 300.1584167480469),
+            new Vertex(48.73223114013672, 298.73223876953125),
+            new Vertex(57.310882568359375, 290.153564453125),
+        ];
+        Contour outer11 =
+        [
+            new Vertex(51.90149688720703, 292.3642883300781),
+            new Vertex(46.948394775390625, 293.0474548339844),
+            new Vertex(44.898834228515625, 278.1881408691406),
+            new Vertex(49.85193634033203, 277.5049743652344),
+            new Vertex(51.90149688720703, 292.3642883300781),
+        ];
+        Contour outer12 =
+        [
+            new Vertex(49.16875076293945, 272.5518798828125),
+            new Vertex(44.21564865112305, 273.23504638671875),
+            new Vertex(42.16608810424805, 258.375732421875),
+            new Vertex(47.11919021606445, 257.69256591796875),
+            new Vertex(49.16875076293945, 272.5518798828125),
+        ];
+        Contour outer13 =
+        [
+            new Vertex(46.436004638671875, 252.73944091796875),
+            new Vertex(41.48290252685547, 253.42263793945312),
+            new Vertex(39.43334197998047, 238.56332397460938),
+            new Vertex(44.386444091796875, 237.880126953125),
+            new Vertex(46.436004638671875, 252.73944091796875),
+        ];
+        Contour outer14 =
+        [
+            new Vertex(43.7032585144043, 232.92701721191406),
+            new Vertex(38.75015640258789, 233.61021423339844),
+            new Vertex(36.70059585571289, 218.7509002685547),
+            new Vertex(41.6536979675293, 218.0677032470703),
+            new Vertex(43.7032585144043, 232.92701721191406),
+        ];
+        Contour outer15 =
+        [
+            new Vertex(40.97051239013672, 213.11459350585938),
+            new Vertex(36.01741027832031, 213.79779052734375),
+            new Vertex(33.96784973144531, 198.9384765625),
+            new Vertex(38.92095184326172, 198.25527954101562),
+            new Vertex(40.97051239013672, 213.11459350585938),
+        ];
+        Contour outer16 =
+        [
+            new Vertex(38.23776626586914, 193.3021697998047),
+            new Vertex(33.284664154052734, 193.98536682128906),
+            new Vertex(31.2351016998291, 179.1260528564453),
+            new Vertex(36.18820571899414, 178.44285583496094),
+            new Vertex(38.23776626586914, 193.3021697998047),
+        ];
+        Contour outer17 =
+        [
+            new Vertex(35.50502014160156, 173.48974609375),
+            new Vertex(30.551916122436523, 174.17294311523438),
+            new Vertex(28.502355575561523, 159.31362915039062),
+            new Vertex(33.45545959472656, 158.63043212890625),
+            new Vertex(35.50502014160156, 173.48974609375),
+        ];
+        Contour outer18 =
+        [
+            new Vertex(32.772274017333984, 153.6773223876953),
+            new Vertex(27.819168090820312, 154.3605194091797),
+            new Vertex(25.76960563659668, 139.50120544433594),
+            new Vertex(30.72271156311035, 138.81800842285156),
+            new Vertex(32.772274017333984, 153.6773223876953),
+        ];
+        Contour outer19 =
+        [
+            new Vertex(30.03952407836914, 133.86489868164062),
+            new Vertex(25.08641815185547, 134.548095703125),
+            new Vertex(23.036855697631836, 119.68877410888672),
+            new Vertex(27.989961624145508, 119.0055923461914),
+            new Vertex(30.03952407836914, 133.86489868164062),
+        ];
+        Contour outer20 =
+        [
+            new Vertex(27.306774139404297, 114.05248260498047),
+            new Vertex(22.353668212890625, 114.73566436767578),
+            new Vertex(20.304105758666992, 99.87635040283203),
+            new Vertex(25.257211685180664, 99.19316864013672),
+            new Vertex(27.306774139404297, 114.05248260498047),
+        ];
+        Contour outer21 =
+        [
+            new Vertex(24.574024200439453, 94.24005889892578),
+            new Vertex(19.62091827392578, 94.9232406616211),
+            new Vertex(17.57135772705078, 80.06392669677734),
+            new Vertex(22.524463653564453, 79.38074493408203),
+            new Vertex(24.574024200439453, 94.24005889892578),
+        ];
+        Contour outer22 =
+        [
+            new Vertex(21.841276168823242, 74.4276351928711),
+            new Vertex(16.88817024230957, 75.1108169555664),
+            new Vertex(14.83860969543457, 60.251502990722656),
+            new Vertex(19.791715621948242, 59.56831359863281),
+            new Vertex(21.841276168823242, 74.4276351928711),
+        ];
+        Contour outer23 =
+        [
+            new Vertex(19.10852813720703, 54.61520767211914),
+            new Vertex(14.15542221069336, 55.298397064208984),
+            new Vertex(12.105860710144043, 40.43907928466797),
+            new Vertex(17.0589656829834, 39.755889892578125),
+            new Vertex(19.10852813720703, 54.61520767211914),
+        ];
+        Contour outer24 =
+        [
+            new Vertex(16.375778198242188, 34.80278396606445),
+            new Vertex(11.422673225402832, 35.4859733581543),
+            new Vertex(9.373111724853516, 20.62665557861328),
+            new Vertex(14.326217651367188, 19.943470001220703),
+            new Vertex(16.375778198242188, 34.80278396606445),
+        ];
+        Contour outer25 =
+        [
+            new Vertex(13.643030166625977, 14.990363121032715),
+            new Vertex(8.689924240112305, 15.673550605773926),
+            new Vertex(8.023447036743164, 10.841593742370605),
+            new Vertex(11.98299789428711, 8.487360000610352),
+            new Vertex(20.13201141357422, 14.49189567565918),
+            new Vertex(17.166015625, 18.517175674438477),
+            new Vertex(9.01700210571289, 12.512639999389648),
+            new Vertex(12.976552963256836, 10.158406257629395),
+            new Vertex(13.643030166625977, 14.990363121032715),
+        ];
+        Contour outer26 =
+        [
+            new Vertex(21.191295623779297, 21.483171463012695),
+            new Vertex(24.157291412353516, 17.4578914642334),
+            new Vertex(36.23312759399414, 26.355876922607422),
+            new Vertex(33.26713180541992, 30.38115692138672),
+            new Vertex(21.191295623779297, 21.483171463012695),
+        ];
+        Contour outer27 =
+        [
+            new Vertex(37.29241180419922, 33.34715270996094),
+            new Vertex(40.25840759277344, 29.32187271118164),
+            new Vertex(52.33424377441406, 38.2198600769043),
+            new Vertex(49.368247985839844, 42.24513626098633),
+            new Vertex(37.29241180419922, 33.34715270996094),
+        ];
+        Contour outer28 =
+        [
+            new Vertex(53.39352798461914, 45.21113204956055),
+            new Vertex(56.35952377319336, 41.185855865478516),
+            new Vertex(68.43536376953125, 50.08384323120117),
+            new Vertex(65.4693603515625, 54.1091194152832),
+            new Vertex(53.39352798461914, 45.21113204956055),
+        ];
+        Contour outer29 =
+        [
+            new Vertex(69.49464416503906, 57.07511520385742),
+            new Vertex(72.46063232421875, 53.04983901977539),
+            new Vertex(84.53646850585938, 61.94782257080078),
+            new Vertex(81.57048034667969, 65.97309875488281),
+            new Vertex(69.49464416503906, 57.07511520385742),
+        ];
+        Contour outer30 =
+        [
+            new Vertex(85.59574890136719, 68.93909454345703),
+            new Vertex(88.56175231933594, 64.91381072998047),
+            new Vertex(100.63758850097656, 73.81179809570312),
+            new Vertex(97.67158508300781, 77.83708190917969),
+            new Vertex(85.59574890136719, 68.93909454345703),
+        ];
+        Contour outer31 =
+        [
+            new Vertex(101.69686126708984, 80.8030776977539),
+            new Vertex(104.6628646850586, 76.77779388427734),
+            new Vertex(116.73870086669922, 85.67578125),
+            new Vertex(113.77269744873047, 89.70106506347656),
+            new Vertex(101.69686126708984, 80.8030776977539),
+        ];
+        Contour outer32 =
+        [
+            new Vertex(117.79798126220703, 92.66706085205078),
+            new Vertex(120.76396942138672, 88.64177703857422),
+            new Vertex(132.83981323242188, 97.53975677490234),
+            new Vertex(129.87380981445312, 101.5650405883789),
+            new Vertex(117.79798126220703, 92.66706085205078),
+        ];
+        Contour outer33 =
+        [
+            new Vertex(133.8990936279297, 104.53103637695312),
+            new Vertex(136.86509704589844, 100.50575256347656),
+            new Vertex(148.94093322753906, 109.40373992919922),
+            new Vertex(145.9749298095703, 113.42902374267578),
+            new Vertex(133.8990936279297, 104.53103637695312),
+        ];
+        Contour outer34 =
+        [
+            new Vertex(150.00021362304688, 116.39501953125),
+            new Vertex(152.96621704101562, 112.36973571777344),
+            new Vertex(165.04205322265625, 121.2677230834961),
+            new Vertex(162.0760498046875, 125.29300689697266),
+            new Vertex(150.00021362304688, 116.39501953125),
+        ];
+        Contour outer35 =
+        [
+            new Vertex(166.10133361816406, 128.25900268554688),
+            new Vertex(169.0673370361328, 124.23371887207031),
+            new Vertex(181.14317321777344, 133.1317138671875),
+            new Vertex(178.1771697998047, 137.156982421875),
+            new Vertex(166.10133361816406, 128.25900268554688),
+        ];
+        Contour outer36 =
+        [
+            new Vertex(182.20245361328125, 140.1229705810547),
+            new Vertex(185.16845703125, 136.0977020263672),
+            new Vertex(197.24429321289062, 144.9956817626953),
+            new Vertex(194.27828979492188, 149.0209503173828),
+            new Vertex(182.20245361328125, 140.1229705810547),
+        ];
+        Contour outer37 =
+        [
+            new Vertex(198.30357360839844, 151.98695373535156),
+            new Vertex(201.2695770263672, 147.96168518066406),
+            new Vertex(201.98300170898438, 148.48736572265625),
+            new Vertex(199.01699829101562, 152.51263427734375),
+            new Vertex(198.30357360839844, 151.98695373535156),
+        ];
+        Contour outer38 =
+        [
+            new Vertex(35.29882049560547, 86.68524932861328),
+            new Vertex(39.70117950439453, 84.31475067138672),
+            new Vertex(46.81267547607422, 97.52181243896484),
+            new Vertex(42.410316467285156, 99.8923110961914),
+            new Vertex(35.29882049560547, 86.68524932861328),
+        ];
+        Contour outer39 =
+        [
+            new Vertex(44.78081512451172, 104.29467010498047),
+            new Vertex(49.18317413330078, 101.9241714477539),
+            new Vertex(56.29467010498047, 115.13124084472656),
+            new Vertex(51.892311096191406, 117.50173950195312),
+            new Vertex(44.78081512451172, 104.29467010498047),
+        ];
+        Contour outer40 =
+        [
+            new Vertex(54.262813568115234, 121.90409088134766),
+            new Vertex(58.665164947509766, 119.5335922241211),
+            new Vertex(65.77666473388672, 132.7406463623047),
+            new Vertex(61.37431335449219, 135.1111602783203),
+            new Vertex(54.262813568115234, 121.90409088134766),
+        ];
+        Contour outer41 =
+        [
+            new Vertex(68.14716339111328, 137.85699462890625),
+            new Vertex(63.74480438232422, 135.48648071289062),
+            new Vertex(70.8563003540039, 122.27942657470703),
+            new Vertex(75.25865936279297, 124.6499252319336),
+            new Vertex(68.14716339111328, 137.85699462890625),
+        ];
+        Contour outer42 =
+        [
+            new Vertex(77.62915802001953, 120.24756622314453),
+            new Vertex(73.22679901123047, 117.87706756591797),
+            new Vertex(80.33829498291016, 104.67000579833984),
+            new Vertex(84.74065399169922, 107.0405044555664),
+            new Vertex(77.62915802001953, 120.24756622314453),
+        ];
+        Contour outer43 =
+        [
+            new Vertex(87.11115264892578, 102.63814544677734),
+            new Vertex(82.70879364013672, 100.26764678955078),
+            new Vertex(89.82029724121094, 87.06058502197266),
+            new Vertex(94.22265625, 89.43108367919922),
+            new Vertex(87.11115264892578, 102.63814544677734),
+        ];
+        Contour outer44 =
+        [
+            new Vertex(91.61859893798828, 83),
+            new Vertex(91.61859893798828, 88),
+            new Vertex(76.61859893798828, 88),
+            new Vertex(76.61859893798828, 83),
+            new Vertex(91.61859893798828, 83),
+        ];
+        Contour outer45 =
+        [
+            new Vertex(71.61859893798828, 83),
+            new Vertex(71.61859893798828, 88),
+            new Vertex(56.61859893798828, 88),
+            new Vertex(56.61859893798828, 83),
+            new Vertex(71.61859893798828, 83),
+        ];
+        Contour outer46 =
+        [
+            new Vertex(51.61859893798828, 83),
+            new Vertex(51.61859893798828, 88),
+            new Vertex(37.5, 88),
+            new Vertex(37.5, 83),
+            new Vertex(51.61859893798828, 83),
+        ];
+
+        Polygon input = [outer0, outer1, outer2, outer3, outer4, outer5, outer6, outer7, outer8, outer9,
+                         outer10, outer11, outer12, outer13, outer14, outer15, outer16, outer17, outer18,
+                         outer19, outer20, outer21, outer22, outer23, outer24, outer25, outer26,
+                         outer27, outer28, outer29, outer30, outer31, outer32, outer33, outer34,
+                         outer35, outer36, outer37, outer38, outer39, outer40, outer41,
+                         outer42, outer43, outer44, outer45, outer46];
+
+        // Act + Assert
+        AssertMatchesClipperByCount(input);
+    }
+
+    /// <summary>
+    /// Tests with even larger vertex counts to stress test the algorithm.
+    /// </summary>
+    [Fact]
+    public void ConcentricCircles_LargeVertexCount_PreservesStructure()
+    {
+        // Arrange: Create high-resolution circles
+        const int outerVertices = 500;
+        const int innerVertices = 450;
+
+        Contour outer = CreateRegularPolygon(0, 0, 200, outerVertices);
+        Contour inner = CreateRegularPolygon(0, 0, 150, innerVertices);
+
+        Polygon input = [outer, inner];
+
+        // Act
+        Polygon result = PolygonClipper.Normalize(input);
+
+        // Assert: Must have exactly 2 contours
+        Assert.Equal(2, result.Count);
+        Assert.True(result[0].IsExternal);
+        Assert.False(result[1].IsExternal);
+
+        // Vertex counts should be preserved
+        Assert.Equal(GetImplicitVertexCount(outer), GetImplicitVertexCount(result[0]));
+        Assert.Equal(GetImplicitVertexCount(inner), GetImplicitVertexCount(result[1]));
+    }
+
+    /// <summary>
+    /// Tests multiple nested contours (like a target or bullseye pattern).
+    /// </summary>
+    [Fact]
+    public void MultipleNestedContours_PreservesHierarchy()
+    {
+        // Arrange: Create 4 concentric circles (alternating external/hole)
+        Contour ring1 = CreateRegularPolygon(0, 0, 100, 64); // Outermost external
+        Contour ring2 = CreateRegularPolygon(0, 0, 80, 64);  // Hole in ring1
+        Contour ring3 = CreateRegularPolygon(0, 0, 60, 64);  // External inside ring2's hole
+        Contour ring4 = CreateRegularPolygon(0, 0, 40, 64);  // Hole in ring3
+
+        Polygon input = [ring1, ring2, ring3, ring4];
+
+        // Act
+        Polygon result = PolygonClipper.Normalize(input);
+
+        // Assert: Must have exactly 4 contours
+        Assert.Equal(4, result.Count);
+
+        // Check depths: 0, 1, 2, 3 (alternating external/hole based on even/odd)
+        // Even depth = external-like, odd depth = hole-like
+        Assert.Equal(0, result[0].Depth); // ring1 - outermost
+        Assert.Equal(1, result[1].Depth); // ring2 - hole in ring1
+        Assert.Equal(2, result[2].Depth); // ring3 - inside ring2
+        Assert.Equal(3, result[3].Depth); // ring4 - hole in ring3
+    }
+
+    /// <summary>
+    /// Tests two separate (non-nested) polygons to ensure they remain separate.
+    /// </summary>
+    [Fact]
+    public void TwoSeparatePolygons_RemainSeparate()
+    {
+        // Arrange: Two non-overlapping circles
+        Contour circle1 = CreateRegularPolygon(-100, 0, 30, 100);
+        Contour circle2 = CreateRegularPolygon(100, 0, 30, 100);
+
+        Polygon input = [circle1, circle2];
+
+        // Act
+        Polygon result = PolygonClipper.Normalize(input);
+
+        // Assert: Must have exactly 2 separate external contours
+        Assert.Equal(2, result.Count);
+        Assert.True(result[0].IsExternal);
+        Assert.True(result[1].IsExternal);
+
+        // Vertex counts preserved
+        Assert.Equal(GetImplicitVertexCount(circle1), GetImplicitVertexCount(result[0]));
+        Assert.Equal(GetImplicitVertexCount(circle2), GetImplicitVertexCount(result[1]));
+    }
+
+    /// <summary>
+    /// Tests a complex shape with multiple holes (like the letter "8" or "B").
+    /// </summary>
+    [Fact]
+    public void ExternalWithMultipleHoles_PreservesStructure()
+    {
+        // Arrange: Outer rectangle with two circular holes
+        Contour outer =
+        [
+            new Vertex(0, 0),
+            new Vertex(100, 0),
+            new Vertex(100, 200),
+            new Vertex(0, 200),
+            new Vertex(0, 0)
+        ];
+
+        Contour hole1 = CreateRegularPolygon(50, 50, 20, 32);
+        Contour hole2 = CreateRegularPolygon(50, 150, 20, 32);
+
+        Polygon input = [outer, hole1, hole2];
+
+        // Act
+        Polygon result = PolygonClipper.Normalize(input);
+
+        // Assert: 1 external + 2 holes
+        Assert.Equal(3, result.Count);
+        Assert.True(result[0].IsExternal);
+        Assert.False(result[1].IsExternal);
+        Assert.False(result[2].IsExternal);
+    }
+
+    /// <summary>
+    /// Tests that two adjacent rectangles sharing an edge are merged into a single contour.
+    /// </summary>
+    [Fact]
+    public void TwoTouchingRectangles_MergeIntoSingleContour()
+    {
+        // Arrange: Two rectangles sharing edge at X=10
+        // Rectangle A: (0,0)-(10,0)-(10,10)-(0,10)
+        // Rectangle B: (10,0)-(20,0)-(20,10)-(10,10)
+        Contour rectA =
+        [
+            new Vertex(0, 0),
+            new Vertex(10, 0),
+            new Vertex(10, 10),
+            new Vertex(0, 10),
+            new Vertex(0, 0)
+        ];
+
+        Contour rectB =
+        [
+            new Vertex(10, 0),
+            new Vertex(20, 0),
+            new Vertex(20, 10),
+            new Vertex(10, 10),
+            new Vertex(10, 0)
+        ];
+
+        Polygon input = [rectA, rectB];
+
+        // Act
+        Polygon result = PolygonClipper.Normalize(input);
+
+        // Assert: Should merge into a single rectangle (0,0)-(20,0)-(20,10)-(0,10)
+        Assert.Equal(1, result.Count);
+
+        AssertMatchesClipperByCount(input);
+    }
+
+    /// <summary>
+    /// Tests that a rectangle and a parallelogram sharing part of an edge at Y=88 are merged.
+    /// This mimics the failing test case geometry.
+    /// </summary>
+    [Fact]
+    public void RectangleAndParallelogramTouchingAtHorizontalEdge_MergeCorrectly()
+    {
+        // Arrange: Horizontal rectangle at Y=83-88
+        Contour rect =
+        [
+            new Vertex(37.5, 83),
+            new Vertex(51.61859893798828, 83),
+            new Vertex(51.61859893798828, 88),
+            new Vertex(37.5, 88),
+            new Vertex(37.5, 83)
+
+            // Parallelogram that overlaps the rectangle (diagonal shape from ~Y=84-99)
+        ];
+
+        // Parallelogram that overlaps the rectangle (diagonal shape from ~Y=84-99)
+        Contour para =
+        [
+            new Vertex(35.29882049560547, 86.68524932861328),
+            new Vertex(39.70117950439453, 84.31475067138672),
+            new Vertex(46.81267547607422, 97.52181243896484),
+            new Vertex(42.410316467285156, 99.8923110961914),
+            new Vertex(35.29882049560547, 86.68524932861328)
+        ];
+
+        Polygon input = [rect, para];
+
+        // Act + Assert
+        AssertMatchesClipperByCount(input);
+    }
+
+    /// <summary>
+    /// Tests that a self-intersecting bowtie stays as one filled region under positive fill.
+    /// </summary>
+    [Fact]
+    public void FigureEight_WithSelfIntersection_RemainsSingleContour()
+    {
+        // Arrange: Bowtie/hourglass that crosses itself at (5,0) so the winding stays >0 everywhere.
+        Contour figure8 =
+        [
+            new Vertex(0, 5), // Top-left
+            new Vertex(10, -5), // Bottom-right (crosses the next segment)
+            new Vertex(10, 5), // Top-right
+            new Vertex(0, -5), // Bottom-left (crosses back)
+            new Vertex(0, 5) // Back to start
+        ];
+
+        Polygon input = [figure8];
+
+        // Act
+        Polygon result = PolygonClipper.Normalize(input);
+
+        // Assert: Positive fill treats the bowtie as a single filled region (same as Clipper).
+        Assert.Equal(1, result.Count);
+        AssertMatchesClipperByCount(input);
+    }
+
+    /// <summary>
+    /// Tests multiple intersections along a single segment to ensure all split points are retained.
+    /// </summary>
+    [Fact]
+    public void MultipleIntersectionsOnSingleSegment_SplitsAll()
+    {
+        // Arrange: A long rectangle edge intersected by multiple vertical rectangles.
+        Contour baseRect =
+        [
+            new Vertex(0, 0),
+            new Vertex(30, 0),
+            new Vertex(30, 4),
+            new Vertex(0, 4),
+            new Vertex(0, 0)
+        ];
+
+        Contour post1 =
+        [
+            new Vertex(4, -2),
+            new Vertex(7, -2),
+            new Vertex(7, 8),
+            new Vertex(4, 8),
+            new Vertex(4, -2)
+        ];
+
+        Contour post2 =
+        [
+            new Vertex(13, -2),
+            new Vertex(16, -2),
+            new Vertex(16, 8),
+            new Vertex(13, 8),
+            new Vertex(13, -2)
+        ];
+
+        Contour post3 =
+        [
+            new Vertex(22, -2),
+            new Vertex(25, -2),
+            new Vertex(25, 8),
+            new Vertex(22, 8),
+            new Vertex(22, -2)
+        ];
+
+        Polygon input = [baseRect, post1, post2, post3];
+
+        // Act + Assert
+        AssertMatchesClipperByCount(input);
+    }
+
+    /// <summary>
+    /// Tests partially overlapping collinear edges to validate overlap handling.
+    /// </summary>
+    [Fact]
+    public void PartialOverlap_CollinearEdges_MatchesClipper()
+    {
+        // Arrange: Two rectangles with a partial overlap on the shared horizontal edges.
+        Contour rectA =
+        [
+            new Vertex(0, 0),
+            new Vertex(12, 0),
+            new Vertex(12, 4),
+            new Vertex(0, 4),
+            new Vertex(0, 0)
+        ];
+
+        Contour rectB =
+        [
+            new Vertex(6, 0),
+            new Vertex(18, 0),
+            new Vertex(18, 4),
+            new Vertex(6, 4),
+            new Vertex(6, 0)
+        ];
+
+        Polygon input = [rectA, rectB];
+
+        // Act + Assert
+        AssertMatchesClipperByCount(input);
+    }
+
+    /// <summary>
+    /// Tests disjoint polygons whose bounding boxes overlap to guard against false nesting.
+    /// </summary>
+    [Fact]
+    public void DisjointPolygonsWithOverlappingBounds_RemainSeparate()
+    {
+        // Arrange: Two disjoint triangles with overlapping bounding boxes.
+        Contour triA =
+        [
+            new Vertex(0, 0),
+            new Vertex(4, 0),
+            new Vertex(0, 4),
+            new Vertex(0, 0)
+        ];
+
+        Contour triB =
+        [
+            new Vertex(3, 3),
+            new Vertex(7, 3),
+            new Vertex(7, 7),
+            new Vertex(3, 3)
+        ];
+
+        Polygon input = [triA, triB];
+
+        // Act + Assert
+        AssertMatchesClipperByCount(input);
+    }
+
+    /// <summary>
+    /// Reproduces Clipper2 issue #1051 (add1 case) and validates against Martinez union.
+    /// </summary>
+    [Fact]
+    public void Issue1051_Union_Add1_MatchesMartinezUnion()
+    {
+        Contour mainActual = CreateIssue1051Main();
+
+        Contour add1 =
+        [
+            new Vertex(-2, 0),
+            new Vertex(0, 0),
+            new Vertex(0, 1),
+            new Vertex(-2, 1),
+            new Vertex(-2, 0)
+        ];
+
+        Polygon actual = PolygonClipper.Normalize([mainActual, add1]);
+
+        Polygon expected = PolygonClipper.Union(
+            [CreateIssue1051Main()],
+            [[
+                new Vertex(-2, 0),
+                new Vertex(0, 0),
+                new Vertex(0, 1),
+                new Vertex(-2, 1),
+                new Vertex(-2, 0)
+            ]]);
+
+        AssertContourVertexSignature(expected, actual);
+    }
+
+    /// <summary>
+    /// Reproduces Clipper2 issue #1051 (add2 case) and validates against Martinez union.
+    /// </summary>
+    [Fact]
+    public void Issue1051_Union_Add2_MatchesMartinezUnion()
+    {
+        Contour mainActual = CreateIssue1051Main();
+
+        // Matches Rect64(-2, 1, 0, 1).AsPath() from the issue (degenerate rectangle).
+        Contour add2 =
+        [
+            new Vertex(-2, 1),
+            new Vertex(0, 1),
+            new Vertex(0, 1),
+            new Vertex(-2, 1),
+            new Vertex(-2, 1)
+        ];
+
+        Polygon actual = PolygonClipper.Normalize([mainActual, add2]);
+
+        Polygon expected = PolygonClipper.Union(
+            [CreateIssue1051Main()],
+            [[
+                new Vertex(-2, 1),
+                new Vertex(0, 1),
+                new Vertex(0, 1),
+                new Vertex(-2, 1),
+                new Vertex(-2, 1)
+            ]]);
+
+        AssertContourVertexSignature(expected, actual);
+    }
+
+    private static Contour CreateIssue1051Main()
+        =>
+        [
+            new Vertex(0, 0),
+            new Vertex(2, 0),
+            new Vertex(2, 2),
+            new Vertex(0, 2),
+            new Vertex(0, 0)
+        ];
+
+    private static void AssertContourVertexSignature(Polygon expected, Polygon actual)
+    {
+        List<int> expectedCounts = GetContourVertexSignature(expected);
+        List<int> actualCounts = GetContourVertexSignature(actual);
+
+        Assert.Equal(expectedCounts.Count, actualCounts.Count);
+        for (int i = 0; i < expectedCounts.Count; i++)
+        {
+            Assert.Equal(expectedCounts[i], actualCounts[i]);
+        }
+    }
+
+    private static List<int> GetContourVertexSignature(Polygon polygon)
+    {
+        List<int> counts = new(polygon.Count);
+        for (int i = 0; i < polygon.Count; i++)
+        {
+            Contour contour = polygon[i];
+            counts.Add(GetImplicitVertexCount(contour));
+        }
+
+        counts.Sort();
+        return counts;
+    }
+
+    /// <summary>
+    /// Helper method to create a regular octagon centered at (cx, cy) with given radius.
+    /// </summary>
+    private static Contour CreateOctagon(double cx, double cy, double radius)
+        => CreateRegularPolygon(cx, cy, radius, 8);
+
+    /// <summary>
+    /// Helper method to create a regular polygon with n vertices centered at (cx, cy) with given radius.
+    /// </summary>
+    private static Contour CreateRegularPolygon(double cx, double cy, double radius, int vertices)
+    {
+        Contour contour = [];
+        for (int i = 0; i < vertices; i++)
+        {
+            double angle = i * 2 * Math.PI / vertices;
+            double x = cx + (radius * Math.Cos(angle));
+            double y = cy + (radius * Math.Sin(angle));
+            contour.Add(new Vertex(x, y));
+        }
+
+        // Add closing vertex
+        contour.Add(new Vertex(cx + radius, cy)); // Same as first vertex (angle=0)
+
+        return contour;
+    }
+
+    private static int GetImplicitVertexCount(Contour contour)
+    {
+        int count = contour.Count;
+        return count > 1 && contour[0] == contour[^1] ? count - 1 : count;
+    }
+
+    private static int GetImplicitVertexCount(PathD path)
+    {
+        int count = path.Count;
+        if (count <= 1)
+        {
+            return count;
+        }
+
+        PointD first = path[0];
+        PointD last = path[^1];
+        return first.x == last.x && first.y == last.y ? count - 1 : count;
+    }
+
+    private static void AssertMatchesClipperByCount(Polygon input)
+    {
+        Polygon result = PolygonClipper.Normalize(input);
+        PathsD clipperResult = NormalizeWithClipperD(input);
+
+        List<PathD> expected = SortPathsByLowestPoint(clipperResult);
+        List<Contour> actual = SortContoursByLowestPoint(result);
+
+        Assert.Equal(expected.Count, actual.Count);
+
+        for (int i = 0; i < expected.Count; i++)
+        {
+            PathD actualPath = ProjectContour(actual[i]);
+            Assert.Equal(GetImplicitVertexCount(expected[i]), GetImplicitVertexCount(actualPath));
+        }
+    }
+
+    private static List<PathD> SortPathsByLowestPoint(PathsD paths)
+    {
+        List<PathD> sorted = [.. paths];
+        sorted.Sort((left, right) => CompareLowestPoint(GetLowestPoint(left), GetLowestPoint(right)));
+        return sorted;
+    }
+
+    private static List<Contour> SortContoursByLowestPoint(Polygon polygon)
+    {
+        List<Contour> sorted = new(polygon.Count);
+        for (int i = 0; i < polygon.Count; i++)
+        {
+            sorted.Add(polygon[i]);
+        }
+
+        sorted.Sort((left, right) => CompareLowestPoint(GetLowestPoint(left), GetLowestPoint(right)));
+        return sorted;
+    }
+
+    private static int CompareLowestPoint(PointD left, PointD right)
+    {
+        if (left.y > right.y)
+        {
+            return -1;
+        }
+
+        if (left.y < right.y)
+        {
+            return 1;
+        }
+
+        return left.x.CompareTo(right.x);
+    }
+
+    private static PointD GetLowestPoint(Contour contour)
+    {
+        int count = contour.Count;
+        if (count == 0)
+        {
+            return default;
+        }
+
+        int lastIndex = count - 1;
+        if (count > 1 && contour[0] == contour[^1])
+        {
+            lastIndex = count - 2;
+        }
+
+        Vertex lowest = contour[0];
+        for (int i = 1; i <= lastIndex; i++)
+        {
+            Vertex candidate = contour[i];
+            if (candidate.Y > lowest.Y || (candidate.Y == lowest.Y && candidate.X < lowest.X))
+            {
+                lowest = candidate;
+            }
+        }
+
+        return new PointD(lowest.X, lowest.Y);
+    }
+
+    private static PathsD NormalizeWithClipperD(Polygon polygon, int precision = 6)
+    {
+        PathsD subject = new(polygon.Count);
+        for (int i = 0; i < polygon.Count; i++)
+        {
+            Contour contour = polygon[i];
+            PathD path = new(contour.Count);
+            for (int j = 0; j < contour.Count; j++)
+            {
+                Vertex vertex = contour[j];
+                path.Add(new PointD(vertex.X, vertex.Y));
+            }
+
+            subject.Add(path);
+        }
+
+        GetLowestPathInfo(subject, out int lowestPathIdx, out bool isNegArea);
+        if (lowestPathIdx >= 0 && isNegArea)
+        {
+            ReversePaths(subject);
+        }
+
+        ClipperD clipper = new(precision)
+        {
+            PreserveCollinear = true,
+            ReverseSolution = false
+        };
+
+        clipper.AddSubject(subject);
+        PathsD solution = [];
+        clipper.Execute(ClipType.Union, FillRule.Positive, solution);
+        return solution;
+    }
+
+    private static void ReversePaths(PathsD paths)
+    {
+        for (int i = 0; i < paths.Count; i++)
+        {
+            paths[i].Reverse();
+        }
+    }
+
+    private static void GetLowestPathInfo(PathsD paths, out int lowestPathIdx, out bool isNegArea)
+    {
+        lowestPathIdx = -1;
+        isNegArea = false;
+
+        if (paths.Count == 0)
+        {
+            return;
+        }
+
+        PointD lowestPoint = default;
+        bool hasPoint = false;
+
+        for (int i = 0; i < paths.Count; i++)
+        {
+            PathD path = paths[i];
+            if (path.Count == 0)
+            {
+                continue;
+            }
+
+            PointD candidate = GetLowestPoint(path);
+            if (!hasPoint || candidate.y > lowestPoint.y ||
+                (candidate.y == lowestPoint.y && candidate.x < lowestPoint.x))
+            {
+                lowestPoint = candidate;
+                lowestPathIdx = i;
+                hasPoint = true;
+            }
+        }
+
+        if (lowestPathIdx >= 0)
+        {
+            isNegArea = Clipper.Area(paths[lowestPathIdx]) < 0;
+        }
+    }
+
+    private static PointD GetLowestPoint(PathD path)
+    {
+        PointD lowest = path[0];
+        for (int i = 1; i < path.Count; i++)
+        {
+            PointD candidate = path[i];
+            if (candidate.y > lowest.y || (candidate.y == lowest.y && candidate.x < lowest.x))
+            {
+                lowest = candidate;
+            }
+        }
+
+        return lowest;
+    }
+
+    private static PathD ProjectContour(Contour contour)
+    {
+        int count = contour.Count;
+        if (count > 1 && contour[0] == contour[^1])
+        {
+            count--;
+        }
+
+        PathD path = new(count);
+        for (int i = 0; i < count; i++)
+        {
+            Vertex vertex = contour[i];
+            path.Add(new PointD(vertex.X, vertex.Y));
+        }
+
+        return path;
+    }
+}

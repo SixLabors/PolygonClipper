@@ -1,22 +1,22 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using GeoJSON.Text;
-using GeoJSON.Text.Feature;
-using GeoJSON.Text.Geometry;
-using PolygonClipper.Tests.TestCases;
-using Xunit;
+using GeoJson;
+using GeoJson.Feature;
+using GeoJson.Geometry;
+using Xunit.Abstractions;
+using GeoPolygon = GeoJson.Geometry.Polygon;
 
-using GeoPolygon = GeoJSON.Text.Geometry.Polygon;
+namespace SixLabors.PolygonClipper.Tests;
 
-namespace PolygonClipper.Tests;
 public class GenericTestCases
 {
-    public static IEnumerable<object[]> GetTestCases()
-        => TestData.Generic.GetFileNames().Select(x => new object[] { x });
+    private readonly ITestOutputHelper testOutputHelper;
+
+    public GenericTestCases(ITestOutputHelper testOutputHelper) => this.testOutputHelper = testOutputHelper;
+
+    public static TheoryData<string> GetTestCases()
+        => new(TestData.Generic.GetFileNames());
 
     [Theory]
     [MemberData(nameof(GetTestCases))]
@@ -30,11 +30,10 @@ public class GenericTestCases
         IGeometryObject subjectGeometry = data.Features[0].Geometry;
         IGeometryObject clippingGeometry = data.Features[1].Geometry;
 
-        Polygon subject = ConvertToPolygon(subjectGeometry);
-        Polygon clipping = ConvertToPolygon(clippingGeometry);
+        (Polygon subject, Polygon clipping) = TestPolygonUtilities.BuildPolygon(data);
 
 #pragma warning disable RCS1124 // Inline local variable
-        List<ExpectedResult> expectedResults = ExtractExpectedResults(data.Features.Skip(2).ToList(), data.Type);
+        List<ExpectedResult> expectedResults = ExtractExpectedResults([.. data.Features.Skip(2)], data.Type);
 #pragma warning restore RCS1124 // Inline local variable
 
         foreach (ExpectedResult result in expectedResults)
@@ -42,61 +41,22 @@ public class GenericTestCases
             Polygon expected = result.Coordinates;
             Polygon actual = result.Operation(subject, clipping);
 
-            Assert.Equal(expected.ContourCount, actual.ContourCount);
-            for (int i = 0; i < expected.ContourCount; i++)
+            Assert.Equal(expected.Count, actual.Count);
+            for (int i = 0; i < expected.Count; i++)
             {
                 // We don't test for holes here as the reference tests do not do so.
-                Assert.Equal(expected[i].VertexCount, actual[i].VertexCount);
-                for (int j = 0; j < expected[i].VertexCount; j++)
+                this.testOutputHelper.WriteLine($"Current Contour {i}");
+
+                Assert.Equal(expected[i].Count, actual[i].Count);
+                for (int j = 0; j < expected[i].Count; j++)
                 {
-                    Vertex expectedVertex = expected[i].GetVertex(j);
-                    Vertex actualVertex = actual[i].GetVertex(j);
+                    Vertex expectedVertex = expected[i][j];
+                    Vertex actualVertex = actual[i][j];
                     Assert.Equal(expectedVertex.X, actualVertex.X, 3);
                     Assert.Equal(expectedVertex.Y, actualVertex.Y, 3);
                 }
             }
         }
-    }
-
-    private static Polygon ConvertToPolygon(IGeometryObject geometry)
-    {
-        if (geometry is GeoPolygon geoJsonPolygon)
-        {
-            // Convert GeoJSON Polygon to our Polygon type
-            Polygon polygon = new();
-            foreach (LineString ring in geoJsonPolygon.Coordinates)
-            {
-                Contour contour = new();
-                foreach (IPosition xy in ring.Coordinates)
-                {
-                    contour.AddVertex(new Vertex(xy.Longitude, xy.Latitude));
-                }
-                polygon.Push(contour);
-            }
-
-            return polygon;
-        }
-        else if (geometry is MultiPolygon geoJsonMultiPolygon)
-        {
-            // Convert GeoJSON MultiPolygon to our Polygon type
-            Polygon polygon = new();
-            foreach (GeoPolygon geoPolygon in geoJsonMultiPolygon.Coordinates)
-            {
-                foreach (LineString ring in geoPolygon.Coordinates)
-                {
-                    Contour contour = new();
-                    foreach (IPosition xy in ring.Coordinates)
-                    {
-                        contour.AddVertex(new Vertex(xy.Longitude, xy.Latitude));
-                    }
-                    polygon.Push(contour);
-                }
-            }
-
-            return polygon;
-        }
-
-        throw new InvalidOperationException("Unsupported geometry type.");
     }
 
     private static List<ExpectedResult> ExtractExpectedResults(List<Feature> features, GeoJSONObjectType type)
@@ -105,10 +65,10 @@ public class GenericTestCases
             string mode = feature.Properties["operation"]?.ToString();
             Func<Polygon, Polygon, Polygon> operation = mode switch
             {
-                "union" => PolygonClipper.Union,
-                "intersection" => PolygonClipper.Intersection,
-                "xor" => PolygonClipper.Xor,
-                "diff" => PolygonClipper.Difference,
+                "union" => (a, b) => PolygonClipper.Union(a, b),
+                "intersection" => (a, b) => PolygonClipper.Intersection(a, b),
+                "xor" => (a, b) => PolygonClipper.Xor(a, b),
+                "diff" => (a, b) => PolygonClipper.Difference(a, b),
                 "diff_ba" => (a, b) => PolygonClipper.Difference(b, a),
                 _ => throw new InvalidOperationException($"Invalid mode: {mode}")
             };
@@ -118,20 +78,21 @@ public class GenericTestCases
                 return new ExpectedResult
                 {
                     Operation = operation,
-                    Coordinates = ConvertToPolygon(feature.Geometry as GeoPolygon)
+                    Coordinates = TestPolygonUtilities.ConvertToPolygon(feature.Geometry as GeoPolygon)
                 };
             }
 
             return new ExpectedResult
             {
                 Operation = operation,
-                Coordinates = ConvertToPolygon(feature.Geometry as MultiPolygon)
+                Coordinates = TestPolygonUtilities.ConvertToPolygon(feature.Geometry as MultiPolygon)
             };
         });
 
-    private class ExpectedResult
+    private sealed class ExpectedResult
     {
         public Func<Polygon, Polygon, Polygon> Operation { get; set; }
+
         public Polygon Coordinates { get; set; }
     }
 
@@ -140,5 +101,36 @@ public class GenericTestCases
         Polygon = 0,
 
         MultiPolygon = 1
+    }
+
+    [Fact(Skip = "Used for performance tracing only.")]
+    public void StarBenchmark()
+    {
+        Polygon subject = BuildStarPolygon(1001, 100D, 0D, 0D);
+        Polygon clipping = BuildStarPolygon(1001, 100D, 35D, 22D);
+        Polygon result = PolygonClipper.Union(subject, clipping);
+    }
+
+    private static Polygon BuildStarPolygon(int vertexCount, double radius, double centerX, double centerY)
+    {
+        if (vertexCount < 5 || (vertexCount & 1) == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(vertexCount), "Vertex count must be an odd number >= 5.");
+        }
+
+        int step = (vertexCount - 1) / 2;
+        Contour contour = new(vertexCount + 1);
+        for (int i = 0; i < vertexCount; i++)
+        {
+            int index = (i * step) % vertexCount;
+            double angle = (index * Math.PI * 2D) / vertexCount;
+            double x = centerX + (Math.Cos(angle) * radius);
+            double y = centerY + (Math.Sin(angle) * radius);
+            contour.Add(new Vertex(x, y));
+        }
+
+        contour.Add(contour[0]);
+        Polygon polygon = [contour];
+        return polygon;
     }
 }

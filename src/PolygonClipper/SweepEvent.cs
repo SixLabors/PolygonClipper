@@ -1,11 +1,11 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Runtime.CompilerServices;
-
 #nullable disable
 
-namespace PolygonClipper;
+using System.Runtime.CompilerServices;
+
+namespace SixLabors.PolygonClipper;
 
 /// <summary>
 /// Represents a sweep.
@@ -152,7 +152,7 @@ internal sealed class SweepEvent
     /// <see langword="true"/> if the line segment is below the point; otherwise <see langword="false"/>.
     /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Below(Vertex p)
+    public bool IsBelow(in Vertex p)
         => this.Left
         ? PolygonUtilities.SignedArea(this.Point, this.OtherEvent.Point, p) > 0D
         : PolygonUtilities.SignedArea(this.OtherEvent.Point, this.Point, p) > 0D;
@@ -165,7 +165,7 @@ internal sealed class SweepEvent
     /// <see langword="true"/> if the line segment is above the point; otherwise <see langword="false"/>.
     /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Above(Vertex p) => !this.Below(p);
+    public bool IsAbove(in Vertex p) => !this.IsBelow(p);
 
     /// <summary>
     /// Is the line segment (point, otherEvent->point) a vertical line segment.
@@ -174,12 +174,32 @@ internal sealed class SweepEvent
     /// <see langword="true"/> if the line segment is vertical; otherwise <see langword="false"/>.
     /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Vertical() => this.Point.X == this.OtherEvent.Point.X;
+    public bool IsVertical() => this.Point.X == this.OtherEvent.Point.X;
+
+    /// <summary>
+    /// Determines if this sweep event comes before another sweep event.
+    /// </summary>
+    /// <param name="other">The other sweep event to compare with.</param>
+    /// <returns>
+    /// <see langword="true"/> if this event comes before the other; otherwise <see langword="false"/>.
+    /// </returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool IsBefore(SweepEvent other)
+    {
+        // Compare by x-coordinate first
+        if (this.Point.X != other.Point.X)
+        {
+            return this.Point.X < other.Point.X;
+        }
+
+        // If x-coordinates are equal, compare by y-coordinate
+        return this.Point.Y < other.Point.Y;
+    }
 
     /// <summary>
     /// Returns the segment associated with the sweep event.
     /// </summary>
     /// <returns>The <see cref="Segment"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Segment Segment() => new(this.Point, this.OtherEvent.Point);
+    public Segment GetSegment() => new(this.Point, this.OtherEvent.Point);
 }

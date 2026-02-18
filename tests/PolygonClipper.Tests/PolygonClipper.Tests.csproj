@@ -1,21 +1,44 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
     <CodeAnalysisRuleSet>..\sixlabors.tests.ruleset</CodeAnalysisRuleSet>
     <IsPackable>false</IsPackable>
+    <AssemblyName>SixLabors.PolygonClipper.Tests</AssemblyName>
+    <RootNamespace>SixLabors.PolygonClipper.Tests</RootNamespace>
   </PropertyGroup>
 
+  <Choose>
+    <When Condition="$(SIXLABORS_TESTING_PREVIEW) == true">
+      <PropertyGroup>
+        <TargetFrameworks>net9.0;net8.0</TargetFrameworks>
+      </PropertyGroup>
+    </When>
+    <Otherwise>
+      <PropertyGroup>
+        <TargetFrameworks>net8.0</TargetFrameworks>
+      </PropertyGroup>
+    </Otherwise>
+  </Choose>
+
   <ItemGroup>
-    <PackageReference Include="GeoJSON.Text" Version="1.1.0" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.5.0" />
-    <PackageReference Include="xunit" Version="2.4.0" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.0" />
-    <PackageReference Include="coverlet.collector" Version="1.2.0" />
+    <Content Remove="D:\.nuget\packages\microsoft.testplatform.testhost\17.8.0\build\netcoreapp3.1\x64\testhost.dll" />
+    <Content Remove="D:\.nuget\packages\microsoft.testplatform.testhost\17.8.0\build\netcoreapp3.1\x64\testhost.exe" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="D:\.nuget\packages\xunit.runner.visualstudio\2.5.6\build\net6.0\xunit.runner.reporters.netcoreapp10.dll" />
+    <None Remove="D:\.nuget\packages\xunit.runner.visualstudio\2.5.6\build\net6.0\xunit.runner.utility.netcoreapp10.dll" />
+    <None Remove="D:\.nuget\packages\xunit.runner.visualstudio\2.5.6\build\net6.0\xunit.runner.visualstudio.testadapter.dll" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Clipper2" Version="2.0.0" />
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\PolygonClipper\PolygonClipper.csproj" />
+    <ProjectReference Include="..\GeoJson\GeoJson.csproj" />
   </ItemGroup>
 
 </Project>

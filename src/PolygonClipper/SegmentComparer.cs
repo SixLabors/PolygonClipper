@@ -1,19 +1,16 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System;
 using System.Collections;
-using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 
-namespace PolygonClipper;
+namespace SixLabors.PolygonClipper;
 
 /// <summary>
 /// Allows the comparison of segments for sorting.
 /// </summary>
 internal sealed class SegmentComparer : IComparer<SweepEvent>, IComparer
 {
-    private readonly SweepEventComparer eventComparer = new();
-
     /// <inheritdoc/>
     public int Compare(SweepEvent? x, SweepEvent? y)
     {
@@ -33,65 +30,97 @@ internal sealed class SegmentComparer : IComparer<SweepEvent>, IComparer
             return 1;
         }
 
+        SweepEvent perhapsInversedX, perhapsInversedY;
+        bool inversed;
+
+        if (x.IsBefore(y))
+        {
+            perhapsInversedX = x;
+            perhapsInversedY = y;
+            inversed = false;
+        }
+        else
+        {
+            perhapsInversedX = y;
+            perhapsInversedY = x;
+            inversed = true;
+        }
+
         // Check if the segments are collinear by comparing their signed areas
-        double area1 = PolygonUtilities.SignedArea(x.Point, x.OtherEvent.Point, y.Point);
-        double area2 = PolygonUtilities.SignedArea(x.Point, x.OtherEvent.Point, y.OtherEvent.Point);
+        double area1 = PolygonUtilities.SignedArea(perhapsInversedX.Point, perhapsInversedX.OtherEvent.Point, perhapsInversedY.Point);
+        double area2 = PolygonUtilities.SignedArea(perhapsInversedX.Point, perhapsInversedX.OtherEvent.Point, perhapsInversedY.OtherEvent.Point);
 
         if (area1 != 0 || area2 != 0)
         {
             // Segments are not collinear
             // If they share their left endpoint, use the right endpoint to sort
-            if (x.Point == y.Point)
+            if (perhapsInversedX.Point == perhapsInversedY.Point)
             {
-                return x.Below(y.OtherEvent.Point) ? -1 : 1;
+                return LessIf(perhapsInversedX.IsBelow(perhapsInversedY.OtherEvent.Point), inversed);
             }
 
             // Different left endpoints: use the y-coordinate to sort if x-coordinates are the same
-            if (x.Point.X == y.Point.X)
+            if (perhapsInversedX.Point.X == perhapsInversedY.Point.X)
             {
-                return x.Point.Y < y.Point.Y ? -1 : 1;
+                return LessIf(perhapsInversedX.Point.Y < perhapsInversedY.Point.Y, inversed);
             }
 
-            // Has the line segment associated to "x" been inserted into the segment after the line
-            // segment associated to "y"?
-            // Use the sweep event order to determine the comparison
-            int compResult = this.eventComparer.Compare(x, y);
-            if (compResult == 1)
+            // If `x` and `y` lie on the same side of the reference segment,
+            // no intersection check is necessary.
+            if ((area1 > 0) == (area2 > 0))
             {
-                return y.Above(x.Point) ? -1 : 1;
+                return LessIf(area1 > 0, inversed);
             }
 
-            // The line segment associated with "y" has been inserted after "x"
-            return x.Below(y.Point) ? -1 : 1;
-        }
-
-        // JavaScript comparer is different to C++
-        if (x.PolygonType == y.PolygonType) // Same polygon
-        {
-            Vertex p1 = x.Point;
-            Vertex p2 = y.Point;
-
-            if (p1 == p2) // Points are the same
+            // If `x` lies on the reference segment, compare based on `y`.
+            if (area1 == 0)
             {
-                // Compare the other endpoints of the segments
-                p1 = x.OtherEvent.Point;
-                p2 = y.OtherEvent.Point;
+                return LessIf(area2 > 0, inversed);
+            }
 
-                if (p1 == p2) // Other endpoints are also the same
+            // Form segments from the events.
+            Segment seg0 = new(perhapsInversedX.Point, perhapsInversedX.OtherEvent.Point);
+            Segment seg1 = new(perhapsInversedY.Point, perhapsInversedY.OtherEvent.Point);
+
+            // Call the provided intersection method.
+            int interResult = PolygonUtilities.FindIntersection(seg0, seg1, out Vertex pi0, out Vertex _);
+
+            if (interResult == 0)
+            {
+                // No unique intersection found: decide based on area1.
+                return LessIf(area1 > 0, inversed);
+            }
+            else if (interResult == 1)
+            {
+                // Unique intersection found.
+                if (pi0 == y.Point)
                 {
-                    return 0;
+                    return LessIf(area2 > 0, inversed);
                 }
 
-                return x.ContourId > y.ContourId ? 1 : -1;
+                return LessIf(area1 > 0, inversed);
             }
-        }
-        else // Segments are collinear but belong to separate polygons
-        {
-            return x.PolygonType == PolygonType.Subject ? -1 : 1;
+
+            // If interResult is neither 0 nor 1, fall through to collinear logic.
         }
 
-        // Fall back to the sweep event comparator for final comparison
-        return this.eventComparer.Compare(x, y) == 1 ? 1 : -1;
+        // Collinear branch – mimicking the Rust logic:
+        if (perhapsInversedX.PolygonType == perhapsInversedY.PolygonType)
+        {
+            // Both segments belong to the same polygon.
+            if (perhapsInversedX.Point == perhapsInversedY.Point)
+            {
+                // When left endpoints are identical, order by contour id.
+                return LessIf(perhapsInversedX.ContourId < perhapsInversedY.ContourId, inversed);
+            }
+
+            // If left endpoints differ, the Rust version simply returns "less" (i.e. the one inserted earlier).
+            // Here we mimic that by always returning -1.
+            return LessIf(true, inversed);
+        }
+
+        // Segments are collinear but belong to different polygons.
+        return LessIf(perhapsInversedX.PolygonType == PolygonType.Subject, inversed);
     }
 
     /// <inheritdoc/>
@@ -114,4 +143,14 @@ internal sealed class SegmentComparer : IComparer<SweepEvent>, IComparer
 
         throw new ArgumentException("Both arguments must be of type SweepEvent.", nameof(x));
     }
+
+    /// <summary>
+    /// Converts a boolean comparison result to an ordering value.
+    /// Returns -1 if the condition is true, 1 if false.
+    /// </summary>
+    /// <param name="condition">The boolean condition to evaluate.</param>
+    /// <param name="inversed">Should the result be inversed.</param>
+    /// <returns>-1 if condition is true, 1 if false.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int LessIf(bool condition, bool inversed = false) => condition ^ inversed ? -1 : 1;
 }
