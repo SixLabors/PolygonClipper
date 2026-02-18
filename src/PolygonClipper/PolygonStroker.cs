@@ -243,9 +243,9 @@ public sealed class PolygonStroker
             return allContours;
         }
 
-        // Positive fill normalization resolves all overlaps from join/cap emission
-        // and produces final render-ready stroke contours.
-        return SelfIntersectionRemover.Process(allContours, FillRule.Positive);
+        // Stroker emission already follows positive-fill assumptions, so skip
+        // extra input-orientation normalization and only resolve overlaps.
+        return SelfIntersectionRemover.Process(allContours, normalizeInputForPositiveFill: false);
     }
 
     /// <summary>

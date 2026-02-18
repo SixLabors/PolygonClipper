@@ -9,8 +9,8 @@ namespace SixLabors.PolygonClipper;
 /// Sweep-line union clipper specialized for self-intersection removal.
 /// </summary>
 /// <remarks>
-/// This clipper consumes subject-only paths and applies the selected fill rule
-/// to compute the union. It reuses pooled data structures to keep allocations low.
+/// This clipper consumes subject-only paths and applies positive winding fill
+/// semantics to compute the union. It reuses pooled data structures to keep allocations low.
 /// </remarks>
 internal sealed class SelfIntersectionSweepLine
 {
@@ -21,7 +21,6 @@ internal sealed class SelfIntersectionSweepLine
     private const double JoinPerpendicularDistanceSquaredTolerance = 2.5E-13D;
     private const int HorizontalLoopFailSafeLimit = 100_000;
 
-    private FillRule fillRule;
     private readonly ActiveEdgeList activeEdges;
     private readonly ScanlineSchedule scanlineSchedule;
     private readonly List<IntersectNode> intersectionList;
@@ -589,55 +588,26 @@ internal sealed class SelfIntersectionSweepLine
     /// <param name="edge">The edge to test.</param>
     /// <returns><see langword="true"/> if the edge contributes.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private bool IsContributingClosedEdge(ActiveEdge edge)
-    {
-        switch (this.fillRule)
-        {
-            case FillRule.Positive:
-                if (edge.WindCount != 1)
-                {
-                    return false;
-                }
-
-                break;
-            case FillRule.Negative:
-                if (edge.WindCount != -1)
-                {
-                    return false;
-                }
-
-                break;
-            case FillRule.NonZero:
-                if (Math.Abs(edge.WindCount) != 1)
-                {
-                    return false;
-                }
-
-                break;
-        }
-
-        return true;
-    }
+    private static bool IsContributingClosedEdge(ActiveEdge edge) => edge.WindCount == 1;
 
     /// <summary>
     /// Updates the winding count for a closed path edge.
     /// </summary>
     /// <param name="edge">The active edge to update.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void SetWindingCountForClosedEdge(ActiveEdge edge)
+    private static void SetWindingCountForClosedEdge(ActiveEdge edge)
     {
         // Winding counts apply to regions, not edges. The edge wind count tracks the
         // higher of the two adjacent region counts. Adjacent regions differ by one.
         ActiveEdge? edge2 = edge.PrevInAel;
 
-        // Even-odd filling tracks parity and doesn't accumulate winding depth.
-        if (edge2 == null || this.fillRule == FillRule.EvenOdd)
+        if (edge2 == null)
         {
             edge.WindCount = edge.WindDelta;
         }
         else
         {
-            // For positive/negative filling, if edge2's wind count follows its wind delta,
+            // If edge2's wind count follows its wind delta,
             // the filled region is to the right of edge2 (so edge is inside). Neither value is 0.
             if (edge2.WindCount * edge2.WindDelta < 0)
             {
@@ -737,8 +707,8 @@ internal sealed class SelfIntersectionSweepLine
             leftBound.IsLeftBound = true;
             this.activeEdges.InsertLeft(leftBound);
 
-            this.SetWindingCountForClosedEdge(leftBound);
-            contributing = this.IsContributingClosedEdge(leftBound);
+            SetWindingCountForClosedEdge(leftBound);
+            contributing = IsContributingClosedEdge(leftBound);
             if (leftBound.IsHorizontal &&
                 rightBound.IsHorizontal &&
                 leftBound.LocalMin.Vertex.Prev == leftBound.LocalMin.Vertex.Next)
@@ -1076,50 +1046,26 @@ internal sealed class SelfIntersectionSweepLine
         }
 
         // Update winding counts for both edges.
-        int oldE1WindCount;
-        int oldE2WindCount;
-        if (this.fillRule == FillRule.EvenOdd)
+        if (edge1.WindCount + edge2.WindDelta == 0)
         {
-            oldE1WindCount = edge1.WindCount;
-            edge1.WindCount = edge2.WindCount;
-            edge2.WindCount = oldE1WindCount;
+            edge1.WindCount = -edge1.WindCount;
         }
         else
         {
-            if (edge1.WindCount + edge2.WindDelta == 0)
-            {
-                edge1.WindCount = -edge1.WindCount;
-            }
-            else
-            {
-                edge1.WindCount += edge2.WindDelta;
-            }
-
-            if (edge2.WindCount - edge1.WindDelta == 0)
-            {
-                edge2.WindCount = -edge2.WindCount;
-            }
-            else
-            {
-                edge2.WindCount -= edge1.WindDelta;
-            }
+            edge1.WindCount += edge2.WindDelta;
         }
 
-        switch (this.fillRule)
+        if (edge2.WindCount - edge1.WindDelta == 0)
         {
-            case FillRule.Positive:
-                oldE1WindCount = edge1.WindCount;
-                oldE2WindCount = edge2.WindCount;
-                break;
-            case FillRule.Negative:
-                oldE1WindCount = -edge1.WindCount;
-                oldE2WindCount = -edge2.WindCount;
-                break;
-            default:
-                oldE1WindCount = Math.Abs(edge1.WindCount);
-                oldE2WindCount = Math.Abs(edge2.WindCount);
-                break;
+            edge2.WindCount = -edge2.WindCount;
         }
+        else
+        {
+            edge2.WindCount -= edge1.WindDelta;
+        }
+
+        int oldE1WindCount = edge1.WindCount;
+        int oldE2WindCount = edge2.WindCount;
 
         bool e1WindCountIs0or1 = oldE1WindCount is 0 or 1;
         bool e2WindCountIs0or1 = oldE2WindCount is 0 or 1;
@@ -1198,12 +1144,10 @@ internal sealed class SelfIntersectionSweepLine
     }
 
     /// <summary>
-    /// Executes the sweep-line union for the provided fill rule.
+    /// Executes the sweep-line union.
     /// </summary>
-    /// <param name="fillRule">The fill rule used to resolve inside/outside.</param>
-    private void ExecuteInternal(FillRule fillRule)
+    private void ExecuteInternal()
     {
-        this.fillRule = fillRule;
         this.ResetState();
         if (!this.scanlineSchedule.TryPopScanline(out double y))
         {
@@ -1252,15 +1196,14 @@ internal sealed class SelfIntersectionSweepLine
     /// <summary>
     /// Executes the sweep-line union, leaving output records populated for conversion.
     /// </summary>
-    /// <param name="fillRule">The fill rule used to resolve inside/outside.</param>
     /// <param name="buildHierarchy">Whether hierarchy-sensitive output ownership is required.</param>
     /// <returns><see langword="true"/> if the sweep completed successfully.</returns>
-    public bool Execute(FillRule fillRule, bool buildHierarchy)
+    public bool Execute(bool buildHierarchy)
     {
         this.buildHierarchy = buildHierarchy;
         try
         {
-            this.ExecuteInternal(fillRule);
+            this.ExecuteInternal();
         }
         catch
         {

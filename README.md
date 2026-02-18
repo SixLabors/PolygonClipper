@@ -14,8 +14,9 @@ SixLabors.PolygonClipper
 </div>
 
 SixLabors.PolygonClipper provides high-performance polygon clipping and stroking in C#.
-Boolean operations (union, intersection, difference, xor) are implemented with a Martinez-Rueda sweep-line pipeline for complex polygons with holes and multiple contours.
-Self-intersection normalization is handled by a dedicated Vatti/Clipper2-inspired remover, and `PolygonStroker` builds stroke geometry on top of that normalization path.
+Boolean operations (union, intersection, difference, xor) are implemented with a Martínez-Rueda sweep-line pipeline for complex polygons with holes and multiple contours.
+Contour normalization is handled by a dedicated Vatti/Clipper2-inspired pipeline (`PolygonClipper.Normalize`) that resolves self-intersections/overlaps into positive-winding output.
+`PolygonStroker` can optionally run that normalization pass on emitted stroke geometry.
 
 ## Features
 
@@ -23,7 +24,7 @@ Self-intersection normalization is handled by a dedicated Vatti/Clipper2-inspire
 - Handles edge cases like overlapping edges and vertical segments
 - Preserves topology: output polygons include hole/contour hierarchy
 - Deterministic and robust sweep line algorithm with O((n + k) log n) complexity
-- Includes self-intersection removal (Clipper2-inspired) to normalize input contours for boolean operations
+- Includes `PolygonClipper.Normalize` (Clipper2-inspired) for positive-winding contour normalization
 - Includes `PolygonStroker` for configurable geometric stroking (joins, caps, miter limits)
 - Uses double precision geometry without coordinate quantization
 
@@ -35,11 +36,14 @@ The API centers around `Polygon` and `Contour` types. Construct input polygons u
 Polygon result = PolygonClipper.Union(subject, clipping);
 ```
 
-You can also normalize input before boolean operations if your contours contain self-intersections:
+Boolean operations can process self-intersecting inputs directly.
+Use normalization when you want canonical positive-winding contours (for example, before export or rendering pipelines that rely on winding semantics):
 
 ```csharp
-Polygon clean = PolygonClipper.RemoveSelfIntersections(input);
+Polygon clean = PolygonClipper.Normalize(input);
 ```
+
+`Normalize` uses a fixed positive-winding normalization path.
 
 ### Stroking
 
@@ -68,13 +72,13 @@ Polygon stroked = PolygonStroker.Stroke(input, width: 12, options);
 
 This project draws on the following algorithm and implementation references:
 
-> F. Martinez et al., "A simple algorithm for Boolean operations on polygons", *Advances in Engineering Software*, 64 (2013), pp. 11-19.  
+> F. Martínez et al., "A simple algorithm for Boolean operations on polygons", *Advances in Engineering Software*, 64 (2013), pp. 11-19.  
 > https://doi.org/10.1016/j.advengsoft.2013.04.004
 
 > B. R. Vatti, "A generic solution to polygon clipping", *Communications of the ACM*, 35(7), 1992, pp. 56-63.  
 > https://dl.acm.org/doi/pdf/10.1145/129902.129906
 
-> 21re, *rust-geo-booleanop* (Rust Martinez-Rueda implementation reference).  
+> 21re, *rust-geo-booleanop* (Rust Martínez-Rueda implementation reference).  
 > https://github.com/21re/rust-geo-booleanop
 
 > Angus Johnson, *Clipper2* polygon clipping library (reference implementation for the self-intersection pipeline).  

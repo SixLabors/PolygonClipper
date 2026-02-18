@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
@@ -159,30 +158,16 @@ public class PolygonClipper
     }
 
     /// <summary>
-    /// Removes self-intersections from a polygon.
+    /// Normalizes a polygon by resolving self-intersections and overlaps.
     /// </summary>
     /// <param name="polygon">The polygon to process.</param>
     /// <returns>
-    /// A new polygon with self-intersections resolved. Output contours are implicitly closed
+    /// A new normalized polygon. Output contours are implicitly closed
     /// (no duplicated terminal closing vertex is appended).
     /// </returns>
     /// <remarks>Preferred entry point. Uses internal thread-local reusable builders.</remarks>
-    public static Polygon RemoveSelfIntersections(Polygon polygon)
-        => SelfIntersectionRemover.Process(polygon, null);
-
-    /// <summary>
-    /// Removes self-intersections from a polygon using an explicit fill rule.
-    /// </summary>
-    /// <param name="polygon">The polygon to process.</param>
-    /// <param name="fillRule">Fill rule that determines which regions are considered filled after splitting intersections.</param>
-    /// <returns>
-    /// A new polygon with self-intersections resolved. Output contours are implicitly closed
-    /// (no duplicated terminal closing vertex is appended).
-    /// </returns>
-    /// <remarks>Preferred entry point. Uses internal thread-local reusable builders.</remarks>
-    [EditorBrowsable(EditorBrowsableState.Advanced)]
-    public static Polygon RemoveSelfIntersections(Polygon polygon, FillRule fillRule)
-        => SelfIntersectionRemover.Process(polygon, fillRule);
+    public static Polygon Normalize(Polygon polygon)
+        => SelfIntersectionRemover.Process(polygon);
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static PolygonClipper Rent(Polygon subject, Polygon clip, BooleanOperation operation)

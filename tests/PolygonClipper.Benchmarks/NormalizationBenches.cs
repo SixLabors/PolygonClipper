@@ -7,16 +7,14 @@ using Clipper2Lib;
 namespace SixLabors.PolygonClipper.Benchmarks;
 
 /// <summary>
-/// Benchmarks the performance of self-intersection removal for star polygons.
+/// Benchmarks normalization performance for star polygons.
 /// </summary>
 [MemoryDiagnoser]
 [OperationsPerSecond]
-public class SelfIntersectionBenches
+public class NormalizationBenches
 {
     private Polygon polygon;
     private PathsD clipperSubject;
-    private Clipper2Lib.FillRule clipperFillRule;
-    private bool clipperReverseSolution;
     private const int ClipperPrecision = 6;
 
     [Params(101, 301, 1001)]
@@ -28,27 +26,28 @@ public class SelfIntersectionBenches
         this.polygon = BuildStarPolygon(this.VertexCount, 100d);
         this.clipperSubject = BuildClipperSubject(this.polygon);
         GetLowestPathInfo(this.clipperSubject, out int lowestPathIdx, out bool isNegArea);
-        this.clipperReverseSolution = lowestPathIdx >= 0 && isNegArea;
-        this.clipperFillRule = this.clipperReverseSolution ? Clipper2Lib.FillRule.Negative : Clipper2Lib.FillRule.Positive;
+        if (lowestPathIdx >= 0 && isNegArea)
+        {
+            ReversePaths(this.clipperSubject);
+        }
     }
 
     [Benchmark]
-    public Polygon RemoveSelfIntersections()
-        => PolygonClipper.RemoveSelfIntersections(this.polygon);
+    public Polygon Normalize()
+        => PolygonClipper.Normalize(this.polygon);
 
     [Benchmark(Baseline = true)]
     public PolyTreeD Clipper2Union()
     {
-        // Match Clipper2's single-polygon union with a positive fill rule.
         ClipperD clipper = new(ClipperPrecision)
         {
             PreserveCollinear = false,
-            ReverseSolution = this.clipperReverseSolution
+            ReverseSolution = false
         };
 
         clipper.AddSubject(this.clipperSubject);
         PolyTreeD solution = [];
-        clipper.Execute(ClipType.Union, this.clipperFillRule, solution);
+        clipper.Execute(ClipType.Union, Clipper2Lib.FillRule.Positive, solution);
         return solution;
     }
 
@@ -92,6 +91,14 @@ public class SelfIntersectionBenches
         }
 
         return subject;
+    }
+
+    private static void ReversePaths(PathsD paths)
+    {
+        for (int i = 0; i < paths.Count; i++)
+        {
+            paths[i].Reverse();
+        }
     }
 
     private static void GetLowestPathInfo(PathsD paths, out int lowestPathIdx, out bool isNegArea)

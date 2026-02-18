@@ -10,8 +10,8 @@ namespace SixLabors.PolygonClipper;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This class implements a sweep line algorithm that applies the requested fill rule
-/// to resolve self-intersections within a polygon.
+/// This class implements a sweep line algorithm that resolves self-intersections
+/// and normalizes contours for positive winding output.
 /// </para>
 /// <para>
 /// The algorithm works in three phases:
@@ -26,7 +26,7 @@ namespace SixLabors.PolygonClipper;
 /// vertices where crossings occur.
 /// </description></item>
 /// <item><description>
-/// <b>Boundary Extraction:</b> Evaluates the chosen fill rule and keeps only edges that
+/// <b>Boundary Extraction:</b> Keeps only edges that
 /// form the boundary between filled and unfilled regions.
 /// </description></item>
 /// </list>
@@ -47,41 +47,42 @@ internal static class SelfIntersectionRemover
     /// Processes a polygon to remove self-intersections.
     /// </summary>
     /// <param name="polygon">The polygon to process.</param>
-    /// <param name="fillRule">
-    /// Optional fill rule to determine which regions are considered filled.
-    /// When <see langword="null"/>, contour orientation is normalized and effective positive/negative fill
-    /// is inferred from the outer winding.
-    /// </param>
     /// <returns>
-    /// A new <see cref="Polygon"/> with self-intersections resolved. Regions considered
-    /// filled by the effective fill rule are preserved.
+    /// A new <see cref="Polygon"/> with self-intersections resolved and contours
+    /// normalized for positive winding fill semantics.
     /// </returns>
-    public static Polygon Process(Polygon polygon, FillRule? fillRule = null)
+    public static Polygon Process(Polygon polygon)
+        => Process(polygon, normalizeInputForPositiveFill: true);
+
+    /// <summary>
+    /// Processes a polygon to remove self-intersections.
+    /// </summary>
+    /// <param name="polygon">The polygon to process.</param>
+    /// <param name="normalizeInputForPositiveFill">
+    /// Whether input contours should be normalized before sweep execution.
+    /// </param>
+    /// <returns>The self-intersection-removed polygon.</returns>
+    internal static Polygon Process(Polygon polygon, bool normalizeInputForPositiveFill)
     {
         if (polygon.Count == 0)
         {
             return [];
         }
 
-        bool hasExplicitFillRule = fillRule is FillRule;
-        List<List<Vertex>> subject = BuildSubjectPaths(polygon, !hasExplicitFillRule);
-
-        FillRule effectiveFillRule = fillRule ?? FillRule.Positive;
-        bool reverseSolution = false;
-
-        // When no explicit rule is provided, normalize contours for positive fill and
-        // infer the final positive/negative winding orientation from the outer contour.
-        if (!hasExplicitFillRule)
+        List<List<Vertex>> subject = BuildSubjectPaths(polygon, normalizeInputForPositiveFill);
+        if (normalizeInputForPositiveFill)
         {
             GetLowestPathInfo(subject, out int lowestPathIdx, out bool isNegativeArea);
-            reverseSolution = lowestPathIdx >= 0 && isNegativeArea;
-            effectiveFillRule = reverseSolution ? FillRule.Negative : FillRule.Positive;
+            if (lowestPathIdx >= 0 && isNegativeArea)
+            {
+                ReverseContours(subject);
+            }
         }
 
         OutputBuilder builder = RentOutputBuilder();
         try
         {
-            return UnionWithClipper(subject, effectiveFillRule, polygon.Count, reverseSolution, builder);
+            return UnionWithClipper(subject, polygon.Count, builder);
         }
         finally
         {
@@ -90,26 +91,30 @@ internal static class SelfIntersectionRemover
     }
 
     /// <summary>
-    /// Executes a union using the internal clipper with the specified fill rule.
+    /// Executes a union using the internal clipper.
     /// </summary>
     /// <param name="subject">The quantized subject contours to union.</param>
-    /// <param name="fillRule">The fill rule used to resolve inside/outside.</param>
     /// <param name="resultCapacity">The initial contour capacity for the output polygon.</param>
-    /// <param name="reverseSolution">Whether output contour orientation should be reversed.</param>
     /// <param name="builder">The reusable output builder instance.</param>
     /// <returns>A polygon containing the unioned contours.</returns>
     private static Polygon UnionWithClipper(
         List<List<Vertex>> subject,
-        FillRule fillRule,
         int resultCapacity,
-        bool reverseSolution,
         OutputBuilder builder)
     {
         builder.ResetForReuse();
         builder.PreserveCollinear = true;
-        builder.ReverseSolution = reverseSolution;
         builder.AddSubject(subject);
-        return builder.Execute(fillRule, resultCapacity);
+        return builder.Execute(resultCapacity);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void ReverseContours(List<List<Vertex>> subject)
+    {
+        for (int i = 0; i < subject.Count; i++)
+        {
+            subject[i].Reverse();
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -362,14 +367,12 @@ internal static class SelfIntersectionRemover
     /// Builds subject paths from a polygon.
     /// </summary>
     /// <param name="polygon">The polygon to convert.</param>
-    /// <param name="normalizeForPositiveFill">
-    /// Whether to normalize contour orientation for positive fill semantics.
-    /// </param>
+    /// <param name="normalizeForPositiveFill">Whether input contour orientation should be normalized.</param>
     /// <returns>A list of fixed-precision vertex paths ready for clipping.</returns>
     private static List<List<Vertex>> BuildSubjectPaths(Polygon polygon, bool normalizeForPositiveFill)
     {
         List<List<Vertex>> subject = new(polygon.Count);
-        List<int> sourceIndices = normalizeForPositiveFill ? new List<int>(polygon.Count) : [];
+        List<int>? sourceIndices = normalizeForPositiveFill ? new List<int>(polygon.Count) : null;
         for (int i = 0; i < polygon.Count; i++)
         {
             Contour contour = polygon[i];
@@ -384,16 +387,12 @@ internal static class SelfIntersectionRemover
 
             CopyContourVertices(contour, isClosed, path);
             subject.Add(path);
-
-            if (normalizeForPositiveFill)
-            {
-                sourceIndices.Add(i);
-            }
+            sourceIndices?.Add(i);
         }
 
         if (normalizeForPositiveFill)
         {
-            ApplyPositiveFillOrientation(polygon, subject, sourceIndices);
+            ApplyPositiveFillOrientation(polygon, subject, sourceIndices!);
         }
 
         return subject;
@@ -438,9 +437,14 @@ internal static class SelfIntersectionRemover
         List<int> sourceIndices)
     {
         int count = subject.Count;
-        if (count <= 1)
+        if (count == 0)
         {
             return null;
+        }
+
+        if (count == 1)
+        {
+            return GetSignedArea(subject[0]) < 0D ? [true] : null;
         }
 
         using Buffer<int> parentIndicesBuffer = new(count);
@@ -1332,15 +1336,12 @@ internal static class SelfIntersectionRemover
         /// <summary>
         /// Executes the union and returns a hierarchical polygon.
         /// </summary>
-        /// <param name="fillRule">The fill rule for the union.</param>
         /// <param name="resultCapacity">The initial contour capacity for the output polygon.</param>
         /// <returns>The resulting polygon.</returns>
-        public Polygon Execute(
-            FillRule fillRule,
-            int resultCapacity)
+        public Polygon Execute(int resultCapacity)
         {
             this.buildHierarchy = true;
-            bool succeeded = this.sweepLine.Execute(fillRule, true);
+            bool succeeded = this.sweepLine.Execute(true);
             Polygon result = succeeded ? this.BuildPolygon(resultCapacity) : [];
             this.sweepLine.ClearSolutionData();
             return result;

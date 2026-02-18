@@ -5,7 +5,7 @@ using Clipper2Lib;
 
 namespace SixLabors.PolygonClipper.Tests;
 
-public class SelfIntersectionRemoverTests
+public class NormalizationTests
 {
     /// <summary>
     /// Tests that a simple rectangle (single contour, no holes) is preserved.
@@ -26,7 +26,7 @@ public class SelfIntersectionRemoverTests
         Polygon input = [outer];
 
         // Act
-        Polygon result = PolygonClipper.RemoveSelfIntersections(input);
+        Polygon result = PolygonClipper.Normalize(input);
 
         // Assert
         Assert.Equal(1, result.Count);
@@ -48,6 +48,7 @@ public class SelfIntersectionRemoverTests
             new Vertex(20, 20),
             new Vertex(0, 20),
             new Vertex(0, 0) // Closing vertex
+
             // Inner rectangle (hole) - smaller, centered
         ];
 
@@ -64,7 +65,7 @@ public class SelfIntersectionRemoverTests
         Polygon input = [outer, inner];
 
         // Act
-        Polygon result = PolygonClipper.RemoveSelfIntersections(input);
+        Polygon result = PolygonClipper.Normalize(input);
 
         // Assert
         Assert.Equal(2, result.Count);
@@ -94,7 +95,7 @@ public class SelfIntersectionRemoverTests
         Polygon input = [outer, inner];
 
         // Act
-        Polygon result = PolygonClipper.RemoveSelfIntersections(input);
+        Polygon result = PolygonClipper.Normalize(input);
 
         // Assert: Must have exactly 2 contours
         Assert.Equal(2, result.Count);
@@ -115,7 +116,7 @@ public class SelfIntersectionRemoverTests
         Polygon input = [outer, inner];
 
         // Act
-        Polygon result = PolygonClipper.RemoveSelfIntersections(input);
+        Polygon result = PolygonClipper.Normalize(input);
 
         // Assert: Must have exactly 2 contours
         Assert.Equal(2, result.Count);
@@ -144,7 +145,7 @@ public class SelfIntersectionRemoverTests
         Polygon input = [outer, inner];
 
         // Act
-        Polygon result = PolygonClipper.RemoveSelfIntersections(input);
+        Polygon result = PolygonClipper.Normalize(input);
 
         // Assert: Must have exactly 2 contours
         Assert.Equal(2, result.Count);
@@ -1950,7 +1951,7 @@ public class SelfIntersectionRemoverTests
         Polygon input = [outer, inner];
 
         // Act
-        Polygon result = PolygonClipper.RemoveSelfIntersections(input);
+        Polygon result = PolygonClipper.Normalize(input);
 
         // Assert: Must have exactly 2 contours
         Assert.Equal(2, result.Count);
@@ -1977,7 +1978,7 @@ public class SelfIntersectionRemoverTests
         Polygon input = [ring1, ring2, ring3, ring4];
 
         // Act
-        Polygon result = PolygonClipper.RemoveSelfIntersections(input);
+        Polygon result = PolygonClipper.Normalize(input);
 
         // Assert: Must have exactly 4 contours
         Assert.Equal(4, result.Count);
@@ -2003,7 +2004,7 @@ public class SelfIntersectionRemoverTests
         Polygon input = [circle1, circle2];
 
         // Act
-        Polygon result = PolygonClipper.RemoveSelfIntersections(input);
+        Polygon result = PolygonClipper.Normalize(input);
 
         // Assert: Must have exactly 2 separate external contours
         Assert.Equal(2, result.Count);
@@ -2037,7 +2038,7 @@ public class SelfIntersectionRemoverTests
         Polygon input = [outer, hole1, hole2];
 
         // Act
-        Polygon result = PolygonClipper.RemoveSelfIntersections(input);
+        Polygon result = PolygonClipper.Normalize(input);
 
         // Assert: 1 external + 2 holes
         Assert.Equal(3, result.Count);
@@ -2076,7 +2077,7 @@ public class SelfIntersectionRemoverTests
         Polygon input = [rectA, rectB];
 
         // Act
-        Polygon result = PolygonClipper.RemoveSelfIntersections(input);
+        Polygon result = PolygonClipper.Normalize(input);
 
         // Assert: Should merge into a single rectangle (0,0)-(20,0)-(20,10)-(0,10)
         Assert.Equal(1, result.Count);
@@ -2138,7 +2139,7 @@ public class SelfIntersectionRemoverTests
         Polygon input = [figure8];
 
         // Act
-        Polygon result = PolygonClipper.RemoveSelfIntersections(input);
+        Polygon result = PolygonClipper.Normalize(input);
 
         // Assert: Positive fill treats the bowtie as a single filled region (same as Clipper).
         Assert.Equal(1, result.Count);
@@ -2271,7 +2272,7 @@ public class SelfIntersectionRemoverTests
             new Vertex(-2, 0)
         ];
 
-        Polygon actual = PolygonClipper.RemoveSelfIntersections([mainActual, add1]);
+        Polygon actual = PolygonClipper.Normalize([mainActual, add1]);
 
         Polygon expected = PolygonClipper.Union(
             [CreateIssue1051Main()],
@@ -2304,7 +2305,7 @@ public class SelfIntersectionRemoverTests
             new Vertex(-2, 1)
         ];
 
-        Polygon actual = PolygonClipper.RemoveSelfIntersections([mainActual, add2]);
+        Polygon actual = PolygonClipper.Normalize([mainActual, add2]);
 
         Polygon expected = PolygonClipper.Union(
             [CreateIssue1051Main()],
@@ -2355,46 +2356,6 @@ public class SelfIntersectionRemoverTests
     }
 
     /// <summary>
-    /// Tests that explicit EvenOdd and NonZero fill rules are applied through the self-intersection pipeline.
-    /// </summary>
-    [Fact]
-    public void FillRuleOverride_DuplicateContours_EvenOddAndNonZeroDiverge()
-    {
-        // Arrange: Two identical contours with the same winding.
-        Contour square1 =
-        [
-            new Vertex(0, 0),
-            new Vertex(10, 0),
-            new Vertex(10, 10),
-            new Vertex(0, 10),
-            new Vertex(0, 0)
-        ];
-
-        Contour square2 =
-        [
-            new Vertex(0, 0),
-            new Vertex(10, 0),
-            new Vertex(10, 10),
-            new Vertex(0, 10),
-            new Vertex(0, 0)
-        ];
-
-        Polygon input = [square1, square2];
-
-        // Act
-        Polygon evenOdd = PolygonClipper.RemoveSelfIntersections(input, FillRule.EvenOdd);
-
-        Polygon nonZero = PolygonClipper.RemoveSelfIntersections(input, FillRule.NonZero);
-
-        // Assert
-        Assert.Empty(evenOdd);
-        Assert.Single(nonZero);
-
-        AssertMatchesClipperByCount(input, FillRule.EvenOdd);
-        AssertMatchesClipperByCount(input, FillRule.NonZero);
-    }
-
-    /// <summary>
     /// Helper method to create a regular octagon centered at (cx, cy) with given radius.
     /// </summary>
     private static Contour CreateOctagon(double cx, double cy, double radius)
@@ -2441,25 +2402,8 @@ public class SelfIntersectionRemoverTests
 
     private static void AssertMatchesClipperByCount(Polygon input)
     {
-        Polygon result = PolygonClipper.RemoveSelfIntersections(input);
-        PathsD clipperResult = RemoveSelfIntersectionsWithClipperD(input);
-
-        List<PathD> expected = SortPathsByLowestPoint(clipperResult);
-        List<Contour> actual = SortContoursByLowestPoint(result);
-
-        Assert.Equal(expected.Count, actual.Count);
-
-        for (int i = 0; i < expected.Count; i++)
-        {
-            PathD actualPath = ProjectContour(actual[i]);
-            Assert.Equal(GetImplicitVertexCount(expected[i]), GetImplicitVertexCount(actualPath));
-        }
-    }
-
-    private static void AssertMatchesClipperByCount(Polygon input, FillRule fillRule)
-    {
-        Polygon result = PolygonClipper.RemoveSelfIntersections(input, fillRule);
-        PathsD clipperResult = RemoveSelfIntersectionsWithClipperD(input, ToClipperFillRule(fillRule));
+        Polygon result = PolygonClipper.Normalize(input);
+        PathsD clipperResult = NormalizeWithClipperD(input);
 
         List<PathD> expected = SortPathsByLowestPoint(clipperResult);
         List<Contour> actual = SortContoursByLowestPoint(result);
@@ -2534,7 +2478,7 @@ public class SelfIntersectionRemoverTests
         return new PointD(lowest.X, lowest.Y);
     }
 
-    private static PathsD RemoveSelfIntersectionsWithClipperD(Polygon polygon, int precision = 6)
+    private static PathsD NormalizeWithClipperD(Polygon polygon, int precision = 6)
     {
         PathsD subject = new(polygon.Count);
         for (int i = 0; i < polygon.Count; i++)
@@ -2551,38 +2495,9 @@ public class SelfIntersectionRemoverTests
         }
 
         GetLowestPathInfo(subject, out int lowestPathIdx, out bool isNegArea);
-        bool pathsReversed = lowestPathIdx >= 0 && isNegArea;
-        Clipper2Lib.FillRule fillRule = pathsReversed ? Clipper2Lib.FillRule.Negative : Clipper2Lib.FillRule.Positive;
-
-        ClipperD clipper = new(precision)
+        if (lowestPathIdx >= 0 && isNegArea)
         {
-            PreserveCollinear = true,
-            ReverseSolution = pathsReversed
-        };
-
-        clipper.AddSubject(subject);
-        PathsD solution = [];
-        clipper.Execute(ClipType.Union, fillRule, solution);
-        return solution;
-    }
-
-    private static PathsD RemoveSelfIntersectionsWithClipperD(
-        Polygon polygon,
-        Clipper2Lib.FillRule fillRule,
-        int precision = 6)
-    {
-        PathsD subject = new(polygon.Count);
-        for (int i = 0; i < polygon.Count; i++)
-        {
-            Contour contour = polygon[i];
-            PathD path = new(contour.Count);
-            for (int j = 0; j < contour.Count; j++)
-            {
-                Vertex vertex = contour[j];
-                path.Add(new PointD(vertex.X, vertex.Y));
-            }
-
-            subject.Add(path);
+            ReversePaths(subject);
         }
 
         ClipperD clipper = new(precision)
@@ -2593,19 +2508,17 @@ public class SelfIntersectionRemoverTests
 
         clipper.AddSubject(subject);
         PathsD solution = [];
-        clipper.Execute(ClipType.Union, fillRule, solution);
+        clipper.Execute(ClipType.Union, FillRule.Positive, solution);
         return solution;
     }
 
-    private static Clipper2Lib.FillRule ToClipperFillRule(FillRule fillRule)
-        => fillRule switch
+    private static void ReversePaths(PathsD paths)
+    {
+        for (int i = 0; i < paths.Count; i++)
         {
-            FillRule.EvenOdd => Clipper2Lib.FillRule.EvenOdd,
-            FillRule.NonZero => Clipper2Lib.FillRule.NonZero,
-            FillRule.Positive => Clipper2Lib.FillRule.Positive,
-            FillRule.Negative => Clipper2Lib.FillRule.Negative,
-            _ => throw new ArgumentOutOfRangeException(nameof(fillRule), fillRule, "Unsupported fill rule.")
-        };
+            paths[i].Reverse();
+        }
+    }
 
     private static void GetLowestPathInfo(PathsD paths, out int lowestPathIdx, out bool isNegArea)
     {
