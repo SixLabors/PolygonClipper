@@ -26,7 +26,7 @@ jobs:
           git config --global core.longpaths true
 
       - name: Git Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           submodules: recursive
@@ -107,7 +107,7 @@ jobs:
           git config --global core.longpaths true
 
       - name: Git Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           submodules: recursive
@@ -192,7 +192,7 @@ jobs:
           git config --global core.longpaths true
 
       - name: Git Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           submodules: recursive
