@@ -137,7 +137,7 @@ public class PolygonStrokerTests
         AssertStrokeCoversInputCenterline(input, actual, samplesPerSegment: 3);
     }
 
-    [Theory (Skip = "For profiling only.")]
+    [Theory(Skip = "For profiling only.")]
     [InlineData(101)]
     [InlineData(301)]
     [InlineData(1001)]

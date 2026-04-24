@@ -36,6 +36,9 @@ public sealed class PolygonStroker
     private const double Pi = Math.PI;
     private const double PiMul2 = Math.PI * 2D;
 
+    // The inner miter limit used to clamp joins on acute interior angles.
+    private const double InnerMiterLimit = 1.01D;
+
     // Keep at most 2 warm instances per option-set (one active shape and one spare)
     // to reduce churn without retaining many rarely reused configurations.
     private const int MaxPooledStrokersPerOptions = 2;
@@ -1100,8 +1103,13 @@ public sealed class PolygonStroker
         double cp = Vertex.Cross(segNext, segForward);
         if (Math.Abs(cp) > double.Epsilon && (cp > 0D) == (strokeWidth > 0D))
         {
-            this.AddPoint(v1.X + dx1, v1.Y - dy1);
-            this.AddPoint(v1.X + dx2, v1.Y - dy2);
+            double limit = Math.Min(len1, len2) / widthAbs;
+            if (limit < InnerMiterLimit)
+            {
+                limit = InnerMiterLimit;
+            }
+
+            this.CalcMiter(ref v0, ref v1, ref v2, dx1, dy1, dx2, dy2, LineJoin.MiterRevert, limit, 0D);
         }
         else
         {
