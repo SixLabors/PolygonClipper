@@ -79,10 +79,8 @@ public sealed class PolygonStroker
         ArgumentNullException.ThrowIfNull(options);
         this.NormalizeOutput = options.NormalizeOutput;
         this.LineJoin = options.LineJoin;
-        this.InnerJoin = options.InnerJoin;
         this.LineCap = options.LineCap;
         this.MiterLimit = options.MiterLimit;
-        this.InnerMiterLimit = options.InnerMiterLimit;
         this.ArcDetailScale = options.ArcDetailScale;
     }
 
@@ -131,10 +129,8 @@ public sealed class PolygonStroker
         {
             this.NormalizeOutput = options.NormalizeOutput;
             this.LineJoin = options.LineJoin;
-            this.InnerJoin = options.InnerJoin;
             this.LineCap = options.LineCap;
             this.MiterLimit = options.MiterLimit;
-            this.InnerMiterLimit = options.InnerMiterLimit;
             this.ArcDetailScale = options.ArcDetailScale;
         }
 
@@ -142,23 +138,17 @@ public sealed class PolygonStroker
 
         public LineJoin LineJoin { get; }
 
-        public InnerJoin InnerJoin { get; }
-
         public LineCap LineCap { get; }
 
         public double MiterLimit { get; }
-
-        public double InnerMiterLimit { get; }
 
         public double ArcDetailScale { get; }
 
         public bool Equals(StrokeOptionsKey other)
             => this.NormalizeOutput == other.NormalizeOutput &&
                this.LineJoin == other.LineJoin &&
-               this.InnerJoin == other.InnerJoin &&
                this.LineCap == other.LineCap &&
                this.MiterLimit == other.MiterLimit &&
-               this.InnerMiterLimit == other.InnerMiterLimit &&
                this.ArcDetailScale == other.ArcDetailScale;
 
         public override bool Equals(object? obj) => obj is StrokeOptionsKey other && this.Equals(other);
@@ -167,10 +157,8 @@ public sealed class PolygonStroker
             => HashCode.Combine(
                 this.NormalizeOutput,
                 this.LineJoin,
-                this.InnerJoin,
                 this.LineCap,
                 this.MiterLimit,
-                this.InnerMiterLimit,
                 this.ArcDetailScale);
     }
 
@@ -267,11 +255,6 @@ public sealed class PolygonStroker
     public double MiterLimit { get; }
 
     /// <summary>
-    /// Gets the inner miter limit used to clamp joins on acute interior angles.
-    /// </summary>
-    public double InnerMiterLimit { get; }
-
-    /// <summary>
     /// Gets the tessellation detail scale used for round joins and round caps.
     /// Higher values produce more vertices and smoother curves.
     /// </summary>
@@ -286,11 +269,6 @@ public sealed class PolygonStroker
     /// Gets the line cap style used for open path ends.
     /// </summary>
     public LineCap LineCap { get; }
-
-    /// <summary>
-    /// Gets the join style used for sharp interior angles.
-    /// </summary>
-    public InnerJoin InnerJoin { get; }
 
     /// <summary>
     /// Gets a value indicating whether generated contours should be normalized by resolving
@@ -1122,53 +1100,8 @@ public sealed class PolygonStroker
         double cp = Vertex.Cross(segNext, segForward);
         if (Math.Abs(cp) > double.Epsilon && (cp > 0D) == (strokeWidth > 0D))
         {
-            double limit = Math.Min(len1, len2) / widthAbs;
-            if (limit < this.InnerMiterLimit)
-            {
-                limit = this.InnerMiterLimit;
-            }
-
-            switch (this.InnerJoin)
-            {
-                default:
-                    // Bevel-like fallback for inner corners.
-                    this.AddPoint(v1.X + dx1, v1.Y - dy1);
-                    this.AddPoint(v1.X + dx2, v1.Y - dy2);
-                    break;
-
-                case InnerJoin.Miter:
-                    this.CalcMiter(ref v0, ref v1, ref v2, dx1, dy1, dx2, dy2, LineJoin.MiterRevert, limit, 0D);
-                    break;
-
-                case InnerJoin.Jag:
-                case InnerJoin.Round:
-                    // If offsets are close enough, miter produces cleaner inner-corner output.
-                    Vertex offset1 = new(dx1, dy1);
-                    Vertex offset2 = new(dx2, dy2);
-                    double offsetDeltaSquared = Vertex.DistanceSquared(offset1, offset2);
-                    if (offsetDeltaSquared < len1 * len1 && offsetDeltaSquared < len2 * len2)
-                    {
-                        this.CalcMiter(ref v0, ref v1, ref v2, dx1, dy1, dx2, dy2, LineJoin.MiterRevert, limit, 0D);
-                    }
-                    else if (this.InnerJoin == InnerJoin.Jag)
-                    {
-                        // Jagged inner join inserts center vertex to preserve cusp.
-                        this.AddPoint(v1.X + dx1, v1.Y - dy1);
-                        this.AddPoint(v1.X, v1.Y);
-                        this.AddPoint(v1.X + dx2, v1.Y - dy2);
-                    }
-                    else
-                    {
-                        // Rounded inner join bridges via arc passing through the corner.
-                        this.AddPoint(v1.X + dx1, v1.Y - dy1);
-                        this.AddPoint(v1.X, v1.Y);
-                        this.CalcArc(v1.X, v1.Y, dx2, -dy2, dx1, -dy1);
-                        this.AddPoint(v1.X, v1.Y);
-                        this.AddPoint(v1.X + dx2, v1.Y - dy2);
-                    }
-
-                    break;
-            }
+            this.AddPoint(v1.X + dx1, v1.Y - dy1);
+            this.AddPoint(v1.X + dx2, v1.Y - dy2);
         }
         else
         {

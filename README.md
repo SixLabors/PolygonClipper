@@ -61,7 +61,6 @@ StrokeOptions options = new()
     LineJoin = LineJoin.Round,
     LineCap = LineCap.Round,
     MiterLimit = 4,
-    InnerMiterLimit = 1.01,
     ArcDetailScale = 1
 };
 

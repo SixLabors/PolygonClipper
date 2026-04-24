@@ -68,8 +68,7 @@ public class PolygonStrokerTests
         StrokeOptions options = new()
         {
             LineCap = LineCap.Butt,
-            LineJoin = LineJoin.Miter,
-            InnerJoin = InnerJoin.Miter
+            LineJoin = LineJoin.Miter
         };
 
         Polygon open =
