@@ -2580,7 +2580,7 @@ internal sealed class SelfIntersectionSweepLine
     /// <summary>
     /// Sorts intersection nodes from top to bottom, then left to right.
     /// </summary>
-    private struct IntersectNodeComparer : IComparer<IntersectNode>
+    internal struct IntersectNodeComparer : IComparer<IntersectNode>
     {
         /// <summary>
         /// Compares two intersection nodes for sorting.
