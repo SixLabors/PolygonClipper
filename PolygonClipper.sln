@@ -39,7 +39,6 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "workflows", "workflows", "{EEA3B5E9-3337-42EE-B0BF-FA586A1BC435}"
 	ProjectSection(SolutionItems) = preProject
 		.github\workflows\build-and-test.yml = .github\workflows\build-and-test.yml
-		.github\workflows\code-coverage.yml = .github\workflows\code-coverage.yml
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PolygonClipper.Benchmarks", "tests\PolygonClipper.Benchmarks\PolygonClipper.Benchmarks.csproj", "{F1965B36-D896-4BC1-8941-7FE6CEB82CD5}"
