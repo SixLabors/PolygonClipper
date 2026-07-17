@@ -101,6 +101,7 @@ internal sealed class OutputRecordPoolList : PooledList<OutputRecord>
             outputRecord.BackEdge = null;
             outputRecord.Points = null;
             outputRecord.Bounds = default;
+            outputRecord.Path = outputRecord.Path == Tombstone ? [] : outputRecord.Path;
             outputRecord.Path.Clear();
             outputRecord.Splits?.Clear();
             outputRecord.RecursiveSplit = null;
