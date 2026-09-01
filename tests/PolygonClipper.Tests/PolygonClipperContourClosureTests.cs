@@ -34,11 +34,13 @@ public class PolygonClipperContourClosureTests
         double maxY,
         bool closed)
     {
-        Contour contour = [];
-        contour.Add(new Vertex(minX, minY));
-        contour.Add(new Vertex(maxX, minY));
-        contour.Add(new Vertex(maxX, maxY));
-        contour.Add(new Vertex(minX, maxY));
+        Contour contour =
+        [
+            new Vertex(minX, minY),
+            new Vertex(maxX, minY),
+            new Vertex(maxX, maxY),
+            new Vertex(minX, maxY)
+        ];
         if (closed)
         {
             contour.Add(contour[0]);

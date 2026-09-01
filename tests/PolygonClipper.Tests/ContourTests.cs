@@ -29,7 +29,7 @@ public class ContourTests
     [Fact]
     public void DefaultConstructor_CreatesEmptyContour()
     {
-        Contour contour = new();
+        Contour contour = [];
 
         Assert.Equal(0, contour.Count);
         Assert.Equal(0, contour.HoleCount);
@@ -49,7 +49,7 @@ public class ContourTests
     [Fact]
     public void Add_AppendsVertices_Indexer_ReturnsThem()
     {
-        Contour contour = new();
+        Contour contour = [];
         Vertex a = new(1, 2);
         Vertex b = new(3, 4);
 
@@ -91,7 +91,7 @@ public class ContourTests
     [Fact]
     public void Holes_CanBeAddedReadAndCleared()
     {
-        Contour contour = new();
+        Contour contour = [];
 
         contour.AddHoleIndex(3);
         contour.AddHoleIndex(7);
@@ -108,7 +108,7 @@ public class ContourTests
     [Fact]
     public void ParentIndex_FlipsIsExternal()
     {
-        Contour contour = new();
+        Contour contour = [];
 
         Assert.True(contour.IsExternal);
 
@@ -224,7 +224,7 @@ public class ContourTests
     [Fact]
     public void GetBoundingBox_EmptyContour_ReturnsDefault()
     {
-        Contour contour = new();
+        Contour contour = [];
 
         Box2 box = contour.GetBoundingBox();
 
@@ -234,7 +234,7 @@ public class ContourTests
     [Fact]
     public void GetBoundingBox_SingleVertex_ReturnsDegenerateBox()
     {
-        Contour contour = new();
+        Contour contour = [];
         Vertex v = new(2, 3);
         contour.Add(v);
 
@@ -247,11 +247,13 @@ public class ContourTests
     [Fact]
     public void GetBoundingBox_ReturnsMinMaxAcrossAllVertices()
     {
-        Contour contour = new();
-        contour.Add(new Vertex(2, -1));
-        contour.Add(new Vertex(5, 4));
-        contour.Add(new Vertex(-3, 2));
-        contour.Add(new Vertex(0, 7));
+        Contour contour =
+        [
+            new Vertex(2, -1),
+            new Vertex(5, 4),
+            new Vertex(-3, 2),
+            new Vertex(0, 7)
+        ];
 
         Box2 box = contour.GetBoundingBox();
 

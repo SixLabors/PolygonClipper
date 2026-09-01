@@ -16,7 +16,7 @@ public class FeatureCollection : GeoJSONObject, IEqualityComparer<FeatureCollect
     /// <summary>
     /// Initializes a new instance of the <see cref="FeatureCollection" /> class.
     /// </summary>
-    public FeatureCollection() : this(new List<Feature>())
+    public FeatureCollection() : this([])
     {
     }
 
@@ -135,7 +135,7 @@ public class FeatureCollection<TProps> : FeatureCollection, IEqualityComparer<Fe
     /// <summary>
     /// Initializes a new instance of the <see cref="FeatureCollection" /> class.
     /// </summary>
-    public FeatureCollection() : this(new List<Feature<IGeometryObject, TProps>>())
+    public FeatureCollection() : this([])
     {
     }
 
