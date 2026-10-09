@@ -45,9 +45,9 @@
     <None Include="..\..\SixLabors.PolygonClipper.props" Pack="true" PackagePath="build" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(IsContinuousIntegration)' == 'true'">
-    <!-- SourceLink 8.0.0 depends on vulnerable Git build tasks. Use the patched tasks without exposing a package dependency. -->
-    <PackageReference Include="Microsoft.Build.Tasks.Git" Version="10.0.303" PrivateAssets="all" />
+  <ItemGroup>
+    <!-- Microsoft.Build.Tasks.Git is brought in by SourceLink in SharedInfrastructure. Remove this suppression when that shared dependency is updated. -->
+    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-23fw-v26w-5fgq" />
   </ItemGroup>
   <Import Project="..\..\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems" Label="Shared" />
 
