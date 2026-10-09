@@ -45,6 +45,10 @@
     <None Include="..\..\SixLabors.PolygonClipper.props" Pack="true" PackagePath="build" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(IsContinuousIntegration)' == 'true'">
+    <!-- SourceLink 8.0.0 depends on vulnerable Git build tasks. Use the patched tasks without exposing a package dependency. -->
+    <PackageReference Include="Microsoft.Build.Tasks.Git" Version="10.0.303" PrivateAssets="all" />
+  </ItemGroup>
   <Import Project="..\..\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems" Label="Shared" />
 
 </Project>
