@@ -45,10 +45,6 @@
     <None Include="..\..\SixLabors.PolygonClipper.props" Pack="true" PackagePath="build" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- Microsoft.Build.Tasks.Git is brought in by SourceLink in SharedInfrastructure. Remove this suppression when that shared dependency is updated. -->
-    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-23fw-v26w-5fgq" />
-  </ItemGroup>
   <Import Project="..\..\shared-infrastructure\src\SharedInfrastructure\SharedInfrastructure.projitems" Label="Shared" />
 
 </Project>
