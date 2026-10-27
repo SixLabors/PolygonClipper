@@ -8,14 +8,19 @@ public class PolygonUtilitiesTests
     [Fact]
     public void FindIntersection_TinyCrossingSegments_ReturnsUniqueCrossing()
     {
-        const double size = 1E-90;
+        double size = Math.ScaleB(1D, -300);
         Segment first = new(new Vertex(0, 0), new Vertex(size, size));
-        Segment second = new(new Vertex(0, size), new Vertex(size, 0));
+        Segment second = new(new Vertex(0, size * 0.75D), new Vertex(size, size * 0.75D));
 
         int count = PolygonUtilities.FindIntersection(first, second, out Vertex intersection, out _);
 
         Assert.Equal(1, count);
-        Assert.Equal(new Vertex(size * 0.5D, size * 0.5D), intersection);
+        Assert.Equal(new Vertex(size * 0.75D, size * 0.75D), intersection);
+
+        count = PolygonUtilities.FindIntersection(first.Source, first.Target, second.Source, second.Target, out intersection, out _);
+
+        Assert.Equal(1, count);
+        Assert.Equal(new Vertex(size * 0.75D, size * 0.75D), intersection);
     }
 
     [Fact]
