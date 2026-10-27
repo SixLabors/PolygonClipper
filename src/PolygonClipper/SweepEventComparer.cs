@@ -13,6 +13,11 @@ internal sealed class SweepEventComparer : IComparer<SweepEvent>, IComparer
     /// <inheritdoc/>
     public int Compare(SweepEvent? x, SweepEvent? y)
     {
+        if (ReferenceEquals(x, y))
+        {
+            return 0;
+        }
+
         if (x == null)
         {
             return -1;

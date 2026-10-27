@@ -92,10 +92,11 @@ internal static class PolygonUtilities
         Vertex e = a2 - a1;
 
         double kross = Vertex.Cross(va, vb);
-        double sqrKross = kross * kross;
         double sqrLenA = Vertex.Dot(va, va);
 
-        if (sqrKross > 0)
+        // Squaring a representable non-zero cross product can underflow to zero,
+        // incorrectly sending small crossing segments into the collinear branch.
+        if (kross != 0)
         {
             // Lines of the segments are not parallel
             double s = Vertex.Cross(e, vb) / kross;
@@ -132,8 +133,7 @@ internal static class PolygonUtilities
 
         // Lines are parallel; check if they are collinear
         kross = Vertex.Cross(e, va);
-        sqrKross = kross * kross;
-        if (sqrKross > 0)
+        if (kross != 0)
         {
             // Lines of the segments are different
             return 0;
@@ -271,11 +271,16 @@ internal static class PolygonUtilities
         }
 
         double area = 0;
-        Vertex prev = path[count - 1];
+
+        // Translation does not change area. Subtract a local origin before the
+        // products so a small ring far from zero does not lose its area or sign
+        // when large absolute-coordinate products cancel.
+        Vertex origin = path[0];
+        Vertex prev = path[count - 1] - origin;
         for (int i = 0; i < count; i++)
         {
-            Vertex current = path[i];
-            area += (prev.Y + current.Y) * (prev.X - current.X);
+            Vertex current = path[i] - origin;
+            area += Vertex.Cross(prev, current);
             prev = current;
         }
 

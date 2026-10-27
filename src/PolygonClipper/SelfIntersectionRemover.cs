@@ -241,25 +241,7 @@ internal static class SelfIntersectionRemover
     }
 
     private static double GetSignedArea(List<Vertex> contour)
-    {
-        int count = contour.Count;
-        if (count == 0)
-        {
-            return 0D;
-        }
-
-        double area = 0;
-        Vertex current = contour[0];
-        for (int i = 1; i < count; i++)
-        {
-            Vertex next = contour[i];
-            area += Vertex.Cross(current, next);
-            current = next;
-        }
-
-        area += Vertex.Cross(current, contour[0]);
-        return area * 0.5D;
-    }
+        => PolygonUtilities.Area(contour);
 
     private static bool HasSelfIntersection(List<Vertex> contour)
     {

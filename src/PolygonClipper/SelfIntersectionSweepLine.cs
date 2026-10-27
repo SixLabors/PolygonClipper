@@ -293,12 +293,14 @@ internal sealed class SelfIntersectionSweepLine
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static double ComputeSignedArea(OutputPoint outputPoint)
     {
-        // https://en.wikipedia.org/wiki/Shoelace_formula
+        // Use a local origin, as for PolygonUtilities.Area, without materializing
+        // the linked ring. Absolute-coordinate products can lose a small area.
+        Vertex origin = outputPoint.Point;
         double signedArea = 0.0;
         OutputPoint outputPoint2 = outputPoint;
         do
         {
-            signedArea += Vertex.Cross(outputPoint2.Prev.Point, outputPoint2.Point);
+            signedArea += Vertex.Cross(outputPoint2.Prev.Point - origin, outputPoint2.Point - origin);
             outputPoint2 = outputPoint2.Next!;
         }
         while (outputPoint2 != outputPoint);

@@ -74,19 +74,17 @@ public sealed class Polygon : IReadOnlyCollection<Contour>
     /// Joins another polygon to this instance.
     /// </summary>
     /// <param name="polygon">The polygon to join.</param>
+    /// <remarks>
+    /// Contours are shared with the source. Their hierarchy indices are updated for this polygon.
+    /// </remarks>
     public void Join(Polygon polygon)
     {
         int size = this.Count;
         for (int i = 0; i < polygon.contours.Count; ++i)
         {
             Contour contour = polygon.contours[i];
+            contour.OffsetHierarchyIndices(size);
             this.Add(contour);
-            this.GetLastContour().ClearHoles();
-
-            for (int j = 0; j < contour.HoleCount; ++j)
-            {
-                this.GetLastContour().AddHoleIndex(contour.GetHoleIndex(j) + size);
-            }
         }
     }
 

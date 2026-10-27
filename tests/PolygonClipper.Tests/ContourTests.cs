@@ -5,6 +5,35 @@ namespace SixLabors.PolygonClipper.Tests;
 
 public class ContourTests
 {
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Orientation_TranslatedUnitSquare_PreservesDirection(bool counterClockwise)
+    {
+        Contour contour = CreateSquare(1E12, 1E12, 1, counterClockwise);
+
+        Assert.Equal(counterClockwise, contour.IsCounterClockwise());
+    }
+
+    [Fact]
+    public void Orientation_VertexEdits_InvalidateCachedDirection()
+    {
+        Contour contour = [new Vertex(0, 0), new Vertex(1, 0), new Vertex(0, 1)];
+        Assert.True(contour.IsCounterClockwise());
+
+        contour.Add(new Vertex(10, -10));
+        Assert.False(contour.IsCounterClockwise());
+
+        contour.RemoveVertexAt(3);
+        Assert.True(contour.IsCounterClockwise());
+
+        contour.Clear();
+        contour.Add(new Vertex(0, 0));
+        contour.Add(new Vertex(0, 1));
+        contour.Add(new Vertex(1, 0));
+        Assert.False(contour.IsCounterClockwise());
+    }
+
     private static Contour CreateSquare(double x, double y, double size, bool counterClockwise = true)
     {
         Contour contour = new(4);

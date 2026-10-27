@@ -5,6 +5,42 @@ namespace SixLabors.PolygonClipper.Tests;
 
 public class PolygonTests
 {
+    [Fact]
+    public void Join_PreservesAndOffsetsSharedContourHierarchy()
+    {
+        Polygon target = [CreateSquare(-20, -20, 5)];
+        Contour outer = CreateSquare(0, 0, 10);
+        Contour hole = CreateSquare(2, 2, 6);
+        outer.AddHoleIndex(1);
+        hole.ParentIndex = 0;
+        hole.Depth = 1;
+        Polygon source = [outer, hole];
+
+        target.Join(source);
+
+        Assert.Same(outer, target[1]);
+        Assert.Same(hole, target[2]);
+        Assert.Equal(1, outer.HoleCount);
+        Assert.Equal(2, outer.GetHoleIndex(0));
+        Assert.Equal(1, hole.ParentIndex);
+        Assert.Equal(1, hole.Depth);
+    }
+
+    [Fact]
+    public void Intersection_ReorderedComponents_KeepValidHoleIndices()
+    {
+        Polygon subject = [CreateSquare(0, 0, 100), CreateSquare(40, 40, 20), CreateSquare(20, -20, 5)];
+        Polygon clip = [CreateSquare(-30, -30, 160)];
+
+        Polygon result = PolygonClipper.Intersection(subject, clip);
+
+        Assert.Equal(3, result.Count);
+        Contour outer = Assert.Single(result, contour => contour.HoleCount == 1);
+        int holeIndex = outer.GetHoleIndex(0);
+        Assert.Equal(new Vertex(40, 40), result[holeIndex].GetBoundingBox().Min);
+        Assert.Same(outer, result[result[holeIndex].ParentIndex!.Value]);
+    }
+
     private static Contour CreateSquare(double x, double y, double size)
     {
         Contour contour =
