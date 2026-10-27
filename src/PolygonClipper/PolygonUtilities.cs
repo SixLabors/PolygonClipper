@@ -745,10 +745,11 @@ internal static class PolygonUtilities
         Vertex vb = b2 - b1;
         Vertex e = b1 - a1;
         double kross = Vertex.Cross(va, vb);
-        double sqrKross = kross * kross;
         double sqrLenA = Vertex.Dot(va, va);
 
-        if (sqrKross > 0D)
+        // Match the segment overload: squaring can underflow even when the
+        // determinant itself is non-zero and the crossing is representable.
+        if (kross != 0D)
         {
             // Lines of the segments are not parallel.
             double s = Vertex.Cross(e, vb) / kross;
@@ -785,8 +786,7 @@ internal static class PolygonUtilities
 
         // Lines are parallel; check if they are collinear.
         kross = Vertex.Cross(e, va);
-        sqrKross = kross * kross;
-        if (sqrKross > 0D)
+        if (kross != 0D)
         {
             // Parallel but not collinear.
             return 0;
