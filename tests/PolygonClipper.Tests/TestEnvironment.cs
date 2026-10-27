@@ -10,7 +10,7 @@ internal static class TestEnvironment
 {
     private static readonly FileInfo TestAssemblyFile = new(typeof(TestEnvironment).GetTypeInfo().Assembly.Location);
 
-    private const string SixLaborsSolutionFileName = "PolygonClipper.sln";
+    private const string SixLaborsSolutionFileName = "PolygonClipper.slnx";
 
     private const string GeoJsonTestDataRelativePath = @"tests\TestData\";
 

@@ -30,7 +30,7 @@ namespace GeoJson.Geometry
         public MultiLineString(IEnumerable<LineString> coordinates)
         {
             this.Coordinates =new ReadOnlyCollection<LineString>(
-                coordinates?.ToArray() ?? Array.Empty<LineString>());
+                coordinates?.ToArray() ?? []);
         }
 
         /// <summary>

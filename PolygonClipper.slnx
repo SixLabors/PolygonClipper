@@ -1,0 +1,37 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path=".gitattributes" />
+    <File Path=".gitignore" />
+    <File Path="ci-build.ps1" />
+    <File Path="ci-pack.ps1" />
+    <File Path="ci-test.ps1" />
+    <File Path="LICENSE" />
+    <File Path="README.md" />
+    <File Path="reference/10.1016@j.advengsoft.2013.04.004.pdf" />
+    <File Path="reference/129902.129906.pdf" />
+    <File Path="THIRD-PARTY-NOTICES.md" />
+  </Folder>
+  <Folder Name="/Solution Items/.github/">
+    <File Path=".github/CONTRIBUTING.md" />
+    <File Path=".github/dependabot.yml" />
+    <File Path=".github/FUNDING.yml" />
+    <File Path=".github/PULL_REQUEST_TEMPLATE.md" />
+  </Folder>
+  <Folder Name="/Solution Items/.github/ISSUE_TEMPLATE/">
+    <File Path=".github/ISSUE_TEMPLATE/config.yml" />
+    <File Path=".github/ISSUE_TEMPLATE/oss-bug-report.yml" />
+  </Folder>
+  <Folder Name="/Solution Items/.github/workflows/">
+    <File Path=".github/workflows/build-and-test.yml" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="shared-infrastructure/src/SharedInfrastructure/SharedInfrastructure.shproj" />
+    <Project Path="src/PolygonClipper/PolygonClipper.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/GeoJson/GeoJson.csproj" />
+    <Project Path="tests/PolygonClipper.Benchmarks/PolygonClipper.Benchmarks.csproj" />
+    <Project Path="tests/PolygonClipper.Tests/PolygonClipper.Tests.csproj" />
+  </Folder>
+</Solution>

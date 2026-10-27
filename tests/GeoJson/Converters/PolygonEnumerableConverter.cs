@@ -55,7 +55,7 @@ namespace GeoJson.Converters
             }
 
             int startDepth = reader.CurrentDepth;
-            List<Polygon>? result = new();
+            List<Polygon>? result = [];
             while (reader.Read())
             {
                 if (JsonTokenType.EndArray == reader.TokenType && reader.CurrentDepth == startDepth)

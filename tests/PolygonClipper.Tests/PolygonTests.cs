@@ -7,18 +7,20 @@ public class PolygonTests
 {
     private static Contour CreateSquare(double x, double y, double size)
     {
-        Contour contour = new(4);
-        contour.Add(new Vertex(x, y));
-        contour.Add(new Vertex(x + size, y));
-        contour.Add(new Vertex(x + size, y + size));
-        contour.Add(new Vertex(x, y + size));
+        Contour contour =
+        [
+            new Vertex(x, y),
+            new Vertex(x + size, y),
+            new Vertex(x + size, y + size),
+            new Vertex(x, y + size)
+        ];
         return contour;
     }
 
     [Fact]
     public void DefaultConstructor_CreatesEmptyPolygon()
     {
-        Polygon polygon = new();
+        Polygon polygon = [];
 
         Assert.Equal(0, polygon.Count);
         Assert.Equal(0, polygon.VertexCount);
@@ -35,7 +37,7 @@ public class PolygonTests
     [Fact]
     public void Add_AppendsContoursAndIndexerReturnsThem()
     {
-        Polygon polygon = new();
+        Polygon polygon = [];
         Contour a = CreateSquare(0, 0, 10);
         Contour b = CreateSquare(20, 20, 5);
 
@@ -51,14 +53,18 @@ public class PolygonTests
     [Fact]
     public void VertexCount_SumsAcrossAllContours()
     {
-        Polygon polygon = new();
-        polygon.Add(CreateSquare(0, 0, 10));
-        polygon.Add(CreateSquare(20, 20, 5));
+        Polygon polygon =
+        [
+            CreateSquare(0, 0, 10),
+            CreateSquare(20, 20, 5)
+        ];
 
-        Contour triangle = new();
-        triangle.Add(new Vertex(0, 0));
-        triangle.Add(new Vertex(1, 0));
-        triangle.Add(new Vertex(0, 1));
+        Contour triangle =
+        [
+            new Vertex(0, 0),
+            new Vertex(1, 0),
+            new Vertex(0, 1)
+        ];
         polygon.Add(triangle);
 
         Assert.Equal(4 + 4 + 3, polygon.VertexCount);
@@ -67,7 +73,7 @@ public class PolygonTests
     [Fact]
     public void GetBoundingBox_EmptyPolygon_ReturnsDefault()
     {
-        Polygon polygon = new();
+        Polygon polygon = [];
 
         Assert.Equal(default, polygon.GetBoundingBox());
     }
@@ -75,7 +81,7 @@ public class PolygonTests
     [Fact]
     public void GetBoundingBox_SingleContour_MatchesContourBox()
     {
-        Polygon polygon = new();
+        Polygon polygon = [];
         Contour contour = CreateSquare(2, 3, 10);
         polygon.Add(contour);
 
@@ -85,9 +91,11 @@ public class PolygonTests
     [Fact]
     public void GetBoundingBox_MultipleContours_ReturnsUnion()
     {
-        Polygon polygon = new();
-        polygon.Add(CreateSquare(0, 0, 10));
-        polygon.Add(CreateSquare(20, -5, 4));
+        Polygon polygon =
+        [
+            CreateSquare(0, 0, 10),
+            CreateSquare(20, -5, 4)
+        ];
 
         Box2 box = polygon.GetBoundingBox();
 
@@ -98,9 +106,11 @@ public class PolygonTests
     [Fact]
     public void Translate_OffsetsAllContours()
     {
-        Polygon polygon = new();
-        polygon.Add(CreateSquare(0, 0, 10));
-        polygon.Add(CreateSquare(20, 20, 5));
+        Polygon polygon =
+        [
+            CreateSquare(0, 0, 10),
+            CreateSquare(20, 20, 5)
+        ];
 
         polygon.Translate(1, 2);
 
@@ -112,9 +122,11 @@ public class PolygonTests
     [Fact]
     public void Clear_RemovesAllContours()
     {
-        Polygon polygon = new();
-        polygon.Add(CreateSquare(0, 0, 10));
-        polygon.Add(CreateSquare(20, 20, 5));
+        Polygon polygon =
+        [
+            CreateSquare(0, 0, 10),
+            CreateSquare(20, 20, 5)
+        ];
 
         polygon.Clear();
 
@@ -125,7 +137,7 @@ public class PolygonTests
     [Fact]
     public void Enumeration_YieldsContoursInInsertionOrder()
     {
-        Polygon polygon = new();
+        Polygon polygon = [];
         Contour a = CreateSquare(0, 0, 10);
         Contour b = CreateSquare(20, 20, 5);
         polygon.Add(a);
@@ -141,9 +153,11 @@ public class PolygonTests
     [Fact]
     public void DeepClone_ProducesIndependentCopy()
     {
-        Polygon original = new();
-        original.Add(CreateSquare(0, 0, 10));
-        original.Add(CreateSquare(20, 20, 5));
+        Polygon original =
+        [
+            CreateSquare(0, 0, 10),
+            CreateSquare(20, 20, 5)
+        ];
 
         Polygon clone = original.DeepClone();
 
@@ -166,13 +180,17 @@ public class PolygonTests
     [Fact]
     public void Join_AppendsAllContours()
     {
-        Polygon a = new();
-        a.Add(CreateSquare(0, 0, 10));
-        a.Add(CreateSquare(20, 0, 5));
+        Polygon a =
+        [
+            CreateSquare(0, 0, 10),
+            CreateSquare(20, 0, 5)
+        ];
 
-        Polygon b = new();
-        b.Add(CreateSquare(40, 0, 5));
-        b.Add(CreateSquare(60, 0, 5));
+        Polygon b =
+        [
+            CreateSquare(40, 0, 5),
+            CreateSquare(60, 0, 5)
+        ];
 
         a.Join(b);
 
@@ -185,9 +203,8 @@ public class PolygonTests
     [Fact]
     public void Join_OnEmptyTarget_CopiesContoursFromSource()
     {
-        Polygon target = new();
-        Polygon source = new();
-        source.Add(CreateSquare(0, 0, 10));
+        Polygon target = [];
+        Polygon source = [CreateSquare(0, 0, 10)];
 
         target.Join(source);
 
@@ -198,8 +215,7 @@ public class PolygonTests
     [Fact]
     public void ToDebugString_ContainsVertexCoordinates()
     {
-        Polygon polygon = new();
-        polygon.Add(CreateSquare(0, 0, 10));
+        Polygon polygon = [CreateSquare(0, 0, 10)];
 
         string debug = polygon.ToDebugString();
 

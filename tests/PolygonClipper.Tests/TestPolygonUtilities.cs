@@ -28,7 +28,7 @@ internal static class TestPolygonUtilities
             Polygon polygon = [];
             foreach (LineString ring in geoJsonPolygon.Coordinates)
             {
-                Contour contour = new();
+                Contour contour = [];
                 foreach (IPosition xy in ring.Coordinates)
                 {
                     contour.Add(new Vertex(xy.Longitude, xy.Latitude));
@@ -52,7 +52,7 @@ internal static class TestPolygonUtilities
             {
                 foreach (LineString ring in geoPolygon.Coordinates)
                 {
-                    Contour contour = new();
+                    Contour contour = [];
                     foreach (IPosition xy in ring.Coordinates)
                     {
                         contour.Add(new Vertex(xy.Longitude, xy.Latitude));

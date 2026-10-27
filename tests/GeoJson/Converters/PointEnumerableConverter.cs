@@ -47,8 +47,8 @@ namespace GeoJson.Converters
             }
 
             int startDepth = reader.CurrentDepth;
-            List<Point>? result = new();
-            List<double> numbers = new();
+            List<Point>? result = [];
+            List<double> numbers = [];
             while (reader.Read())
             {
                 if (JsonTokenType.EndArray == reader.TokenType && reader.CurrentDepth == startDepth)

@@ -4,7 +4,6 @@
 using GeoJson;
 using GeoJson.Feature;
 using GeoJson.Geometry;
-using Xunit.Abstractions;
 using GeoPolygon = GeoJson.Geometry.Polygon;
 
 namespace SixLabors.PolygonClipper.Tests;
@@ -16,7 +15,7 @@ public class GenericTestCases
     public GenericTestCases(ITestOutputHelper testOutputHelper) => this.testOutputHelper = testOutputHelper;
 
     public static TheoryData<string> GetTestCases()
-        => new(TestData.Generic.GetFileNames());
+        => [.. TestData.Generic.GetFileNames()];
 
     [Theory]
     [MemberData(nameof(GetTestCases))]

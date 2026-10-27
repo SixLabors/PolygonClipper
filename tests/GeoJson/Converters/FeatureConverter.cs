@@ -55,7 +55,7 @@ namespace GeoJson.Converters
                                     genericArguments),
                                 BindingFlags.Default,
                                 binder: null,
-                                args: new object[] { typedGeometry, (IDictionary<string, object>)properties, id },
+                                args: [typedGeometry, (IDictionary<string, object>)properties, id],
                                 culture: null);
                         }
                         else
@@ -67,7 +67,7 @@ namespace GeoJson.Converters
                                     genericArguments),
                                 BindingFlags.Default,
                                 binder: null,
-                                args: new object[] { typedGeometry, typedProperty, id },
+                                args: [typedGeometry, typedProperty, id],
                                 culture: null);
                         }
                     }

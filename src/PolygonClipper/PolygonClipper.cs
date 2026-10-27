@@ -496,7 +496,7 @@ public class PolygonClipper
 
             if (operation is BooleanOperation.Union or BooleanOperation.Xor)
             {
-                result = new(subject.Count + clipping.Count);
+                result = new Polygon(subject.Count + clipping.Count);
                 result.Join(subject.DeepClone());
                 result.Join(clipping.DeepClone());
                 return true;
