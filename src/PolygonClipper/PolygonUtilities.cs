@@ -10,7 +10,7 @@ namespace SixLabors.PolygonClipper;
 /// Provides utility methods for performing geometric calculations related to polygons, such as calculating signed areas
 /// and finding intersections of line segments.
 /// </summary>
-internal static class PolygonUtilities
+internal static partial class PolygonUtilities
 {
     /// <summary>
     /// Returns the signed area of a triangle.

@@ -110,7 +110,13 @@ public class GenericTestCases
         Polygon result = PolygonClipper.Union(subject, clipping);
     }
 
-    private static Polygon BuildStarPolygon(int vertexCount, double radius, double centerX, double centerY)
+    /// <summary>Constructs the self-crossing star used by the clipping stress cases.</summary>
+    /// <param name="vertexCount">The odd vertex count.</param>
+    /// <param name="radius">The distance from the centre to each vertex.</param>
+    /// <param name="centerX">The horizontal centre.</param>
+    /// <param name="centerY">The vertical centre.</param>
+    /// <returns>The directed star contour.</returns>
+    internal static Polygon BuildStarPolygon(int vertexCount, double radius, double centerX, double centerY)
     {
         if (vertexCount < 5 || (vertexCount & 1) == 0)
         {

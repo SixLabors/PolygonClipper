@@ -37,7 +37,7 @@ namespace SixLabors.PolygonClipper;
 /// <item><description>Connecting edges: Constructs the resulting polygon by connecting valid segments.</description></item>
 /// </list>
 /// </remarks>
-public class PolygonClipper
+public partial class PolygonClipper
 {
     // Keep a small per-thread hot set of clipper instances. Depth 4 covers common
     // burst usage without retaining many heavyweight buffers per thread.
@@ -191,6 +191,7 @@ public class PolygonClipper
         clipper.unorderedEventQueue.Clear();
         clipper.sortedEvents.Clear();
         clipper.statusLine.Reset(0);
+        clipper.windingSweep?.Reset();
 
         // Avoid keeping very large event buffers alive in thread-static pools.
         if (clipper.GetRetainedEventCapacityScore() > MaxRetainedEventCapacityScore)
@@ -211,11 +212,13 @@ public class PolygonClipper
         this.subject = subject;
         this.clipping = clip;
         this.operation = operation;
+        this.useFillRules = false;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int GetRetainedEventCapacityScore()
-        => this.unorderedEventQueue.Capacity + this.sortedEvents.Capacity + this.statusLine.RetainedCapacity;
+        => this.unorderedEventQueue.Capacity + this.sortedEvents.Capacity + this.statusLine.RetainedCapacity +
+           (this.windingSweep?.RetainedCapacity ?? 0);
 
     /// <summary>
     /// Executes the configured boolean operation for the current subject and clipping polygons.
@@ -228,6 +231,13 @@ public class PolygonClipper
         Polygon subject = this.subject ?? throw new InvalidOperationException("Polygon clipper subject is not configured.");
         Polygon clipping = this.clipping ?? throw new InvalidOperationException("Polygon clipper clipping polygon is not configured.");
         BooleanOperation operation = this.operation;
+
+        if (this.useFillRules)
+        {
+            this.sortedEvents.Clear();
+            WindingSweep sweep = this.windingSweep ??= new WindingSweep();
+            return sweep.Run(subject, clipping, operation, this.subjectFillRule, this.clipFillRule, this.sortedEvents, this.comparer);
+        }
 
         // Check for trivial cases that can be resolved without sweeping
         if (TryTrivialOperationForEmptyPolygons(subject, clipping, operation, out Polygon? result))

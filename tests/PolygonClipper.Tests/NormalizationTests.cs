@@ -2508,7 +2508,7 @@ public class NormalizationTests
 
         clipper.AddSubject(subject);
         PathsD solution = [];
-        clipper.Execute(ClipType.Union, FillRule.Positive, solution);
+        clipper.Execute(ClipType.Union, Clipper2Lib.FillRule.Positive, solution);
         return solution;
     }
 

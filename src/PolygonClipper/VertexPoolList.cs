@@ -167,6 +167,10 @@ internal sealed class HorizontalJoinPoolList : PooledList<HorizontalJoin>
 /// </summary>
 internal sealed class SweepEventPoolList : PooledList<SweepEvent>
 {
+    /// <summary>Orders completed native boundary events for edge connection.</summary>
+    /// <param name="comparer">The edge connector's event ordering.</param>
+    public void Sort(SweepEventComparer comparer) => this.Items.AsSpan(0, this.Size).Sort(comparer);
+
     /// <summary>
     /// Adds a sweep event to the active range.
     /// </summary>

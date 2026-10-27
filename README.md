@@ -23,7 +23,7 @@ Contour normalization is handled by a dedicated Vatti/Clipper2-inspired pipeline
 - Works with non-convex polygons, including holes and multiple disjoint regions
 - Handles edge cases like overlapping edges and vertical segments
 - Preserves topology: output polygons include hole/contour hierarchy
-- Deterministic and robust sweep line algorithm with O((n + k) log n) complexity
+- Deterministic sweep line processing
 - Includes `PolygonClipper.Normalize` (Clipper2-inspired) for positive-winding contour normalization
 - Includes `PolygonStroker` for configurable geometric stroking (joins, caps, miter limits)
 - Uses double precision geometry without coordinate quantization
@@ -44,6 +44,28 @@ Polygon clean = PolygonClipper.Normalize(input);
 ```
 
 `Normalize` uses a fixed positive-winding normalization path.
+
+### Explicit fill rules
+
+The V2 overloads accept `EvenOdd`, `NonZero`, `Positive`, and `Negative` fill rules.
+They interpret the original directed contours in one Martínez clipping sweep. They do not run `Normalize` first.
+Counterclockwise contours contribute positive winding and clockwise contours contribute negative winding.
+Input parent and hole metadata do not override the selected rule.
+
+```csharp
+// Interpret both operands using their signed winding counts.
+Polygon result = PolygonClipper.Union(subject, clipping, FillRule.NonZero);
+
+// Select an independent rule for each operand.
+Polygon intersection = PolygonClipper.Intersection(subject, clipping, FillRule.EvenOdd, FillRule.NonZero);
+
+// Resolve one raw operand under an explicit rule without a separate normalization pass.
+Polygon clean = PolygonClipper.Union(input, FillRule.NonZero);
+```
+
+Explicit-rule results have counterclockwise exterior contours, clockwise holes, and no duplicated closing vertex.
+Coordinates must be finite doubles. The existing overloads and `Normalize` retain their existing behaviour.
+Polygon clipping is pure geometry and remains entirely separate from rasterization and rasterizer clipping.
 
 ### Stroking
 
