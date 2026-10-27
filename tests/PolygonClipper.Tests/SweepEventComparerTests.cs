@@ -5,6 +5,17 @@ namespace SixLabors.PolygonClipper.Tests;
 
 public class SweepEventComparerTests
 {
+    [Fact]
+    public void SameEvent_CompareEqual()
+    {
+        SweepEvent first = new(new Vertex(0, 0), true, new SweepEvent(new Vertex(4, 0), false));
+        SweepEventComparer comparer = new();
+
+        Assert.Equal(0, comparer.Compare(first, first));
+        SegmentComparer segments = new();
+        Assert.Equal(0, segments.Compare(first, first));
+    }
+
     private readonly SweepEventComparer comparer = new();
 
     [Fact]

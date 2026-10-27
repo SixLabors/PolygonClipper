@@ -140,22 +140,7 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
 
         this.hasCachedOrientation = true;
 
-        double area = 0;
-        Vertex c;
-        Vertex c1;
-
-        List<Vertex> points = this.vertices;
-        for (int i = 0; i < points.Count - 1; i++)
-        {
-            c = points[i];
-            c1 = points[i + 1];
-            area += Vertex.Cross(c, c1);
-        }
-
-        c = points[^1];
-        c1 = points[0];
-        area += Vertex.Cross(c, c1);
-        return this.cachedCounterClockwise = area >= 0;
+        return this.cachedCounterClockwise = PolygonUtilities.Area(this.vertices) >= 0;
     }
 
     /// <summary>
@@ -216,14 +201,22 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     /// </summary>
     /// <param name="vertex">The vertex to add.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void Add(in Vertex vertex) => this.vertices.Add(vertex);
+    public void Add(in Vertex vertex)
+    {
+        this.vertices.Add(vertex);
+        this.hasCachedOrientation = false;
+    }
 
     /// <summary>
     /// Removes the vertex at the specified index from the contour.
     /// </summary>
     /// <param name="index">The index of the vertex to remove.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public void RemoveVertexAt(int index) => this.vertices.RemoveAt(index);
+    public void RemoveVertexAt(int index)
+    {
+        this.vertices.RemoveAt(index);
+        this.hasCachedOrientation = false;
+    }
 
     /// <summary>
     /// Clears all vertices and holes from the contour.
@@ -232,6 +225,7 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     {
         this.vertices.Clear();
         this.holeIndices.Clear();
+        this.hasCachedOrientation = false;
     }
 
     /// <summary>
@@ -250,6 +244,42 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     /// </summary>
     /// <param name="index">The index of the hole to add.</param>
     public void AddHoleIndex(int index) => this.holeIndices.Add(index);
+
+    /// <summary>
+    /// Moves hierarchy indices into a polygon that already contains contours.
+    /// </summary>
+    /// <param name="offset">The number of preceding contours in the destination.</param>
+    internal void OffsetHierarchyIndices(int offset)
+    {
+        if (this.ParentIndex is int parent)
+        {
+            this.ParentIndex = parent + offset;
+        }
+
+        // Update the owning list in place. Join shares contour instances, so clearing
+        // and then reading the source's holes would erase the same list.
+        for (int i = 0; i < this.holeIndices.Count; i++)
+        {
+            this.holeIndices[i] += offset;
+        }
+    }
+
+    /// <summary>
+    /// Remaps hierarchy indices after contours have been reordered.
+    /// </summary>
+    /// <param name="indices">The destination index for each original contour index.</param>
+    internal void RemapHierarchyIndices(ReadOnlySpan<int> indices)
+    {
+        if (this.ParentIndex is int parent)
+        {
+            this.ParentIndex = indices[parent];
+        }
+
+        for (int i = 0; i < this.holeIndices.Count; i++)
+        {
+            this.holeIndices[i] = indices[this.holeIndices[i]];
+        }
+    }
 
     /// <summary>
     /// Creates a deep copy of this contour.

@@ -1020,6 +1020,8 @@ public class PolygonClipper
         }
 
         Polygon polygon = [];
+        using Buffer<int> contourIndices = new(result.Count);
+        Span<int> indices = contourIndices.GetSpan();
 
         for (int i = 0; i < result.Count; i++)
         {
@@ -1027,15 +1029,24 @@ public class PolygonClipper
             if (contour.IsExternal)
             {
                 // The exterior ring goes first
+                indices[i] = polygon.Count;
                 polygon.Add(contour);
 
                 // Followed by holes if any
                 for (int j = 0; j < contour.HoleCount; j++)
                 {
                     int holeId = contour.GetHoleIndex(j);
+                    indices[holeId] = polygon.Count;
                     polygon.Add(result[holeId]);
                 }
             }
+        }
+
+        // Connectivity used the original contour order. Exported indices must
+        // instead address the exterior/hole order returned to the caller.
+        for (int i = 0; i < polygon.Count; i++)
+        {
+            polygon[i].RemapHierarchyIndices(indices);
         }
 
         return polygon;

@@ -6,6 +6,19 @@ namespace SixLabors.PolygonClipper.Tests;
 public class PolygonUtilitiesTests
 {
     [Fact]
+    public void FindIntersection_TinyCrossingSegments_ReturnsUniqueCrossing()
+    {
+        const double size = 1E-90;
+        Segment first = new(new Vertex(0, 0), new Vertex(size, size));
+        Segment second = new(new Vertex(0, size), new Vertex(size, 0));
+
+        int count = PolygonUtilities.FindIntersection(first, second, out Vertex intersection, out _);
+
+        Assert.Equal(1, count);
+        Assert.Equal(new Vertex(size * 0.5D, size * 0.5D), intersection);
+    }
+
+    [Fact]
     public void AnalyticalSignedArea()
     {
         // Assert negative area
