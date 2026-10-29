@@ -224,10 +224,10 @@ public class PolygonStrokerTests
     public void Stroke_BooleanOutput_RequiresNoClosureConversion()
     {
         Contour square = [new Vertex(0, 0), new Vertex(10, 0), new Vertex(10, 10), new Vertex(0, 10)];
-        Polygon filled = PolygonClipper.Union([square], FillRule.NonZero);
+        Polygon filled = PolygonClipper.Normalize([square], FillRule.NonZero);
 
         Polygon stroke = PolygonStroker.Stroke(filled, 2, new StrokeOptions { LineJoin = LineJoin.Miter });
-        Polygon resolved = PolygonClipper.Union(stroke, FillRule.Positive);
+        Polygon resolved = PolygonClipper.Normalize(stroke, FillRule.Positive);
 
         AssertPolygonIsValid(filled);
         AssertPolygonIsValid(stroke);

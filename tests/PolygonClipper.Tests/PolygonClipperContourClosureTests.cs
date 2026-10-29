@@ -27,7 +27,6 @@ public class PolygonClipperContourClosureTests
         AssertEquivalent(PolygonClipper.Union(subject, clip, rule), PolygonClipper.Union(openSubject, openClip, rule));
         AssertEquivalent(PolygonClipper.Difference(subject, clip, rule), PolygonClipper.Difference(openSubject, openClip, rule));
         AssertEquivalent(PolygonClipper.Xor(subject, clip, rule), PolygonClipper.Xor(openSubject, openClip, rule));
-        AssertEquivalent(PolygonClipper.Union(subject, rule), PolygonClipper.Union(openSubject, rule));
         AssertEquivalent(PolygonClipper.Normalize(subject, rule), PolygonClipper.Normalize(openSubject, rule));
 
         Assert.False(openSubject[0].IsClosed);

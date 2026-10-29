@@ -20,6 +20,7 @@ self-intersections, overlapping edges, and multiple contours.
 ## Clipping
 
 The Boolean operations are `Intersection`, `Union`, `Difference`, and `Xor`.
+Each combines a subject polygon with a clip polygon.
 Each accepts `EvenOdd`, `NonZero`, `Positive`, or `Negative` filling.
 
 ```csharp
@@ -45,13 +46,6 @@ The subject and clip can use different fill rules:
 Polygon result = PolygonClipper.Intersection(subject, clip, FillRule.EvenOdd, FillRule.NonZero);
 ```
 
-To resolve self-intersections and overlaps in one polygon, use unary union:
-
-```csharp
-// Keep every region whose winding count is non-zero.
-Polygon result = PolygonClipper.Union(subject, FillRule.NonZero);
-```
-
 These operations apply the fill rules during the clipping sweep. They do not require
 an input normalization pass. Coordinates must be finite doubles.
 
@@ -62,10 +56,9 @@ Use `NonZero`, `EvenOdd`, or `Positive` filling to consume the resolved area.
 
 ## Normalization
 
-`Normalize(polygon, fillRule)` is unary union. It resolves self-intersections and overlaps,
+`Normalize(polygon, fillRule)` cleans one polygon. It resolves self-intersections and overlaps,
 removes zero-area retraces, and returns the full contour hierarchy.
 It reads the original contour directions without changing the input or applying a preparation pass.
-Small features are not discarded using fixed distance or area thresholds.
 
 ```csharp
 // Clean the NonZero-filled area and retain parent and hole information.
@@ -84,7 +77,7 @@ One polygon can contain both open and closed stroke inputs.
 
 Boolean operations use the filled area of each contour and implicitly close open inputs.
 Both Boolean and stroke output contain closed contours without a repeated closing vertex.
-When `NormalizeOutput` is enabled, stroke cleanup uses unary union with `NonZero` filling.
+When `NormalizeOutput` is enabled, stroke cleanup calls `Normalize` with `NonZero` filling.
 This preserves the raw outlines' filled area for either sign of stroke width.
 
 ```csharp

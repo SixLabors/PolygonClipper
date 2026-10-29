@@ -253,7 +253,7 @@ public sealed class PolygonStroker
 
         // Raw outlines describe a NonZero-filled band. A negative width reverses
         // their winding, so Positive filling would incorrectly erase that band.
-        return PolygonClipper.Union(allContours, FillRule.NonZero);
+        return PolygonClipper.Normalize(allContours, FillRule.NonZero);
     }
 
     /// <summary>

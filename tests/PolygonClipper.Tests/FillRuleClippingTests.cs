@@ -71,7 +71,7 @@ public class FillRuleClippingTests
         FillRule invalid = (FillRule)value;
         Assert.Throws<ArgumentOutOfRangeException>(() => PolygonClipper.Intersection([], [], invalid));
         Assert.Throws<ArgumentOutOfRangeException>(() => PolygonClipper.Intersection([], [], FillRule.NonZero, invalid));
-        Assert.Throws<ArgumentOutOfRangeException>(() => PolygonClipper.Union([], invalid));
+        Assert.Throws<ArgumentOutOfRangeException>(() => PolygonClipper.Normalize([], invalid));
         Assert.Throws<ArgumentOutOfRangeException>(() => new PolygonClipper([], [], BooleanOperation.Union, invalid, FillRule.NonZero));
         Assert.Throws<ArgumentOutOfRangeException>(() => new PolygonClipper([], [], (BooleanOperation)value, FillRule.NonZero, FillRule.NonZero));
     }
@@ -88,10 +88,10 @@ public class FillRuleClippingTests
     {
         Polygon invalid = [Rectangle(0, 0, 2, 2), [new Vertex(coordinate, 0), new Vertex(1, 0), new Vertex(0, 1)]];
 
-        // Empty intersection does not inspect unused geometry. Unary union does.
+        // Empty intersection does not inspect unused geometry. Normalize does.
         Assert.Empty(PolygonClipper.Intersection(invalid, [], FillRule.NonZero));
-        Assert.Throws<ArgumentException>(() => PolygonClipper.Union(invalid, FillRule.NonZero));
-        Assert.Equal(4D, Area(PolygonClipper.Union([Rectangle(0, 0, 2, 2)], FillRule.NonZero)));
+        Assert.Throws<ArgumentException>(() => PolygonClipper.Normalize(invalid, FillRule.NonZero));
+        Assert.Equal(4D, Area(PolygonClipper.Normalize([Rectangle(0, 0, 2, 2)], FillRule.NonZero)));
     }
 
     /// <summary>
@@ -102,12 +102,12 @@ public class FillRuleClippingTests
     [InlineData(FillRule.EvenOdd)]
     [InlineData(FillRule.NonZero)]
     [InlineData(FillRule.Positive)]
-    public void UnaryUnion_NearlyParallelIntegerEdges_PreservesTriangle(FillRule rule)
+    public void Normalize_NearlyParallelIntegerEdges_PreservesTriangle(FillRule rule)
     {
         const double n = 134217728D;
         Contour triangle = [new Vertex(0, 0), new Vertex(n, n + 1), new Vertex(n - 1, n)];
 
-        Polygon result = PolygonClipper.Union([triangle], rule);
+        Polygon result = PolygonClipper.Normalize([triangle], rule);
 
         // The determinant is n*n - (n+1)*(n-1) = 1, so the area is exactly one half.
         Contour boundary = Assert.Single(result);
@@ -137,13 +137,10 @@ public class FillRuleClippingTests
         Polygon original = input.DeepClone();
 
         Polygon cleaned = PolygonClipper.Normalize(input, rule);
-        Polygon union = PolygonClipper.Union(input, rule);
 
         // The clockwise exterior contributes -1. Its counterclockwise inner
         // contour cancels that count in the 6-by-6 hole: 100 - 36 = 64.
         Assert.Equal(expectedArea, Area(cleaned));
-        Assert.Equal(expectedArea, Area(union));
-        Assert.Equal(union.Count, cleaned.Count);
         for (int i = 0; i < input.Count; i++)
         {
             Assert.Equal<Vertex>(original[i], input[i]);
@@ -153,7 +150,6 @@ public class FillRuleClippingTests
         if (expectedArea == 0)
         {
             Assert.Empty(cleaned);
-            Assert.Empty(union);
         }
         else
         {
@@ -167,7 +163,6 @@ public class FillRuleClippingTests
             {
                 Assert.True(cleaned[i].IsClosed);
                 Assert.NotEqual(cleaned[i][0], cleaned[i][^1]);
-                Assert.Equal<Vertex>(union[i], cleaned[i]);
             }
 
             // Resolved output describes an area with positive orientation.
@@ -243,7 +238,6 @@ public class FillRuleClippingTests
         Polygon distant = [Rectangle(10, 10, 20, 20)];
 
         Assert.Empty(PolygonClipper.Normalize(line, rule));
-        Assert.Empty(PolygonClipper.Union(line, rule));
         Assert.Empty(PolygonClipper.Intersection(line, distant, rule, FillRule.NonZero));
         Assert.Empty(PolygonClipper.Difference(line, distant, rule, FillRule.NonZero));
         Assert.Equal(100D, Area(PolygonClipper.Union(line, distant, rule, FillRule.NonZero)));
@@ -277,7 +271,6 @@ public class FillRuleClippingTests
         Polygon input = [Rectangle(0, 0, 10, 10), Rectangle(2, 2, 8, 8), Rectangle(3, 3, 7, 7), Rectangle(4, 4, 6, 6)];
 
         Polygon cleaned = PolygonClipper.Normalize(input, FillRule.EvenOdd);
-        Polygon union = PolygonClipper.Union(input, FillRule.EvenOdd);
 
         Assert.Equal(76D, Area(cleaned));
         Assert.Equal(4, cleaned.Count);
@@ -286,7 +279,6 @@ public class FillRuleClippingTests
             Assert.Equal(i, cleaned[i].Depth);
             Assert.Equal(i == 0 ? (int?)null : i - 1, cleaned[i].ParentIndex);
             Assert.Equal((i & 1) == 0, Area([cleaned[i]]) > 0);
-            Assert.Equal<Vertex>(union[i], cleaned[i]);
             Assert.Equal(i == 3 ? 0 : 1, cleaned[i].HoleCount);
             if (i < 3)
             {
@@ -388,11 +380,11 @@ public class FillRuleClippingTests
     [Theory]
     [InlineData(1E-90)]
     [InlineData(1E90)]
-    public void UnaryUnion_ScaledCrossing_PreservesFilledArea(double scale)
+    public void Normalize_ScaledCrossing_PreservesFilledArea(double scale)
     {
         Polygon input = [[new Vertex(0, 0), new Vertex(10 * scale, 10 * scale), new Vertex(10 * scale, 0), new Vertex(0, 10 * scale)]];
 
-        Polygon result = PolygonClipper.Union(input, FillRule.NonZero);
+        Polygon result = PolygonClipper.Normalize(input, FillRule.NonZero);
 
         Assert.Equal(50D, Area(result) / (scale * scale), 10);
     }
@@ -536,11 +528,11 @@ public class FillRuleClippingTests
     [InlineData(FillRule.NonZero, 100D)]
     [InlineData(FillRule.Positive, 100D)]
     [InlineData(FillRule.Negative, 0D)]
-    public void UnaryUnion_SameDirectionNestedRings_UsesSelectedRule(FillRule rule, double area)
+    public void Normalize_SameDirectionNestedRings_UsesSelectedRule(FillRule rule, double area)
     {
         Polygon input = [Rectangle(0, 0, 10, 10), Rectangle(2, 2, 8, 8)];
 
-        Polygon result = PolygonClipper.Union(input, rule);
+        Polygon result = PolygonClipper.Normalize(input, rule);
 
         Assert.Equal(area, Area(result), 10);
         Assert.Equal(2, input.Count);
@@ -558,11 +550,11 @@ public class FillRuleClippingTests
     [InlineData(FillRule.NonZero, 50D)]
     [InlineData(FillRule.Positive, 25D)]
     [InlineData(FillRule.Negative, 25D)]
-    public void UnaryUnion_Bowtie_ResolvesBothWindingSigns(FillRule rule, double area)
+    public void Normalize_Bowtie_ResolvesBothWindingSigns(FillRule rule, double area)
     {
         Polygon input = [[new Vertex(0, 0), new Vertex(10, 10), new Vertex(10, 0), new Vertex(0, 10)]];
 
-        Polygon result = PolygonClipper.Union(input, rule);
+        Polygon result = PolygonClipper.Normalize(input, rule);
 
         Assert.Equal(area, Area(result), 10);
     }
@@ -596,8 +588,8 @@ public class FillRuleClippingTests
         PolygonClipper manual = new(subject, [], BooleanOperation.Union, FillRule.Negative, FillRule.EvenOdd);
         Assert.Equal(100D, Area(manual.Run()));
         Assert.Equal(100D, Area(manual.Run()));
-        Assert.Equal(0D, Area(PolygonClipper.Union(subject, FillRule.Positive)));
-        Assert.Equal(100D, Area(PolygonClipper.Union(subject, FillRule.Negative)));
+        Assert.Equal(0D, Area(PolygonClipper.Normalize(subject, FillRule.Positive)));
+        Assert.Equal(100D, Area(PolygonClipper.Normalize(subject, FillRule.Negative)));
 
         Polygon evenOdd = PolygonClipper.Union(subject, [], FillRule.EvenOdd);
         Assert.Equal(subject[0].Count, evenOdd[0].Count);
@@ -609,12 +601,12 @@ public class FillRuleClippingTests
     /// Checks double-coordinate behavior without integer scaling.
     /// </summary>
     [Fact]
-    public void UnaryUnion_TranslatedUnitRings_PreservesSmallArea()
+    public void Normalize_TranslatedUnitRings_PreservesSmallArea()
     {
         const double origin = 1E12;
         Polygon input = [Rectangle(origin, origin, origin + 1, origin + 1)];
 
-        Polygon result = PolygonClipper.Union(input, FillRule.NonZero);
+        Polygon result = PolygonClipper.Normalize(input, FillRule.NonZero);
 
         Assert.Equal(1D, Area(result));
         Assert.Equal(origin, result[0].GetBoundingBox().Min.X);

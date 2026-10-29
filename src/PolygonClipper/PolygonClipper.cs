@@ -24,7 +24,7 @@ namespace SixLabors.PolygonClipper;
 /// Contours use implicit closure without a repeated closing vertex.
 /// </para>
 /// <para>
-/// Unary union and Normalize return full containment hierarchies. Binary operations group each exterior contour with its holes.
+/// Normalize returns the full containment hierarchy. Binary operations group each exterior contour with its holes.
 /// </para>
 /// <para>
 /// Coordinates must be finite. Only coordinates used by an operation are validated.
@@ -147,16 +147,6 @@ public class PolygonClipper
         => ExecuteFillOperation(subject, clip, BooleanOperation.Union, subjectFillRule, clipFillRule, ContourOutput.Grouped);
 
     /// <summary>
-    /// Resolves directed contours into their filled area.
-    /// </summary>
-    /// <param name="polygon">The raw directed contours.</param>
-    /// <param name="fillRule">The rule interpreting the contours.</param>
-    /// <returns>The resolved filled area with the full containment hierarchy, without changing the input contours.</returns>
-    /// <remarks>Input hierarchy does not override contour direction or the selected fill rule.</remarks>
-    public static Polygon Union(Polygon polygon, FillRule fillRule)
-        => ExecuteFillOperation(polygon, EmptyFillOperand, BooleanOperation.Union, fillRule, FillRule.EvenOdd, ContourOutput.Nested);
-
-    /// <summary>
     /// Subtracts one filled area from another using a common fill rule.
     /// </summary>
     /// <param name="subject">The area to retain.</param>
@@ -204,16 +194,17 @@ public class PolygonClipper
     /// <param name="polygon">The source contours. Their vertices and directions are not modified.</param>
     /// <param name="fillRule">The rule that determines the source polygon's filled area.</param>
     /// <returns>
-    /// The same cleanup as unary union, with closed contours and their full containment hierarchy.
+    /// Closed contours with their full containment hierarchy.
     /// Exterior contours and islands are counterclockwise. Holes are clockwise.
     /// The first vertex is not repeated at the end of a contour.
     /// </returns>
     /// <remarks>
     /// The fill rule interprets the input. Output orientation is positive even when the input rule is Negative.
+    /// Input hierarchy does not override contour direction or the selected fill rule.
     /// Use NonZero, EvenOdd, or Positive filling when reusing the cleaned polygon.
     /// </remarks>
     public static Polygon Normalize(Polygon polygon, FillRule fillRule)
-        => Union(polygon, fillRule);
+        => ExecuteFillOperation(polygon, EmptyFillOperand, BooleanOperation.Union, fillRule, FillRule.EvenOdd, ContourOutput.Nested);
 
     /// <summary>
     /// Executes the configured Boolean operation using the operand fill rules.
