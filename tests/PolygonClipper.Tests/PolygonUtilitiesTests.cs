@@ -6,6 +6,56 @@ namespace SixLabors.PolygonClipper.Tests;
 public class PolygonUtilitiesTests
 {
     /// <summary>
+    /// Checks a point against a diagonal segment in both operand orders.
+    /// </summary>
+    /// <param name="x">The point's x coordinate.</param>
+    /// <param name="y">The point's y coordinate.</param>
+    /// <param name="expected">Whether the point lies on the segment.</param>
+    [Theory]
+    [InlineData(1D, 1D, 1)]
+    [InlineData(1D, 1.5D, 0)]
+    [InlineData(3D, 3D, 0)]
+    public void FindIntersection_PointAndDiagonal_IsSymmetric(double x, double y, int expected)
+    {
+        Vertex point = new(x, y);
+        Segment singleton = new(point, point);
+        Segment diagonal = new(new(0, 0), new(2, 2));
+        foreach ((Segment first, Segment second) in new[] { (singleton, diagonal), (diagonal, singleton) })
+        {
+            Assert.Equal(expected, PolygonUtilities.FindIntersection(first, second, out Vertex intersection, out _));
+            if (expected == 1)
+            {
+                Assert.Equal(point, intersection);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Checks axis-aligned crossings whose coordinates are supplied by the two source segments.
+    /// </summary>
+    /// <param name="scale">The coordinate scale.</param>
+    [Theory]
+    [InlineData(1D)]
+    [InlineData(1E-90)]
+    [InlineData(1E90)]
+    public void FindIntersection_PerpendicularAxes_ReturnsExactSourceCoordinates(double scale)
+    {
+        Segment horizontal = new(new(0, scale * 0.75D), new(scale, scale * 0.75D));
+        Segment vertical = new(new(scale * 0.25D, 0), new(scale * 0.25D, scale));
+        foreach (Segment first in new[] { horizontal, horizontal.Reverse() })
+        {
+            foreach (Segment second in new[] { vertical, vertical.Reverse() })
+            {
+                foreach ((Segment a, Segment b) in new[] { (first, second), (second, first) })
+                {
+                    Assert.Equal(1, PolygonUtilities.FindIntersection(a, b, out Vertex point, out _));
+                    Assert.Equal(new Vertex(scale * 0.25D, scale * 0.75D), point);
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// Checks overlap when rounded directions suggest a crossing or an endpoint contact.
     /// </summary>
     /// <param name="largeCoordinates">Whether a short overlap lies near a long segment's endpoint.</param>

@@ -69,6 +69,16 @@ internal static class PolygonUtilities
             return 0;
         }
 
+        // A vertical segment and a horizontal segment intersect at existing
+        // source coordinates. The overlapping bounds identify that point
+        // exactly, so determinant construction and division add no information.
+        if ((seg0.IsVertical() && seg1.Source.Y == seg1.Target.Y) ||
+            (seg1.IsVertical() && seg0.Source.Y == seg0.Target.Y))
+        {
+            pi0 = bbox.Value.Min;
+            return 1;
+        }
+
         int interResult = FindIntersectionImpl(seg0, seg1, out pi0, out pi1);
 
         if (interResult == 1)
@@ -174,8 +184,9 @@ internal static class PolygonUtilities
             return 1;
         }
 
-        // Use the original coordinates for the collinearity decision too.
-        if (SignedArea(a1, seg0.Target, a2) != 0)
+        // Use the original coordinates for collinearity. A point has no
+        // supporting direction, so test it against the other segment instead.
+        if ((seg0.IsDegenerate() ? SignedArea(a2, seg1.Target, a1) : SignedArea(a1, seg0.Target, a2)) != 0)
         {
             return 0;
         }
