@@ -66,6 +66,44 @@ internal sealed class SweepEventPoolList : PooledList<SweepEvent>
     public void Sort(SweepEventComparer comparer) => this.Items.AsSpan(0, this.Size).Sort(comparer);
 
     /// <summary>
+    /// Gets the active event references.
+    /// </summary>
+    /// <returns>A read-only span that is valid until this pool changes.</returns>
+    public ReadOnlySpan<SweepEvent> GetEventsSpan() => this.Items.AsSpan(0, this.Size);
+
+    /// <summary>
+    /// Orders outgoing intervals with the sweep's ray comparison.
+    /// </summary>
+    /// <param name="comparison">The ordering of outgoing rays.</param>
+    public void Sort(Comparison<SweepEvent> comparison)
+    {
+        // Ordinary crossings have two outgoing rays. They need one comparison,
+        // without entering the general sort used for larger shared vertices.
+        if (this.Size == 2)
+        {
+            if (comparison(this.Items[0], this.Items[1]) > 0)
+            {
+                (this.Items[0], this.Items[1]) = (this.Items[1], this.Items[0]);
+            }
+        }
+        else if (this.Size > 2)
+        {
+            this.Items.AsSpan(0, this.Size).Sort(comparison);
+        }
+    }
+
+    /// <summary>
+    /// Appends references owned by another sweep pool without copying its inactive slots.
+    /// </summary>
+    /// <param name="source">The active references to append.</param>
+    public void AddRange(SweepEventPoolList source)
+    {
+        this.EnsureCapacity(this.Size + source.Size);
+        source.Items.AsSpan(0, source.Size).CopyTo(this.Items.AsSpan(this.Size));
+        this.Size += source.Size;
+    }
+
+    /// <summary>
     /// Adds a sweep event to the active range.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

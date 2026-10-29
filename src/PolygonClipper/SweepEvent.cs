@@ -12,6 +12,17 @@ namespace SixLabors.PolygonClipper;
 /// </summary>
 internal sealed class SweepEvent
 {
+    private const byte LeftFlag = 1;
+    private const byte ClipFlag = 2;
+
+    // Direction and operand share one byte. Separate stored properties leave
+    // padding in every output endpoint, even though each needs only two bits.
+    private byte flags;
+
+    // Result transitions are -1, 0, or 1. Keep their signed values without
+    // storing a four-byte enum in every completed output endpoint.
+    private sbyte resultTransition;
+
     // Live-only state is allocated and pooled with source intervals. Output
     // history needs only endpoint, transition, and predecessor data, so it must
     // not pay for source support, bundle ledgers, and active-status bookkeeping.
@@ -24,19 +35,16 @@ internal sealed class SweepEvent
     /// <param name="left">Whether the point is the left endpoint of the segment.</param>
     /// <param name="otherEvent">The event associated with the other endpoint of the segment.</param>
     /// <param name="polygonType">The polygon type to which the segment belongs.</param>
-    /// <param name="edgeType">The type of the edge. Default is <see cref="EdgeType.Normal"/>.</param>
     public SweepEvent(
         Vertex point,
         bool left,
         SweepEvent otherEvent,
-        PolygonType polygonType = PolygonType.Subject,
-        EdgeType edgeType = EdgeType.Normal)
+        PolygonType polygonType = PolygonType.Subject)
     {
+        this.flags = polygonType == PolygonType.Clipping ? ClipFlag : (byte)0;
         this.Point = point;
         this.Left = left;
         this.OtherEvent = otherEvent;
-        this.PolygonType = polygonType;
-        this.EdgeType = edgeType;
     }
 
     /// <summary>
@@ -47,10 +55,9 @@ internal sealed class SweepEvent
     /// <param name="polygonType">The polygon type to which the segment belongs.</param>
     public SweepEvent(Vertex point, bool left, PolygonType polygonType = PolygonType.Subject)
     {
+        this.flags = polygonType == PolygonType.Clipping ? ClipFlag : (byte)0;
         this.Point = point;
         this.Left = left;
-        this.PolygonType = polygonType;
-        this.EdgeType = EdgeType.Normal;
     }
 
     /// <summary>
@@ -64,8 +71,6 @@ internal sealed class SweepEvent
         this.Point = point;
         this.Left = left;
         this.ContourId = contourId;
-        this.PolygonType = PolygonType.Subject;
-        this.EdgeType = EdgeType.Normal;
     }
 
     /// <summary>
@@ -77,7 +82,11 @@ internal sealed class SweepEvent
     /// Gets or sets a value indicating whether the point is the
     /// left (source) endpoint of the segment (p, other->p).
     /// </summary>
-    public bool Left { get; set; }
+    public bool Left
+    {
+        get => (this.flags & LeftFlag) != 0;
+        set => this.flags = value ? (byte)(this.flags | LeftFlag) : (byte)(this.flags & ~LeftFlag);
+    }
 
     /// <summary>
     /// Gets or sets the ID of the contour to which the event belongs.
@@ -87,7 +96,7 @@ internal sealed class SweepEvent
     /// <summary>
     /// Gets index of the polygon to which the associated segment belongs to;
     /// </summary>
-    public PolygonType PolygonType { get; }
+    public PolygonType PolygonType => (this.flags & ClipFlag) == 0 ? PolygonType.Subject : PolygonType.Clipping;
 
     /// <summary>
     /// Gets or sets the current terminal point of this live interval.
@@ -129,14 +138,14 @@ internal sealed class SweepEvent
     public SweepEvent Boundary { get => this.interval.Boundary; set => this.interval.Boundary = value; }
 
     /// <summary>
-    /// Gets or sets the number of result intervals at or below this status entry.
-    /// </summary>
-    public int ResultRank { get => this.interval.ResultRank; set => this.interval.ResultRank = value; }
-
-    /// <summary>
     /// Gets or sets the generation identifying this piece in queued endpoint records.
     /// </summary>
     public int Version { get => this.interval.Version; set => this.interval.Version = value; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the current interval version already has a queued endpoint.
+    /// </summary>
+    public bool EndQueued { get => this.interval.EndQueued; set => this.interval.EndQueued = value; }
 
     /// <summary>
     /// Gets or sets a value indicating whether this interval is active.
@@ -144,33 +153,9 @@ internal sealed class SweepEvent
     public bool Active { get => this.interval.Active; set => this.interval.Active = value; }
 
     /// <summary>
-    /// Gets or sets the type of the edge.
-    /// </summary>
-    public EdgeType EdgeType { get; set; }
-
-    /// <summary>
     /// Gets or sets the event associated to the other endpoint of the segment.
     /// </summary>
     public SweepEvent OtherEvent { get; set; }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether the segment (p, other->p) represent an
-    /// inside-outside transition in the polygon for a vertical ray from (p.x, -infinite)
-    /// that crosses the segment.
-    /// </summary>
-    public bool InOut { get; set; }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether the inOut transition for the segment from
-    /// the other polygon preceding this segment in the sweep line.
-    /// </summary>
-    public bool OtherInOut { get; set; }
-
-    /// <summary>
-    /// Gets or sets the sorted sweep events. Only used in "left" events.
-    /// Position of the event (segment) in SL (status line).
-    /// </summary>
-    public int PosSL { get; set; }
 
     /// <summary>
     /// Gets or sets the previous segment in the sweep line  belonging to the result of the
@@ -181,7 +166,11 @@ internal sealed class SweepEvent
     /// <summary>
     /// Gets or sets the transition state of the event in the result.
     /// </summary>
-    public ResultTransition ResultTransition { get; set; }
+    public ResultTransition ResultTransition
+    {
+        get => (ResultTransition)this.resultTransition;
+        set => this.resultTransition = (sbyte)value;
+    }
 
     /// <summary>
     /// Gets a value indicating whether the event contributes to the result.
@@ -189,14 +178,12 @@ internal sealed class SweepEvent
     public bool InResult => this.ResultTransition != ResultTransition.Neutral;
 
     /// <summary>
-    /// Gets or sets the position of the event in the sorted events.
+    /// Gets or sets the active-status index for a source interval or the result-list index for an output endpoint.
     /// </summary>
+    /// <remarks>
+    /// Source intervals and output endpoints are separate instances.
+    /// </remarks>
     public int Pos { get; set; }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether the event is a result in-out transition.
-    /// </summary>
-    public bool ResultInOut { get; set; }
 
     /// <summary>
     /// Gets or sets the output contour ID associated with this contour.
@@ -286,8 +273,9 @@ internal sealed class SweepEvent
         this.Above = default;
         this.Ends = null;
         this.Boundary = null;
-        this.Version = this.ResultRank = this.PosSL = 0;
+        this.Version = this.Pos = 0;
         this.Active = false;
+        this.EndQueued = false;
     }
 
     /// <summary>
@@ -352,11 +340,6 @@ internal sealed class SweepEvent
         public SweepEvent Boundary { get; set; }
 
         /// <summary>
-        /// Gets or sets the number of result intervals at or below this status entry.
-        /// </summary>
-        public int ResultRank { get; set; }
-
-        /// <summary>
         /// Gets or sets the generation identifying this piece in queued endpoint records.
         /// </summary>
         public int Version { get; set; }
@@ -365,5 +348,10 @@ internal sealed class SweepEvent
         /// Gets or sets a value indicating whether this interval is active.
         /// </summary>
         public bool Active { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether this version's endpoint is already in the queue.
+        /// </summary>
+        public bool EndQueued { get; set; }
     }
 }

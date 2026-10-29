@@ -3,6 +3,7 @@
 
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace SixLabors.PolygonClipper;
 
@@ -108,7 +109,7 @@ internal sealed class StatusLine
         }
 
         this.sortedEvents.Insert(index, e);
-        e.PosSL = index;
+        e.Pos = index;
         return index;
     }
 
@@ -125,6 +126,33 @@ internal sealed class StatusLine
     /// <param name="index">The first incoming position.</param>
     /// <param name="count">The number of incoming intervals.</param>
     public void RemoveRange(int index, int count) => this.sortedEvents.RemoveRange(index, count);
+
+    /// <summary>
+    /// Replaces an incident block without shifting the unchanged suffix when its size stays the same.
+    /// </summary>
+    /// <param name="index">The first incident interval.</param>
+    /// <param name="count">The number of intervals to replace.</param>
+    /// <param name="replacement">The outgoing intervals in status order.</param>
+    public void ReplaceRange(int index, int count, ReadOnlySpan<SweepEvent> replacement)
+    {
+        int common = Math.Min(count, replacement.Length);
+        Span<SweepEvent> events = CollectionsMarshal.AsSpan(this.sortedEvents);
+        for (int i = 0; i < common; i++)
+        {
+            events[index + i] = replacement[i];
+        }
+
+        // Crossings normally replace two intervals with two intervals. Only
+        // source endpoints and changing bundles require a suffix move.
+        if (replacement.Length > count)
+        {
+            this.sortedEvents.InsertRange(index + count, replacement[count..]);
+        }
+        else if (replacement.Length < count)
+        {
+            this.sortedEvents.RemoveRange(index + replacement.Length, count - replacement.Length);
+        }
+    }
 
     /// <summary>
     /// Finds the first interval not strictly below the complete event point.
@@ -172,7 +200,7 @@ internal sealed class StatusLine
     {
         List<SweepEvent> events = this.sortedEvents;
         int count = events.Count;
-        int hint = e.PosSL;
+        int hint = e.Pos;
 
         if ((uint)hint < (uint)count && ReferenceEquals(events[hint], e))
         {
@@ -184,7 +212,7 @@ internal sealed class StatusLine
         {
             if (ReferenceEquals(events[index], e))
             {
-                e.PosSL = index;
+                e.Pos = index;
                 return index;
             }
 
@@ -193,7 +221,7 @@ internal sealed class StatusLine
             {
                 if (ReferenceEquals(events[i], e))
                 {
-                    e.PosSL = i;
+                    e.Pos = i;
                     return i;
                 }
             }
@@ -202,7 +230,7 @@ internal sealed class StatusLine
             {
                 if (ReferenceEquals(events[i], e))
                 {
-                    e.PosSL = i;
+                    e.Pos = i;
                     return i;
                 }
             }
@@ -213,7 +241,7 @@ internal sealed class StatusLine
         {
             if (ReferenceEquals(events[i], e))
             {
-                e.PosSL = i;
+                e.Pos = i;
                 return i;
             }
         }

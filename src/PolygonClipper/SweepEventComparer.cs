@@ -87,7 +87,7 @@ internal sealed class SweepEventComparer : IComparer<SweepEvent>, IComparer<Poly
         int order = this.Compare(x.Point, y.Point);
         if (order == 0)
         {
-            order = x.Edge.ContourId.CompareTo(y.Edge.ContourId);
+            order = x.EdgeIndex.CompareTo(y.EdgeIndex);
         }
 
         if (order == 0)

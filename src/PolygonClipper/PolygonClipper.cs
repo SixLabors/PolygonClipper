@@ -2,6 +2,7 @@
 // Licensed under the Six Labors Split License.
 
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace SixLabors.PolygonClipper;
 
@@ -52,12 +53,12 @@ public class PolygonClipper
     private readonly List<QueueEntry> eventStorage = [];
     private readonly StablePriorityQueue<QueueEntry, SweepEventComparer> events;
     private readonly SweepEventPoolList segments = [];
-    private readonly StatusLine activeResult = new();
-    private readonly List<SweepEvent> outgoing = [];
-    private readonly List<SweepEvent> bundled = [];
-    private readonly List<SweepEvent> pendingBoundaries = [];
+    private readonly SweepEventPoolList outgoing = [];
+    private readonly SweepEventPoolList bundled = [];
+    private readonly SweepEventPoolList pendingBoundaries = [];
     private readonly Stack<PriorityQueue<WindingCount, Vertex>> endpointQueues = new();
     private int retainedEndpointCapacity;
+    private int activeBoundaryCount;
 
     private Polygon? subject;
     private Polygon? clipping;
@@ -264,30 +265,31 @@ public class PolygonClipper
         {
             // Bounds exclude any further filled result. Finish active boundaries
             // first because an ordering repair can move their endpoint by one ULP.
-            if (this.events.Peek().Point.X > stopX && this.activeResult.Count == 0)
+            if (this.events.Peek().Point.X > stopX && this.activeBoundaryCount == 0)
             {
                 break;
             }
 
             QueueEntry next = this.events.Dequeue();
-            if (!next.IsValid)
+            SweepEvent queuedEdge = this.segments[next.EdgeIndex];
+            if (!next.IsValid(queuedEdge))
             {
                 continue;
             }
 
             Vertex point = next.Point;
-            bool sourcePoint = next.IsStart || point == next.Edge.SourceEnd;
+            bool sourcePoint = next.IsStart || point == queuedEdge.SourceEnd;
             this.outgoing.Clear();
             this.pendingBoundaries.Clear();
             int firstEnd = int.MaxValue;
             int lastEnd = -1;
             if (next.IsStart)
             {
-                this.outgoing.Add(next.Edge);
+                this.outgoing.Add(queuedEdge);
             }
             else
             {
-                firstEnd = lastEnd = next.Edge.PosSL;
+                firstEnd = lastEnd = queuedEdge.Pos;
             }
 
             // A vertex is a transaction, not a sequence of parity toggles.
@@ -295,19 +297,21 @@ public class PolygonClipper
             while (this.events.Count > 0 && this.events.Peek().Point == point)
             {
                 next = this.events.Dequeue();
-                if (next.IsValid && (next.IsStart || point == next.Edge.SourceEnd))
+                queuedEdge = this.segments[next.EdgeIndex];
+                bool valid = next.IsValid(queuedEdge);
+                if (valid && (next.IsStart || point == queuedEdge.SourceEnd))
                 {
                     sourcePoint = true;
                 }
 
-                if (next.IsValid && next.IsStart)
+                if (valid && next.IsStart)
                 {
-                    this.outgoing.Add(next.Edge);
+                    this.outgoing.Add(queuedEdge);
                 }
-                else if (next.IsValid)
+                else if (valid)
                 {
-                    firstEnd = Math.Min(firstEnd, next.Edge.PosSL);
-                    lastEnd = Math.Max(lastEnd, next.Edge.PosSL);
+                    firstEnd = Math.Min(firstEnd, queuedEdge.Pos);
+                    lastEnd = Math.Max(lastEnd, queuedEdge.Pos);
                 }
             }
 
@@ -323,21 +327,6 @@ public class PolygonClipper
                 after++;
             }
 
-            // The result index is a filtered view of the very same block.
-            // Derive removals from the owned interval identities, so rounded
-            // incidence tests cannot remove a boundary independently of its
-            // source interval and leave a stale birth context behind.
-            int firstResult = first == 0 ? 0 : this.statusLine[first - 1].ResultRank;
-            int afterResult = firstResult;
-            for (int i = first; i < after; i++)
-            {
-                SweepEvent incoming = this.statusLine[i];
-                if (incoming.Boundary is not null)
-                {
-                    afterResult++;
-                }
-            }
-
             // The surviving lower interval is outside the changed block.
             // Closure conserves the sum of signed contributions, so its
             // prefix and every surviving prefix above the block stay valid.
@@ -346,18 +335,19 @@ public class PolygonClipper
                 this.StageIncoming(this.statusLine[i], point);
             }
 
-            this.statusLine.RemoveRange(first, after - first);
-            this.activeResult.RemoveRange(firstResult, afterResult - firstResult);
+            int statusCount = this.statusLine.Count;
+            int blockCount = after - first;
 
             while (true)
             {
                 this.outgoing.Sort(SegmentComparer.CompareRays);
                 this.BundleOutgoing();
+                this.statusLine.ReplaceRange(first, blockCount, this.bundled.GetEventsSpan());
+                blockCount = this.bundled.Count;
                 for (int i = 0; i < this.bundled.Count; i++)
                 {
                     SweepEvent edge = this.bundled[i];
                     edge.Active = true;
-                    this.statusLine.Insert(first + i, edge);
                 }
 
                 // Rounded intersections can equal this point even when the
@@ -372,7 +362,6 @@ public class PolygonClipper
                     break;
                 }
 
-                this.statusLine.RemoveRange(first, this.bundled.Count);
                 this.outgoing.Clear();
                 this.outgoing.AddRange(this.bundled);
                 foreach (SweepEvent edge in this.outgoing)
@@ -381,29 +370,20 @@ public class PolygonClipper
                     // future endpoint queued while checking the staged block.
                     edge.Active = false;
                     edge.Version++;
+                    edge.EndQueued = false;
                 }
 
                 if (lowerIncident)
                 {
                     SweepEvent incoming = this.statusLine[--first];
-                    if (incoming.Boundary is not null)
-                    {
-                        this.activeResult.RemoveAt(--firstResult);
-                    }
-
-                    this.statusLine.RemoveAt(first);
+                    blockCount++;
                     this.StageIncoming(incoming, point);
                 }
 
                 if (upperIncident)
                 {
-                    SweepEvent incoming = this.statusLine[first];
-                    if (incoming.Boundary is not null)
-                    {
-                        this.activeResult.RemoveAt(firstResult);
-                    }
-
-                    this.statusLine.RemoveAt(first);
+                    SweepEvent incoming = this.statusLine[first + blockCount];
+                    blockCount++;
                     this.StageIncoming(incoming, point);
                 }
             }
@@ -417,22 +397,35 @@ public class PolygonClipper
             }
 
             WindingCount winding = first == 0 ? default : this.statusLine[first - 1].Above;
-            SweepEvent? previousBoundary = firstResult == 0 ? null : this.activeResult[firstResult - 1].Boundary;
-            if (firstResult > 0 && this.activeResult[firstResult - 1].Point.X == this.activeResult[firstResult - 1].End.X)
-            {
-                previousBoundary = previousBoundary!.PrevInResult;
-            }
-
-            int resultIndex = firstResult;
+            bool below = InResult(winding, operation, subjectRule, clipRule);
+            SweepEvent? previousBoundary = null;
+            bool hasBoundaryContext = false;
             for (int i = 0; i < this.bundled.Count; i++)
             {
                 SweepEvent edge = this.bundled[i];
-                bool below = InResult(winding, operation, subjectRule, clipRule);
                 winding = winding.Add(edge.Delta);
                 edge.Above = winding;
                 bool above = InResult(winding, operation, subjectRule, clipRule);
                 if (below != above)
                 {
+                    // Interior crossings emit nothing and need no output
+                    // predecessor. For a boundary, the first contributing
+                    // interval below this complete block owns that context.
+                    if (!hasBoundaryContext)
+                    {
+                        for (int j = first - 1; j >= 0; j--)
+                        {
+                            SweepEvent lower = this.statusLine[j];
+                            if (lower.Boundary is not null)
+                            {
+                                previousBoundary = lower.Point.X == lower.End.X ? lower.Boundary.PrevInResult : lower.Boundary;
+                                break;
+                            }
+                        }
+
+                        hasBoundaryContext = true;
+                    }
+
                     // Endpoint pairing is completed when the interval ends.
                     // No geometry consumer reads this event until connection.
                     edge.Boundary = resultEvents.Add(
@@ -442,32 +435,58 @@ public class PolygonClipper
                         above ? ResultTransition.Contributing : ResultTransition.NonContributing,
                         previousBoundary!,
                         edge.ContourId);
+                    this.activeBoundaryCount++;
 
                     if (edge.Point.X != edge.End.X)
                     {
                         previousBoundary = edge.Boundary;
                     }
-
-                    this.activeResult.Insert(resultIndex++, edge);
                 }
 
-                this.events.Enqueue(new QueueEntry(edge.End, edge, false));
+                // The next interval starts in this interval's upper region.
+                // Carry its membership instead of evaluating the same winding twice.
+                below = above;
+
+                // Neighbor intersection discovery can already have queued this
+                // version's shortened endpoint. Keep one record per version.
+                if (!edge.EndQueued)
+                {
+                    this.events.Enqueue(new QueueEntry(edge.End, edge, false));
+                    edge.EndQueued = true;
+                }
+
+                edge.Pos = first + i;
             }
 
-            // List insertion/removal already shifts this suffix. Keep the
-            // endpoint anchors and filtered-boundary ranks in the same order.
-            // Winding counts above the changed block do not need recomputing.
-            int resultRank = firstResult;
-            for (int i = first; i < this.statusLine.Count; i++)
+            // Crossings keep full-status positions unchanged. Only births,
+            // deaths, and changing bundles move the unchanged suffix.
+            if (this.statusLine.Count != statusCount)
             {
-                SweepEvent edge = this.statusLine[i];
-                edge.PosSL = i;
-                if (edge.Boundary is not null)
+                for (int i = first + this.bundled.Count; i < this.statusLine.Count; i++)
                 {
-                    resultRank++;
+                    SweepEvent edge = this.statusLine[i];
+                    edge.Pos = i;
+                }
+            }
+
+            // Each source interval owns at most one valid queued start or end.
+            // Above twice the interval count, at least half the heap is obsolete.
+            // Rebuild only then, so each scan is paid for by discarded versions
+            // and old endpoints cannot grow the queue with every intersection.
+            if (this.eventStorage.Count > this.segments.Count * 2)
+            {
+                Span<QueueEntry> queued = CollectionsMarshal.AsSpan(this.eventStorage);
+                int count = 0;
+                for (int i = 0; i < queued.Length; i++)
+                {
+                    if (queued[i].IsValid(this.segments[queued[i].EdgeIndex]))
+                    {
+                        queued[count++] = queued[i];
+                    }
                 }
 
-                edge.ResultRank = resultRank;
+                this.eventStorage.RemoveRange(count, this.eventStorage.Count - count);
+                this.events.Heapify();
             }
         }
 
@@ -624,7 +643,7 @@ public class PolygonClipper
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private int GetRetainedEventCapacityScore()
         => this.sortedEvents.Capacity + this.eventStorage.Capacity + this.segments.Capacity + this.statusLine.RetainedCapacity +
-           this.activeResult.RetainedCapacity + this.outgoing.Capacity + this.bundled.Capacity +
+           this.outgoing.Capacity + this.bundled.Capacity +
            this.pendingBoundaries.Capacity + this.retainedEndpointCapacity;
 
     /// <summary>
@@ -651,10 +670,10 @@ public class PolygonClipper
     {
         this.eventStorage.Clear();
         this.statusLine.Reset(0);
-        this.activeResult.Reset(0);
         this.outgoing.Clear();
         this.bundled.Clear();
         this.pendingBoundaries.Clear();
+        this.activeBoundaryCount = 0;
         for (int i = 0; i < this.segments.Count; i++)
         {
             if (this.segments[i].Ends is PriorityQueue<WindingCount, Vertex> ends)
@@ -732,9 +751,11 @@ public class PolygonClipper
     {
         incoming.Active = false;
         incoming.Version++;
+        incoming.EndQueued = false;
         if (incoming.Boundary is SweepEvent boundary)
         {
             this.pendingBoundaries.Add(boundary);
+            this.activeBoundaryCount--;
         }
 
         this.ContinueAt(incoming, point);
@@ -1016,6 +1037,7 @@ public class PolygonClipper
         edge.End = intersection;
         edge.Version++;
         this.events.Enqueue(new QueueEntry(intersection, edge, false));
+        edge.EndQueued = true;
     }
 
     /// <summary>
@@ -1028,14 +1050,12 @@ public class PolygonClipper
     /// <returns>Whether the region belongs to the result.</returns>
     private static bool InResult(WindingCount count, BooleanOperation operation, FillRule subjectRule, FillRule clipRule)
     {
-        bool subject = Filled(count.Subject, subjectRule);
-        bool clip = Filled(count.Clip, clipRule);
         return operation switch
         {
-            BooleanOperation.Intersection => subject && clip,
-            BooleanOperation.Union => subject || clip,
-            BooleanOperation.Difference => subject && !clip,
-            _ => subject ^ clip
+            BooleanOperation.Intersection => Filled(count.Subject, subjectRule) && Filled(count.Clip, clipRule),
+            BooleanOperation.Union => Filled(count.Subject, subjectRule) || Filled(count.Clip, clipRule),
+            BooleanOperation.Difference => Filled(count.Subject, subjectRule) && !Filled(count.Clip, clipRule),
+            _ => Filled(count.Subject, subjectRule) ^ Filled(count.Clip, clipRule)
         };
     }
 
@@ -1084,10 +1104,17 @@ public class PolygonClipper
             }
         }
 
-        ReadOnlySpan<int> iterationMap = PrecomputeIterationOrder(resultEvents);
+        using Buffer<int> iterationBuffer = new(resultEvents.Count);
+        Span<int> iterationMap = iterationBuffer.GetSpan();
+        PrecomputeIterationOrder(resultEvents, iterationMap);
 
         Polygon result = [];
-        Span<bool> processed = new bool[resultEvents.Count];
+        using Buffer<bool> processedBuffer = new(resultEvents.Count);
+        Span<bool> processed = processedBuffer.GetSpan();
+
+        // Every iteration-map slot is assigned, but processed flags must
+        // start clear because pooled storage can contain flags from a prior run.
+        processed.Clear();
         for (int i = 0; i < resultEvents.Count; i++)
         {
             if (processed[i])
@@ -1113,13 +1140,20 @@ public class PolygonClipper
                 Vertex point = resultEvents[pos].Point;
                 contour.Add(point);
 
+                // Closing the contour needs no further edge. Searching here
+                // would revisit processed rays at a shared starting vertex.
+                if (point == initial)
+                {
+                    break;
+                }
+
                 pos = NextPos(pos, processed, iterationMap, out bool found);
                 if (!found)
                 {
                     break;
                 }
             }
-            while (resultEvents[pos].Point != initial);
+            while (true);
 
             result.Add(contour);
         }
@@ -1129,7 +1163,7 @@ public class PolygonClipper
             return result;
         }
 
-        Polygon polygon = [];
+        Polygon polygon = new(result.Count);
         using Buffer<int> contourIndices = new(result.Count);
         Span<int> indices = contourIndices.GetSpan();
 
@@ -1166,11 +1200,9 @@ public class PolygonClipper
     /// Builds the incident boundary order used to trace connected contours.
     /// </summary>
     /// <param name="data">The fully sorted, paired output events.</param>
-    /// <returns>The next incident event index for each boundary endpoint.</returns>
-    private static ReadOnlySpan<int> PrecomputeIterationOrder(SweepEventPoolList data)
+    /// <param name="map">Receives the next incident event index for every boundary endpoint.</param>
+    private static void PrecomputeIterationOrder(SweepEventPoolList data, Span<int> map)
     {
-        Span<int> map = new int[data.Count];
-
         int i = 0;
         while (i < data.Count)
         {
@@ -1246,8 +1278,6 @@ public class PolygonClipper
                 }
             }
         }
-
-        return map;
     }
 
     /// <summary>
@@ -1274,7 +1304,9 @@ public class PolygonClipper
     /// <returns>The initialized <see cref="Contour"/>.</returns>
     private Contour InitializeContourFromContext(SweepEvent sweepEvent, Polygon polygon, int contourId)
     {
-        Contour contour = [];
+        // A triangle needs three vertices and its closing vertex during tracing.
+        // Reserve those slots instead of growing the list on the first Add.
+        Contour contour = new(4);
         if (this.contourOutput == ContourOutput.Nested)
         {
             if (sweepEvent.PrevInResult is SweepEvent lower)
@@ -1440,19 +1472,14 @@ public class PolygonClipper
         public readonly Vertex Point;
 
         /// <summary>
-        /// The associated interval.
+        /// The source pool index, complemented for a start record.
         /// </summary>
-        public readonly SweepEvent Edge;
+        private readonly int sourceIndex;
 
         /// <summary>
         /// The interval version when queued.
         /// </summary>
         public readonly int Version;
-
-        /// <summary>
-        /// Whether this record starts a source interval.
-        /// </summary>
-        public readonly bool IsStart;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="QueueEntry"/> struct.
@@ -1463,14 +1490,29 @@ public class PolygonClipper
         public QueueEntry(Vertex point, SweepEvent edge, bool isStart)
         {
             this.Point = point;
-            this.Edge = edge;
+
+            // Pool indices remain stable until the operation ends. Encoding
+            // start/end in their sign keeps every version bit and removes the
+            // managed reference, so heap movement needs no GC write barriers.
+            this.sourceIndex = isStart ? ~edge.ContourId : edge.ContourId;
             this.Version = edge.Version;
-            this.IsStart = isStart;
         }
 
         /// <summary>
-        /// Gets a value indicating whether the representative still owns this queued record.
+        /// Gets a value indicating whether this record starts a source interval.
         /// </summary>
-        public bool IsValid => this.Version == this.Edge.Version && (this.IsStart || this.Edge.Active);
+        public bool IsStart => this.sourceIndex < 0;
+
+        /// <summary>
+        /// Gets the stable index in the source interval pool.
+        /// </summary>
+        public int EdgeIndex => this.sourceIndex < 0 ? ~this.sourceIndex : this.sourceIndex;
+
+        /// <summary>
+        /// Checks whether the source interval still owns this queued record.
+        /// </summary>
+        /// <param name="edge">The interval at <see cref="EdgeIndex"/>.</param>
+        /// <returns>Whether the interval version and activity match.</returns>
+        public bool IsValid(SweepEvent edge) => this.Version == edge.Version && (this.IsStart || edge.Active);
     }
 }

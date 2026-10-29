@@ -26,7 +26,7 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     /// <summary>
     /// Set of vertices conforming the external contour
     /// </summary>
-    private readonly List<Vertex> vertices = [];
+    private readonly List<Vertex> vertices;
 
     /// <summary>
     /// Holes of the contour. They are stored as the indexes of
