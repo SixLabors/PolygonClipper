@@ -32,7 +32,7 @@ public class PolygonTests
         Polygon subject = [CreateSquare(0, 0, 100), CreateSquare(40, 40, 20), CreateSquare(20, -20, 5)];
         Polygon clip = [CreateSquare(-30, -30, 160)];
 
-        Polygon result = PolygonClipper.Intersection(subject, clip);
+        Polygon result = PolygonClipper.Intersection(subject, clip, FillRule.EvenOdd);
 
         Assert.Equal(3, result.Count);
         Contour outer = Assert.Single(result, contour => contour.HoleCount == 1);

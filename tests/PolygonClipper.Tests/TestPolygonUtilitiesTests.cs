@@ -35,11 +35,11 @@ public class TestPolygonUtilitiesTests
     [Fact]
     public void PolygonClipper_Union_Profile_Test()
     {
-        Polygon solution = PolygonClipper.Union(Polygons.Subject, Polygons.Clipping);
+        Polygon solution = PolygonClipper.Union(Polygons.Subject, Polygons.Clipping, FillRule.EvenOdd);
         Assert.NotNull(solution);
 
         Assert.Equal(2, solution.Count);
-        Assert.Equal(122, solution[0].Count);
-        Assert.Equal(9, solution[1].Count);
+        Assert.Equal(121, solution[0].Count);
+        Assert.Equal(8, solution[1].Count);
     }
 }

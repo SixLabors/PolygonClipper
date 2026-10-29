@@ -13,8 +13,8 @@ public sealed class StrokeOptions : IEquatable<StrokeOptions?>
     /// resolving self-intersections and overlaps before returning.
     /// </summary>
     /// <remarks>
-    /// Defaults to <see langword="false"/> for maximum throughput.
-    /// When disabled, callers should rasterize with a non-zero winding fill rule.
+    /// Defaults to <see langword="false"/>.
+    /// Raw outlines describe their filled area using the NonZero fill rule.
     /// </remarks>
     public bool NormalizeOutput { get; set; }
 

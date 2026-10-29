@@ -182,14 +182,18 @@ public readonly struct Vertex : IEquatable<Vertex>
         return determinant + secondError;
     }
 
-    /// <summary>Computes the Euclidean distance between the two given vertices.</summary>
+    /// <summary>
+    /// Computes the Euclidean distance between the two given vertices.
+    /// </summary>
     /// <param name="a">The first vertex.</param>
     /// <param name="b">The second vertex.</param>
     /// <returns>The distance.</returns>
     public static double Distance(in Vertex a, in Vertex b)
         => double.Sqrt(DistanceSquared(a, b));
 
-    /// <summary>Returns the Euclidean distance squared between two specified vertices.</summary>
+    /// <summary>
+    /// Returns the Euclidean distance squared between two specified vertices.
+    /// </summary>
     /// <param name="a">The first vertex.</param>
     /// <param name="b">The second vertex.</param>
     /// <returns>The distance squared.</returns>
@@ -204,7 +208,9 @@ public readonly struct Vertex : IEquatable<Vertex>
     public double Length()
         => double.Sqrt(this.LengthSquared());
 
-    /// <summary>Returns the length of the vertex squared.</summary>
+    /// <summary>
+    /// Returns the length of the vertex squared.
+    /// </summary>
     /// <returns>The vertex's length squared.</returns>
     /// <remarks>This operation offers better performance than a call to the <see cref="Length" /> method.</remarks>
     /// <altmember cref="Length" />

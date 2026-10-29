@@ -36,15 +36,16 @@ public class Benches
         this.clipperClipping = BuildClipperPaths(clipping);
     }
 
-    [Benchmark]
-    public Polygon PolygonClipper() => SixLabors.PolygonClipper.PolygonClipper.Union(this.subject, this.clipping);
-
-    /// <summary>Measures explicit parity clipping on the same raw geometry as the legacy API.</summary>
+    /// <summary>
+    /// Measures even-odd union on the raw input contours.
+    /// </summary>
     /// <returns>The clipped geometry.</returns>
     [Benchmark]
     public Polygon PolygonClipperEvenOdd() => SixLabors.PolygonClipper.PolygonClipper.Union(this.subject, this.clipping, FillRule.EvenOdd);
 
-    /// <summary>Measures non-zero clipping without a separate normalization operation.</summary>
+    /// <summary>
+    /// Measures non-zero clipping without a separate normalization operation.
+    /// </summary>
     /// <returns>The clipped geometry.</returns>
     [Benchmark]
     public Polygon PolygonClipperNonZero() => SixLabors.PolygonClipper.PolygonClipper.Union(this.subject, this.clipping, FillRule.NonZero);

@@ -3,7 +3,7 @@
 
 namespace SixLabors.PolygonClipper.Tests;
 
-public class FloatExtensionsTests
+public class DoubleExtensionsTests
 {
     public static TheoryData<double, double, double> NextAfterTestData => new()
     {

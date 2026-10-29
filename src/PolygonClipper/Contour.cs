@@ -4,16 +4,16 @@
 using System.Collections;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace SixLabors.PolygonClipper;
 
 /// <summary>
-/// Represents a single polygon ring (outer contour or hole).
+/// Represents an open or closed sequence of vertices.
 /// </summary>
 /// <remarks>
-/// A contour is treated as implicitly closed: an edge is always considered between the last
-/// vertex and the first vertex. A duplicated terminal closing vertex is optional on input
-/// but not required.
+/// Stroking respects <see cref="IsClosed"/>. Filled-area operations implicitly close the
+/// contour regardless of that value. A repeated closing vertex is optional on input.
 /// </remarks>
 [DebuggerDisplay("Count = {Count}")]
 #pragma warning disable CA1710 // Identifiers should have correct suffix
@@ -57,22 +57,32 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     }
 
     /// <summary>
-    /// Gets the number of holes.
+    /// Gets or sets a value indicating whether the source contour is closed.
+    /// </summary>
+    /// <remarks>
+    /// The default is true. Stroking respects this value.
+    /// Filled-area operations implicitly close the contour regardless of this value.
+    /// </remarks>
+    public bool IsClosed { get; set; } = true;
+
+    /// <summary>
+    /// Gets the number of directly nested child contours.
     /// </summary>
     public int HoleCount => this.holeIndices.Count;
 
     /// <summary>
-    /// Gets a value indicating whether the contour is external (not a hole).
+    /// Gets a value indicating whether the contour has no parent contour.
     /// </summary>
+    /// <remarks>In a full containment hierarchy, even depths identify exterior contours and islands.</remarks>
     public bool IsExternal => this.ParentIndex == null;
 
     /// <summary>
-    /// Gets or sets the index of the parent contour in the polygon if this contour is a hole.
+    /// Gets or sets the index of the contour that directly contains this contour.
     /// </summary>
     public int? ParentIndex { get; set; }
 
     /// <summary>
-    /// Gets or sets the depth of the contour.
+    /// Gets or sets the number of ancestors of this contour.
     /// </summary>
     public int Depth { get; set; }
 
@@ -88,14 +98,14 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     }
 
     /// <summary>
-    /// Gets the hole index at the specified position in the contour.
+    /// Gets the child contour index at the specified position.
     /// </summary>
-    /// <param name="index">The index of the hole.</param>
-    /// <returns>The hole index.</returns>
+    /// <param name="index">The position in the child contour list.</param>
+    /// <returns>The child's index in the owning polygon.</returns>
     public int GetHoleIndex(int index) => this.holeIndices[index];
 
     /// <summary>
-    /// Gets the segment at the specified index of the contour.
+    /// Gets the filled-area boundary segment at the specified index.
     /// </summary>
     /// <param name="index">The index of the segment.</param>
     /// <returns>The <see cref="Segment"/>. The final segment wraps from last vertex to first vertex.</returns>
@@ -103,6 +113,13 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
         => (index == this.Count - 1)
         ? new Segment(this.vertices[^1], this.vertices[0])
         : new Segment(this.vertices[index], this.vertices[index + 1]);
+
+    /// <summary>
+    /// Gets a read-only span of the vertices in this contour.
+    /// </summary>
+    /// <returns>The vertex span.</returns>
+    /// <remarks>Do not add or remove vertices while using the span.</remarks>
+    internal ReadOnlySpan<Vertex> AsVertexSpan() => CollectionsMarshal.AsSpan(this.vertices);
 
     /// <summary>
     /// Gets the bounding box of the contour.
@@ -126,7 +143,7 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     }
 
     /// <summary>
-    /// Gets a value indicating whether the contour is counterclockwise oriented
+    /// Determines whether the implicitly closed contour has counterclockwise orientation.
     /// </summary>
     /// <returns>
     /// <see langword="true"/> if the contour is counterclockwise oriented; otherwise <see langword="false"/>.
@@ -144,7 +161,7 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     }
 
     /// <summary>
-    /// Gets a value indicating whether the contour is clockwise oriented
+    /// Determines whether the implicitly closed contour has clockwise orientation.
     /// </summary>
     /// <returns>
     /// <see langword="true"/> if the contour is clockwise oriented; otherwise <see langword="false"/>.
@@ -219,8 +236,9 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     }
 
     /// <summary>
-    /// Clears all vertices and holes from the contour.
+    /// Clears all vertices and child contour indices.
     /// </summary>
+    /// <remarks>The closure state is unchanged.</remarks>
     public void Clear()
     {
         this.vertices.Clear();
@@ -229,7 +247,7 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     }
 
     /// <summary>
-    /// Clears all holes from the contour.
+    /// Clears all child contour indices.
     /// </summary>
     public void ClearHoles() => this.holeIndices.Clear();
 
@@ -240,9 +258,9 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     public Vertex GetLastVertex() => this.vertices[^1];
 
     /// <summary>
-    /// Adds a hole index to the contour.
+    /// Adds an index to the child contour list.
     /// </summary>
-    /// <param name="index">The index of the hole to add.</param>
+    /// <param name="index">The child's index in the owning polygon.</param>
     public void AddHoleIndex(int index) => this.holeIndices.Add(index);
 
     /// <summary>
@@ -289,6 +307,7 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     {
         Contour clone = new(this.vertices.Count)
         {
+            IsClosed = this.IsClosed,
             ParentIndex = this.ParentIndex,
             Depth = this.Depth,
             hasCachedOrientation = this.hasCachedOrientation,

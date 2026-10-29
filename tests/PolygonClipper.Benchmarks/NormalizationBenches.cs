@@ -34,7 +34,7 @@ public class NormalizationBenches
 
     [Benchmark]
     public Polygon Normalize()
-        => PolygonClipper.Normalize(this.polygon);
+        => PolygonClipper.Normalize(this.polygon, FillRule.Positive);
 
     [Benchmark(Baseline = true)]
     public PolyTreeD Clipper2Union()

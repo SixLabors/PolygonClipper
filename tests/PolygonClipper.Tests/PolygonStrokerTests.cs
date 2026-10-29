@@ -86,6 +86,8 @@ public class PolygonStrokerTests
             new Vertex(0, 0)
         ]];
 
+        open[0].IsClosed = false;
+
         Polygon openResult = PolygonStroker.Stroke(open, width, options);
         Polygon closedResult = PolygonStroker.Stroke(closed, width, options);
 
@@ -97,6 +99,300 @@ public class PolygonStrokerTests
         Assert.True(
             Math.Abs(openArea - closedArea) > 1E-6D,
             $"Open and closed path strokes should differ. openArea={openArea:R}, closedArea={closedArea:R}.");
+    }
+
+    /// <summary>
+    /// Checks that source closure selects the closing segment without changing output closure.
+    /// </summary>
+    /// <param name="normalizeOutput">Whether to resolve the generated outlines.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Stroke_ThreePointSource_ClosureSelectsFinalSegment(bool normalizeOutput)
+    {
+        Contour source = [new Vertex(0, 0), new Vertex(10, 0), new Vertex(10, 10)];
+        source.IsClosed = false;
+        Vertex[] originalVertices = [.. source];
+        StrokeOptions options = new() { LineJoin = LineJoin.Miter, NormalizeOutput = normalizeOutput };
+
+        Polygon open = PolygonStroker.Stroke([source], 2, options);
+        source.IsClosed = true;
+        Polygon closed = PolygonStroker.Stroke([source], 2, options);
+
+        // The diagonal belongs only to the closed source's final-to-first segment.
+        Assert.Equal(Containment.Outside, ClassifyPoint(open, new Vertex(5, 5), 1E-10));
+        Assert.Equal(Containment.Inside, ClassifyPoint(closed, new Vertex(5, 5), 1E-10));
+        AssertPolygonIsValid(open);
+        AssertPolygonIsValid(closed);
+        Assert.Equal(3, source.Count);
+        Assert.Equal<Vertex>(originalVertices, source);
+    }
+
+    /// <summary>
+    /// Checks that nearby or coincident open endpoints retain caps at different widths.
+    /// </summary>
+    /// <param name="endY">The final source vertex's distance from the start.</param>
+    /// <param name="width">The stroke width.</param>
+    [Theory]
+    [InlineData(0D, 1D)]
+    [InlineData(0D, 4D)]
+    [InlineData(0.25D, 1D)]
+    [InlineData(0.25D, 4D)]
+    public void Stroke_OpenEndpoints_DoNotSelectClosure(double endY, double width)
+    {
+        Contour source =
+        [
+            new Vertex(0, 0),
+            new Vertex(10, 0),
+            new Vertex(10, 10),
+            new Vertex(0, 10),
+            new Vertex(0, endY)
+        ];
+        source.IsClosed = false;
+        StrokeOptions options = new() { LineJoin = LineJoin.Miter, LineCap = LineCap.Butt, NormalizeOutput = true };
+
+        Polygon open = PolygonStroker.Stroke([source], width, options);
+        Assert.False(source.IsClosed);
+        Assert.Equal(5, source.Count);
+        source.IsClosed = true;
+        Polygon closed = PolygonStroker.Stroke([source], width, options);
+
+        // A miter joins the closed bottom-left corner. The two butt caps leave
+        // this point outside the open stroke, even when the endpoints coincide.
+        Vertex corner = new(-width / 4, -width / 4);
+        Assert.Equal(Containment.Outside, ClassifyPoint(open, corner, 1E-10));
+        Assert.Equal(Containment.Inside, ClassifyPoint(closed, corner, 1E-10));
+        AssertPolygonIsValid(open);
+        AssertPolygonIsValid(closed);
+    }
+
+    /// <summary>
+    /// Checks that repeated closing vertices do not change a closed contour's stroke.
+    /// </summary>
+    /// <param name="normalizeOutput">Whether to resolve the generated outlines.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Stroke_ClosedDuplicateEndpoint_DoesNotChangeGeometry(bool normalizeOutput)
+    {
+        Contour source = [new Vertex(0, 0), new Vertex(10, 0), new Vertex(10, 10), new Vertex(0, 10)];
+        StrokeOptions options = new() { LineJoin = LineJoin.Miter, NormalizeOutput = normalizeOutput };
+        Polygon implicitClosure = PolygonStroker.Stroke([source], 2, options);
+        source.Add(source[0]);
+
+        Polygon explicitClosure = PolygonStroker.Stroke([source], 2, options);
+
+        AssertSameStroke(implicitClosure, explicitClosure);
+        AssertPolygonIsValid(implicitClosure);
+        AssertPolygonIsValid(explicitClosure);
+        Assert.Equal(5, source.Count);
+    }
+
+    /// <summary>
+    /// Checks combined cleanup where an open segment crosses a closed square's stroke.
+    /// </summary>
+    [Fact]
+    public void Stroke_MixedClosure_ResolvesCombinedArea()
+    {
+        Contour square = [new Vertex(0, 0), new Vertex(10, 0), new Vertex(10, 10), new Vertex(0, 10)];
+        Contour segment = [new Vertex(5, -5), new Vertex(5, 15)];
+        segment.IsClosed = false;
+        StrokeOptions options = new() { LineJoin = LineJoin.Miter, NormalizeOutput = true };
+
+        Polygon result = PolygonStroker.Stroke([square, segment], 2, options);
+
+        // The square band has area 12*12 - 8*8 = 80. The segment adds 20*2 = 40,
+        // with two 2*2 overlaps. Their union therefore has area 112.
+        double area = 0;
+        foreach (Contour contour in result)
+        {
+            area += ComputeSignedArea(contour);
+        }
+
+        Assert.Equal(112D, area, 10);
+        Assert.Equal(Containment.Inside, ClassifyPoint(result, new Vertex(5, 5), 1E-10));
+        Assert.Equal(Containment.Outside, ClassifyPoint(result, new Vertex(2, 5), 1E-10));
+        Assert.True(square.IsClosed);
+        Assert.False(segment.IsClosed);
+        AssertPolygonIsValid(result);
+    }
+
+    /// <summary>
+    /// Checks direct reuse of Boolean output as a closed stroke source and filled-area operand.
+    /// </summary>
+    [Fact]
+    public void Stroke_BooleanOutput_RequiresNoClosureConversion()
+    {
+        Contour square = [new Vertex(0, 0), new Vertex(10, 0), new Vertex(10, 10), new Vertex(0, 10)];
+        Polygon filled = PolygonClipper.Union([square], FillRule.NonZero);
+
+        Polygon stroke = PolygonStroker.Stroke(filled, 2, new StrokeOptions { LineJoin = LineJoin.Miter });
+        Polygon resolved = PolygonClipper.Union(stroke, FillRule.Positive);
+
+        AssertPolygonIsValid(filled);
+        AssertPolygonIsValid(stroke);
+        AssertPolygonIsValid(resolved);
+        Assert.Equal(Containment.Inside, ClassifyPoint(resolved, new Vertex(-0.5, 5), 1E-10));
+        Assert.Equal(Containment.Outside, ClassifyPoint(resolved, new Vertex(5, 5), 1E-10));
+    }
+
+    /// <summary>
+    /// Checks that default options and manually configured instances produce identical geometry.
+    /// </summary>
+    [Fact]
+    public void Stroke_DefaultExplicitAndInstanceOptions_Agree()
+    {
+        Polygon source = [[new Vertex(0, 0), new Vertex(10, 0), new Vertex(10, 10)]];
+        StrokeOptions options = new();
+        PolygonStroker stroker = new(options) { Width = 2 };
+
+        Polygon defaults = PolygonStroker.Stroke(source, 2);
+        Polygon explicitOptions = PolygonStroker.Stroke(source, 2, options);
+        Polygon instance = stroker.Stroke(source);
+
+        AssertSameStroke(defaults, explicitOptions);
+        AssertSameStroke(defaults, instance);
+    }
+
+    /// <summary>
+    /// Checks that optional cleanup preserves the NonZero area of raw stroke outlines.
+    /// </summary>
+    /// <param name="width">The signed stroke width.</param>
+    /// <param name="isClosed">Whether the source includes its final-to-first segment.</param>
+    /// <param name="expectedArea">The analytically expected stroke area.</param>
+    [Theory]
+    [InlineData(2D, true, 80D)]
+    [InlineData(-2D, true, 80D)]
+    [InlineData(2D, false, 60D)]
+    [InlineData(-2D, false, 60D)]
+    public void Stroke_OutputCleanup_PreservesNonZeroArea(double width, bool isClosed, double expectedArea)
+    {
+        Contour source = [new Vertex(0, 0), new Vertex(10, 0), new Vertex(10, 10), new Vertex(0, 10)];
+        source.IsClosed = isClosed;
+        StrokeOptions options = new() { LineJoin = LineJoin.Miter };
+        Polygon raw = PolygonStroker.Stroke([source], width, options);
+        options.NormalizeOutput = true;
+
+        Polygon cleaned = PolygonStroker.Stroke([source], width, options);
+
+        double area = 0;
+        foreach (Contour contour in cleaned)
+        {
+            area += ComputeSignedArea(contour);
+        }
+
+        // Closed: 12*12 - 8*8 = 80. Open: three 10-unit segments at width 2 give 60.
+        // Reversing the width changes outline direction, not the intended filled area.
+        Assert.Equal(expectedArea, area, 10);
+        for (int y = -2; y <= 12; y++)
+        {
+            for (int x = -2; x <= 12; x++)
+            {
+                Vertex point = new(x + 0.25D, y + 0.375D);
+                Assert.Equal(ClassifyPointNonZero(raw, point, 1E-10), ClassifyPoint(cleaned, point, 1E-10));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Checks the public boundary for an explicitly null options argument.
+    /// </summary>
+    [Fact]
+    public void Stroke_NullOptions_ThrowsArgumentNullException()
+    {
+        Assert.Throws<ArgumentNullException>("options", () => PolygonStroker.Stroke([], 2, null!));
+    }
+
+    /// <summary>
+    /// Checks the existing two-vertex point-cap result for both source closure states.
+    /// </summary>
+    /// <param name="isClosed">The source closure state.</param>
+    /// <param name="cap">The point-cap shape.</param>
+    [Theory]
+    [InlineData(false, LineCap.Butt)]
+    [InlineData(true, LineCap.Butt)]
+    [InlineData(false, LineCap.Square)]
+    [InlineData(true, LineCap.Square)]
+    [InlineData(false, LineCap.Round)]
+    [InlineData(true, LineCap.Round)]
+    public void Stroke_TwoEqualVertices_PreservesPointCap(bool isClosed, LineCap cap)
+    {
+        Contour source = [new Vertex(5, 5), new Vertex(5, 5)];
+        source.IsClosed = isClosed;
+
+        Polygon result = PolygonStroker.Stroke([source], 4, new StrokeOptions { LineCap = cap });
+
+        Contour footprint = Assert.Single(result);
+        Assert.Equal(isClosed, source.IsClosed);
+        Assert.Equal(2, source.Count);
+        AssertPolygonIsValid(result);
+        if (cap == LineCap.Round)
+        {
+            foreach (Vertex vertex in footprint)
+            {
+                Assert.Equal(4D, Vertex.DistanceSquared(new Vertex(5, 5), vertex), 10);
+            }
+        }
+        else
+        {
+            Assert.Equal(4, footprint.Count);
+            Assert.Equal(16D, Math.Abs(ComputeSignedArea(footprint)));
+            Assert.Equal(new Vertex(3, 3), footprint.GetBoundingBox().Min);
+            Assert.Equal(new Vertex(7, 7), footprint.GetBoundingBox().Max);
+        }
+    }
+
+    /// <summary>
+    /// Checks the existing capped-segment fallback for two distinct vertices.
+    /// </summary>
+    /// <param name="isClosed">The source closure state.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Stroke_TwoDistinctVertices_PreservesSegmentCaps(bool isClosed)
+    {
+        Contour source = [new Vertex(0, 0), new Vertex(10, 0)];
+        source.IsClosed = isClosed;
+
+        Polygon result = PolygonStroker.Stroke([source], 2, new StrokeOptions { LineCap = LineCap.Square });
+
+        Assert.Single(result);
+        Assert.Equal(new Vertex(-1, -1), result.GetBoundingBox().Min);
+        Assert.Equal(new Vertex(11, 1), result.GetBoundingBox().Max);
+        Assert.Equal(isClosed, source.IsClosed);
+        AssertPolygonIsValid(result);
+    }
+
+    /// <summary>
+    /// Checks that empty and single-vertex source contours produce no stroke.
+    /// </summary>
+    /// <param name="isClosed">The source closure state.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Stroke_FewerThanTwoVertices_ReturnsEmpty(bool isClosed)
+    {
+        Contour source = new() { IsClosed = isClosed };
+        Assert.Empty(PolygonStroker.Stroke([source], 2));
+
+        source.Add(new Vertex(5, 5));
+        Assert.Empty(PolygonStroker.Stroke([source], 2));
+        Assert.Equal(isClosed, source.IsClosed);
+    }
+
+    /// <summary>
+    /// Compares all stored vertices and closure states of two stroke results.
+    /// </summary>
+    /// <param name="expected">The expected stroke contours.</param>
+    /// <param name="actual">The actual stroke contours.</param>
+    private static void AssertSameStroke(Polygon expected, Polygon actual)
+    {
+        Assert.Equal(expected.Count, actual.Count);
+        for (int i = 0; i < expected.Count; i++)
+        {
+            Assert.Equal(expected[i].IsClosed, actual[i].IsClosed);
+            Assert.Equal<Vertex>(expected[i], actual[i]);
+        }
     }
 
     [Fact]
@@ -480,6 +776,8 @@ public class PolygonStrokerTests
         {
             Contour contour = polygon[contourIndex];
             Assert.True(contour.Count >= 3, $"Contour {contourIndex} must have at least 3 vertices.");
+            Assert.True(contour.IsClosed);
+            Assert.NotEqual(contour[0], contour[^1]);
 
             int edgeCount = contour.Count;
             if (edgeCount > 1 && contour[0] == contour[^1])
@@ -569,8 +867,9 @@ public class PolygonStrokerTests
                 continue;
             }
 
-            bool isClosed = contour.Count > 1 && contour[0] == contour[^1];
-            int vertexCount = isClosed ? contour.Count - 1 : contour.Count;
+            bool isClosed = contour.IsClosed;
+            bool repeatedEndpoint = contour[0] == contour[^1];
+            int vertexCount = isClosed && repeatedEndpoint ? contour.Count - 1 : contour.Count;
             int segmentCount = isClosed ? vertexCount : vertexCount - 1;
 
             for (int segmentIndex = 0; segmentIndex < segmentCount; segmentIndex++)
@@ -887,12 +1186,10 @@ public class PolygonStrokerTests
     {
         Box2 bounds = output.GetBoundingBox();
         double epsilon = Math.Max(bounds.Max.X - bounds.Min.X, bounds.Max.Y - bounds.Min.Y) * 1E-12D;
-        double closeThreshold = Math.Max(strokeWidth * 2D, 1E-3D);
-
         for (int contourIndex = 0; contourIndex < input.Count; contourIndex++)
         {
             Contour contour = input[contourIndex];
-            if (contour.Count < 3 || contour[0] == contour[^1])
+            if (!contour.IsClosed || contour.Count < 3 || contour[0] == contour[^1])
             {
                 continue;
             }
@@ -901,11 +1198,6 @@ public class PolygonStrokerTests
             Vertex last = contour[^1];
             double dx = first.X - last.X;
             double dy = first.Y - last.Y;
-            if ((dx * dx) + (dy * dy) > closeThreshold * closeThreshold)
-            {
-                continue;
-            }
-
             double seamLength = Math.Sqrt((dx * dx) + (dy * dy));
             if (seamLength <= 1E-12D)
             {

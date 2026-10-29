@@ -65,6 +65,7 @@ public class ContourTests
         Assert.True(contour.IsExternal);
         Assert.Null(contour.ParentIndex);
         Assert.Equal(0, contour.Depth);
+        Assert.True(contour.IsClosed);
     }
 
     [Fact]
@@ -73,6 +74,63 @@ public class ContourTests
         Contour contour = new(64);
 
         Assert.Equal(0, contour.Count);
+        Assert.True(contour.IsClosed);
+    }
+
+    /// <summary>
+    /// Checks that vertex and hierarchy edits do not change source closure.
+    /// </summary>
+    /// <param name="isClosed">The source closure state.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Closure_VertexEditsAndCopy_PreserveState(bool isClosed)
+    {
+        Contour contour = CreateSquare(0, 0, 10);
+        contour.IsClosed = isClosed;
+
+        contour.Reverse();
+        Assert.Equal(isClosed, contour.IsClosed);
+        contour.Translate(2, 3);
+        Assert.Equal(isClosed, contour.IsClosed);
+        contour.Add(new Vertex(4, 5));
+        Assert.Equal(isClosed, contour.IsClosed);
+        contour.RemoveVertexAt(contour.Count - 1);
+        Assert.Equal(isClosed, contour.IsClosed);
+
+        Polygon polygon = [contour];
+        Contour joined = CreateSquare(20, 0, 10);
+        joined.IsClosed = isClosed;
+        polygon.Join([joined]);
+        Assert.Equal(isClosed, polygon[0].IsClosed);
+        Assert.Equal(isClosed, polygon[1].IsClosed);
+
+        Polygon clone = polygon.DeepClone();
+        Assert.Equal(isClosed, clone[0].IsClosed);
+        Assert.Equal(isClosed, clone[1].IsClosed);
+        clone[0].IsClosed = !isClosed;
+        Assert.Equal(isClosed, contour.IsClosed);
+
+        contour.Clear();
+        Assert.Empty(contour);
+        Assert.Equal(isClosed, contour.IsClosed);
+    }
+
+    /// <summary>
+    /// Checks that orientation and filled-boundary segments do not depend on source closure.
+    /// </summary>
+    [Fact]
+    public void Closure_OrientationAndFilledBoundary_AreUnchanged()
+    {
+        Contour contour = CreateSquare(0, 0, 10);
+        Assert.True(contour.IsCounterClockwise());
+
+        contour.IsClosed = false;
+
+        Assert.True(contour.IsCounterClockwise());
+        Segment closing = contour.GetSegment(contour.Count - 1);
+        Assert.Equal(new Vertex(0, 10), closing.Source);
+        Assert.Equal(new Vertex(0, 0), closing.Target);
     }
 
     [Fact]

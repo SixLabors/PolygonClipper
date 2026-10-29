@@ -33,7 +33,7 @@ public class StarBooleanBenches
 
     [Benchmark]
     public Polygon PolygonClipperUnion()
-        => PolygonClipper.Union(this.subject, this.clipping);
+        => PolygonClipper.Union(this.subject, this.clipping, FillRule.EvenOdd);
 
     //[Benchmark]
     //public PolyTreeD Clipper2Union()
@@ -48,7 +48,7 @@ public class StarBooleanBenches
 
     [Benchmark]
     public Polygon PolygonClipperIntersection()
-        => PolygonClipper.Intersection(this.subject, this.clipping);
+        => PolygonClipper.Intersection(this.subject, this.clipping, FillRule.EvenOdd);
 
     //[Benchmark]
     //public PolyTreeD Clipper2Intersection()
@@ -63,7 +63,7 @@ public class StarBooleanBenches
 
     [Benchmark]
     public Polygon PolygonClipperDifference()
-        => PolygonClipper.Difference(this.subject, this.clipping);
+        => PolygonClipper.Difference(this.subject, this.clipping, FillRule.EvenOdd);
 
     //[Benchmark]
     //public PolyTreeD Clipper2Difference()
@@ -78,7 +78,7 @@ public class StarBooleanBenches
 
     [Benchmark]
     public Polygon PolygonClipperXor()
-        => PolygonClipper.Xor(this.subject, this.clipping);
+        => PolygonClipper.Xor(this.subject, this.clipping, FillRule.EvenOdd);
 
     //[Benchmark]
     //public PolyTreeD Clipper2Xor()

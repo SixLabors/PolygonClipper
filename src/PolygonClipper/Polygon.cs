@@ -8,8 +8,11 @@ using System.Text;
 namespace SixLabors.PolygonClipper;
 
 /// <summary>
-/// Represents a complex polygon.
+/// Represents a collection of contours.
 /// </summary>
+/// <remarks>
+/// Filled-area operations implicitly close every contour. Stroking respects each contour's closure state.
+/// </remarks>
 #pragma warning disable CA1710 // Identifiers should have correct suffix
 public sealed class Polygon : IReadOnlyCollection<Contour>
 #pragma warning restore CA1710 // Identifiers should have correct suffix

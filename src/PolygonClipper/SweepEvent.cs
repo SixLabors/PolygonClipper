@@ -12,6 +12,11 @@ namespace SixLabors.PolygonClipper;
 /// </summary>
 internal sealed class SweepEvent
 {
+    // Live-only state is allocated and pooled with source intervals. Output
+    // history needs only endpoint, transition, and predecessor data, so it must
+    // not pay for source support, bundle ledgers, and active-status bookkeeping.
+    private IntervalState interval;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SweepEvent"/> class.
     /// </summary>
@@ -64,9 +69,9 @@ internal sealed class SweepEvent
     }
 
     /// <summary>
-    /// Gets the point associated with the event.
+    /// Gets or sets the point associated with the event.
     /// </summary>
-    public Vertex Point { get; }
+    public Vertex Point { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether the point is the
@@ -83,6 +88,60 @@ internal sealed class SweepEvent
     /// Gets index of the polygon to which the associated segment belongs to;
     /// </summary>
     public PolygonType PolygonType { get; }
+
+    /// <summary>
+    /// Gets or sets the current terminal point of this live interval.
+    /// </summary>
+    public Vertex End
+    {
+        get => this.OtherEvent.Point;
+        set => this.OtherEvent.Point = value;
+    }
+
+    /// <summary>
+    /// Gets or sets the next source contribution endpoint.
+    /// </summary>
+    public Vertex SourceEnd { get => this.interval.SourceEnd; set => this.interval.SourceEnd = value; }
+
+    /// <summary>
+    /// Gets or sets the original supporting segment, preserved across rounded splits.
+    /// </summary>
+    public Segment Support { get => this.interval.Support; set => this.interval.Support = value; }
+
+    /// <summary>
+    /// Gets or sets the signed subject and clip contributions of this interval.
+    /// </summary>
+    public PolygonClipper.WindingCount Delta { get => this.interval.Delta; set => this.interval.Delta = value; }
+
+    /// <summary>
+    /// Gets or sets the winding immediately above this live interval.
+    /// </summary>
+    public PolygonClipper.WindingCount Above { get => this.interval.Above; set => this.interval.Above = value; }
+
+    /// <summary>
+    /// Gets or sets the endpoint changes retained for a coincident bundle.
+    /// </summary>
+    public PriorityQueue<PolygonClipper.WindingCount, Vertex> Ends { get => this.interval.Ends; set => this.interval.Ends = value; }
+
+    /// <summary>
+    /// Gets or sets the immutable output record for the current contributing piece.
+    /// </summary>
+    public SweepEvent Boundary { get => this.interval.Boundary; set => this.interval.Boundary = value; }
+
+    /// <summary>
+    /// Gets or sets the number of result intervals at or below this status entry.
+    /// </summary>
+    public int ResultRank { get => this.interval.ResultRank; set => this.interval.ResultRank = value; }
+
+    /// <summary>
+    /// Gets or sets the generation identifying this piece in queued endpoint records.
+    /// </summary>
+    public int Version { get => this.interval.Version; set => this.interval.Version = value; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether this interval is active.
+    /// </summary>
+    public bool Active { get => this.interval.Active; set => this.interval.Active = value; }
 
     /// <summary>
     /// Gets or sets the type of the edge.
@@ -184,17 +243,7 @@ internal sealed class SweepEvent
     /// <see langword="true"/> if this event comes before the other; otherwise <see langword="false"/>.
     /// </returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool IsBefore(SweepEvent other)
-    {
-        // Compare by x-coordinate first
-        if (this.Point.X != other.Point.X)
-        {
-            return this.Point.X < other.Point.X;
-        }
-
-        // If x-coordinates are equal, compare by y-coordinate
-        return this.Point.Y < other.Point.Y;
-    }
+    public bool IsBefore(SweepEvent other) => SweepEventComparer.Instance.Compare(this.Point, other.Point) < 0;
 
     /// <summary>
     /// Returns the segment associated with the sweep event.
@@ -202,4 +251,119 @@ internal sealed class SweepEvent
     /// <returns>The <see cref="Segment"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Segment GetSegment() => new(this.Point, this.OtherEvent.Point);
+
+    /// <summary>
+    /// Tests incidence on the noded interval and its original supporting segment.
+    /// </summary>
+    /// <param name="point">The queued event point.</param>
+    /// <returns>Whether this interval participates in the point event.</returns>
+    public bool ContainsPoint(Vertex point)
+    {
+        // Rounded split endpoints belong to their interval. For other points,
+        // use the original support so a rounded split cannot rotate the line
+        // into a nearby source vertex. Neighbor discovery closes rounded junctions.
+        return SweepEventComparer.Instance.Compare(this.Point, point) <= 0 && SweepEventComparer.Instance.Compare(point, this.End) <= 0 &&
+            (point == this.Point || point == this.End ||
+             PolygonUtilities.SignedArea(this.Support.Source, this.Support.Target, point) == 0);
+    }
+
+    /// <summary>
+    /// Initializes a reusable directed source interval before it enters the event queue.
+    /// </summary>
+    /// <param name="start">The canonical starting point.</param>
+    /// <param name="end">The source endpoint.</param>
+    /// <param name="id">The stable interval identity.</param>
+    /// <param name="delta">The signed operand contributions.</param>
+    public void InitializeInterval(Vertex start, Vertex end, int id, PolygonClipper.WindingCount delta)
+    {
+        this.interval ??= new IntervalState();
+        this.Point = start;
+        this.End = end;
+        this.ContourId = id;
+        this.SourceEnd = end;
+        this.Support = new Segment(start, end);
+        this.Delta = delta;
+        this.Above = default;
+        this.Ends = null;
+        this.Boundary = null;
+        this.Version = this.ResultRank = this.PosSL = 0;
+        this.Active = false;
+    }
+
+    /// <summary>
+    /// Initializes an output-history record without allocating live interval state.
+    /// </summary>
+    /// <param name="point">The boundary endpoint.</param>
+    /// <param name="left">Whether this is the canonical starting endpoint.</param>
+    /// <param name="other">The paired endpoint, completed when its position is known.</param>
+    /// <param name="transition">The filled-side transition of this boundary.</param>
+    /// <param name="previous">The immutable boundary predecessor.</param>
+    /// <param name="id">The source interval identity.</param>
+    public void InitializeBoundary(
+        Vertex point,
+        bool left,
+        SweepEvent other,
+        ResultTransition transition,
+        SweepEvent previous,
+        int id)
+    {
+        this.Point = point;
+        this.Left = left;
+        this.OtherEvent = other;
+        this.ResultTransition = transition;
+        this.PrevInResult = previous;
+        this.ContourId = id;
+        this.OutputContourId = this.Pos = 0;
+    }
+
+    /// <summary>
+    /// Stores the live interval state that is unnecessary in completed boundary history.
+    /// </summary>
+    private sealed class IntervalState
+    {
+        /// <summary>
+        /// Gets or sets the next source contribution endpoint.
+        /// </summary>
+        public Vertex SourceEnd { get; set; }
+
+        /// <summary>
+        /// Gets or sets the original supporting segment, preserved across rounded splits.
+        /// </summary>
+        public Segment Support { get; set; }
+
+        /// <summary>
+        /// Gets or sets the signed subject and clip contributions of this interval.
+        /// </summary>
+        public PolygonClipper.WindingCount Delta { get; set; }
+
+        /// <summary>
+        /// Gets or sets the winding immediately above this live interval.
+        /// </summary>
+        public PolygonClipper.WindingCount Above { get; set; }
+
+        /// <summary>
+        /// Gets or sets the endpoint changes retained for a coincident bundle.
+        /// </summary>
+        public PriorityQueue<PolygonClipper.WindingCount, Vertex> Ends { get; set; }
+
+        /// <summary>
+        /// Gets or sets the immutable output record for the current contributing piece.
+        /// </summary>
+        public SweepEvent Boundary { get; set; }
+
+        /// <summary>
+        /// Gets or sets the number of result intervals at or below this status entry.
+        /// </summary>
+        public int ResultRank { get; set; }
+
+        /// <summary>
+        /// Gets or sets the generation identifying this piece in queued endpoint records.
+        /// </summary>
+        public int Version { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether this interval is active.
+        /// </summary>
+        public bool Active { get; set; }
+    }
 }

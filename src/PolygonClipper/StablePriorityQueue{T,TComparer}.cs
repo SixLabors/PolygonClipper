@@ -71,7 +71,9 @@ internal sealed class StablePriorityQueue<T, TComparer>
     /// </summary>
     public TComparer Comparer { get; }
 
-    /// <summary>Restores queue ordering after filling the shared backing list with unordered items.</summary>
+    /// <summary>
+    /// Restores queue ordering after filling the shared backing list with unordered items.
+    /// </summary>
     public void Heapify() => this.Heapify(this.heap);
 
     /// <summary>

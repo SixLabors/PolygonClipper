@@ -113,6 +113,46 @@ internal sealed class StatusLine
     }
 
     /// <summary>
+    /// Inserts an interval at its established complete-point block position.
+    /// </summary>
+    /// <param name="index">The established position.</param>
+    /// <param name="segment">The outgoing interval.</param>
+    public void Insert(int index, SweepEvent segment) => this.sortedEvents.Insert(index, segment);
+
+    /// <summary>
+    /// Removes a contiguous incoming block before its outgoing replacement is inserted.
+    /// </summary>
+    /// <param name="index">The first incoming position.</param>
+    /// <param name="count">The number of incoming intervals.</param>
+    public void RemoveRange(int index, int count) => this.sortedEvents.RemoveRange(index, count);
+
+    /// <summary>
+    /// Finds the first interval not strictly below the complete event point.
+    /// </summary>
+    /// <param name="point">The event point.</param>
+    /// <returns>The beginning of the incident block or the insertion position.</returns>
+    public int FindLower(Vertex point)
+    {
+        int left = 0;
+        int right = this.sortedEvents.Count;
+        while (left < right)
+        {
+            int middle = left + ((right - left) >> 1);
+            SweepEvent segment = this.sortedEvents[middle];
+            if (!segment.ContainsPoint(point) && segment.IsBelow(point))
+            {
+                left = middle + 1;
+            }
+            else
+            {
+                right = middle;
+            }
+        }
+
+        return left;
+    }
+
+    /// <summary>
     /// Removes a sweep event from the status line.
     /// </summary>
     /// <param name="index">The index of the event to remove.</param>

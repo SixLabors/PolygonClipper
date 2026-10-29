@@ -8,8 +8,20 @@ namespace SixLabors.PolygonClipper;
 /// <summary>
 /// Compares two <see cref="SweepEvent"/> instances for sorting in the event queue.
 /// </summary>
-internal sealed class SweepEventComparer : IComparer<SweepEvent>, IComparer
+internal sealed class SweepEventComparer : IComparer<SweepEvent>, IComparer<PolygonClipper.QueueEntry>, IComparer<Vertex>, IComparer
 {
+    /// <summary>
+    /// The shared comparer for point, queue, and boundary event order.
+    /// </summary>
+    public static readonly SweepEventComparer Instance = new();
+
+    /// <inheritdoc/>
+    public int Compare(Vertex x, Vertex y)
+    {
+        int order = x.X.CompareTo(y.X);
+        return order == 0 ? x.Y.CompareTo(y.Y) : order;
+    }
+
     /// <inheritdoc/>
     public int Compare(SweepEvent? x, SweepEvent? y)
     {
@@ -28,21 +40,10 @@ internal sealed class SweepEventComparer : IComparer<SweepEvent>, IComparer
             return 1;
         }
 
-        // Compare by x-coordinate
-        if (x.Point.X > y.Point.X)
+        int pointOrder = this.Compare(x.Point, y.Point);
+        if (pointOrder != 0)
         {
-            return 1;
-        }
-
-        if (x.Point.X < y.Point.X)
-        {
-            return -1;
-        }
-
-        // Compare by y-coordinate when x-coordinates are the same
-        if (x.Point.Y != y.Point.Y)
-        {
-            return x.Point.Y > y.Point.Y ? 1 : -1;
+            return pointOrder;
         }
 
         // Compare left vs. right endpoint
@@ -78,6 +79,23 @@ internal sealed class SweepEventComparer : IComparer<SweepEvent>, IComparer
         }
 
         return order;
+    }
+
+    /// <inheritdoc/>
+    public int Compare(PolygonClipper.QueueEntry x, PolygonClipper.QueueEntry y)
+    {
+        int order = this.Compare(x.Point, y.Point);
+        if (order == 0)
+        {
+            order = x.Edge.ContourId.CompareTo(y.Edge.ContourId);
+        }
+
+        if (order == 0)
+        {
+            order = x.Version.CompareTo(y.Version);
+        }
+
+        return order == 0 ? x.IsStart.CompareTo(y.IsStart) : order;
     }
 
     /// <inheritdoc/>

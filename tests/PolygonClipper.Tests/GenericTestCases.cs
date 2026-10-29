@@ -1,10 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using GeoJson;
 using GeoJson.Feature;
 using GeoJson.Geometry;
-using GeoPolygon = GeoJson.Geometry.Polygon;
 
 namespace SixLabors.PolygonClipper.Tests;
 
@@ -32,7 +30,7 @@ public class GenericTestCases
         (Polygon subject, Polygon clipping) = TestPolygonUtilities.BuildPolygon(data);
 
 #pragma warning disable RCS1124 // Inline local variable
-        List<ExpectedResult> expectedResults = ExtractExpectedResults([.. data.Features.Skip(2)], data.Type);
+        List<ExpectedResult> expectedResults = ExtractExpectedResults([.. data.Features.Skip(2)]);
 #pragma warning restore RCS1124 // Inline local variable
 
         foreach (ExpectedResult result in expectedResults)
@@ -43,13 +41,33 @@ public class GenericTestCases
             Assert.Equal(expected.Count, actual.Count);
             for (int i = 0; i < expected.Count; i++)
             {
-                // We don't test for holes here as the reference tests do not do so.
                 this.testOutputHelper.WriteLine($"Current Contour {i}");
 
-                Assert.Equal(expected[i].Count, actual[i].Count);
-                for (int j = 0; j < expected[i].Count; j++)
+                Contour reference = expected[i];
+                Assert.Equal(reference[0], reference[^1]);
+
+                // GeoJSON stores a closing vertex. V2 returns each ring without it.
+                int count = reference.Count - 1;
+                Assert.Equal(count, actual[i].Count);
+                Assert.NotEqual(actual[i][0], actual[i][^1]);
+                Assert.Equal(reference.IsExternal, actual[i].IsExternal);
+
+                // Derive reference direction from its coordinates and GeoJSON ring
+                // role, without using the production orientation calculation.
+                double area = 0;
+                Vertex origin = reference[0];
+                for (int j = 1; j < count - 1; j++)
                 {
-                    Vertex expectedVertex = expected[i][j];
+                    Vertex first = reference[j];
+                    Vertex second = reference[j + 1];
+                    area += ((first.X - origin.X) * (second.Y - origin.Y)) -
+                            ((first.Y - origin.Y) * (second.X - origin.X));
+                }
+
+                bool reverse = (area >= 0) != reference.IsExternal;
+                for (int j = 0; j < count; j++)
+                {
+                    Vertex expectedVertex = reference[reverse ? count - 1 - j : j];
                     Vertex actualVertex = actual[i][j];
                     Assert.Equal(expectedVertex.X, actualVertex.X, 3);
                     Assert.Equal(expectedVertex.Y, actualVertex.Y, 3);
@@ -58,33 +76,29 @@ public class GenericTestCases
         }
     }
 
-    private static List<ExpectedResult> ExtractExpectedResults(List<Feature> features, GeoJSONObjectType type)
+    /// <summary>
+    /// Reads the reference operations and their GeoJSON geometry.
+    /// </summary>
+    /// <param name="features">The reference operations and their GeoJSON output.</param>
+    /// <returns>The operations and their expected contours.</returns>
+    private static List<ExpectedResult> ExtractExpectedResults(List<Feature> features)
         => features.ConvertAll(feature =>
         {
             string mode = feature.Properties["operation"]?.ToString();
             Func<Polygon, Polygon, Polygon> operation = mode switch
             {
-                "union" => (a, b) => PolygonClipper.Union(a, b),
-                "intersection" => (a, b) => PolygonClipper.Intersection(a, b),
-                "xor" => (a, b) => PolygonClipper.Xor(a, b),
-                "diff" => (a, b) => PolygonClipper.Difference(a, b),
-                "diff_ba" => (a, b) => PolygonClipper.Difference(b, a),
+                "union" => (a, b) => PolygonClipper.Union(a, b, FillRule.EvenOdd),
+                "intersection" => (a, b) => PolygonClipper.Intersection(a, b, FillRule.EvenOdd),
+                "xor" => (a, b) => PolygonClipper.Xor(a, b, FillRule.EvenOdd),
+                "diff" => (a, b) => PolygonClipper.Difference(a, b, FillRule.EvenOdd),
+                "diff_ba" => (a, b) => PolygonClipper.Difference(b, a, FillRule.EvenOdd),
                 _ => throw new InvalidOperationException($"Invalid mode: {mode}")
             };
-
-            if (type == GeoJSONObjectType.Polygon)
-            {
-                return new ExpectedResult
-                {
-                    Operation = operation,
-                    Coordinates = TestPolygonUtilities.ConvertToPolygon(feature.Geometry as GeoPolygon)
-                };
-            }
 
             return new ExpectedResult
             {
                 Operation = operation,
-                Coordinates = TestPolygonUtilities.ConvertToPolygon(feature.Geometry as MultiPolygon)
+                Coordinates = TestPolygonUtilities.ConvertToPolygon(feature.Geometry)
             };
         });
 
@@ -107,10 +121,12 @@ public class GenericTestCases
     {
         Polygon subject = BuildStarPolygon(1001, 100D, 0D, 0D);
         Polygon clipping = BuildStarPolygon(1001, 100D, 35D, 22D);
-        Polygon result = PolygonClipper.Union(subject, clipping);
+        Polygon result = PolygonClipper.Union(subject, clipping, FillRule.EvenOdd);
     }
 
-    /// <summary>Constructs the self-crossing star used by the clipping stress cases.</summary>
+    /// <summary>
+    /// Constructs the self-crossing star used by the clipping stress cases.
+    /// </summary>
     /// <param name="vertexCount">The odd vertex count.</param>
     /// <param name="radius">The distance from the centre to each vertex.</param>
     /// <param name="centerX">The horizontal centre.</param>

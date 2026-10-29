@@ -5,6 +5,37 @@ namespace SixLabors.PolygonClipper.Tests;
 
 public class PolygonClipperContourClosureTests
 {
+    /// <summary>
+    /// Checks source closure independently of duplicate endpoint representation for all fill rules.
+    /// </summary>
+    /// <param name="rule">The fill rule for both operands.</param>
+    [Theory]
+    [InlineData(FillRule.EvenOdd)]
+    [InlineData(FillRule.NonZero)]
+    [InlineData(FillRule.Positive)]
+    [InlineData(FillRule.Negative)]
+    public void FilledOperations_SourceClosureFlags_DoNotChangeOutput(FillRule rule)
+    {
+        Polygon subject = [CreateRectangleContour(0, 0, 10, 10, false)];
+        Polygon clip = [CreateRectangleContour(5, 5, 15, 15, false)];
+        Polygon openSubject = subject.DeepClone();
+        Polygon openClip = clip.DeepClone();
+        openSubject[0].IsClosed = false;
+        openClip[0].IsClosed = false;
+
+        AssertEquivalent(PolygonClipper.Intersection(subject, clip, rule), PolygonClipper.Intersection(openSubject, openClip, rule));
+        AssertEquivalent(PolygonClipper.Union(subject, clip, rule), PolygonClipper.Union(openSubject, openClip, rule));
+        AssertEquivalent(PolygonClipper.Difference(subject, clip, rule), PolygonClipper.Difference(openSubject, openClip, rule));
+        AssertEquivalent(PolygonClipper.Xor(subject, clip, rule), PolygonClipper.Xor(openSubject, openClip, rule));
+        AssertEquivalent(PolygonClipper.Union(subject, rule), PolygonClipper.Union(openSubject, rule));
+        AssertEquivalent(PolygonClipper.Normalize(subject, rule), PolygonClipper.Normalize(openSubject, rule));
+
+        Assert.False(openSubject[0].IsClosed);
+        Assert.False(openClip[0].IsClosed);
+        Assert.Equal<Vertex>(subject[0], openSubject[0]);
+        Assert.Equal<Vertex>(clip[0], openClip[0]);
+    }
+
     [Fact]
     public void BooleanOperations_OpenAndClosedContours_ProduceSameOutput()
     {
@@ -14,17 +45,17 @@ public class PolygonClipperContourClosureTests
         Polygon closedClip = [CreateRectangleContour(5, 5, 15, 15, true)];
 
         AssertEquivalent(
-            PolygonClipper.Intersection(openSubject, openClip),
-            PolygonClipper.Intersection(closedSubject, closedClip));
+            PolygonClipper.Intersection(openSubject, openClip, FillRule.EvenOdd),
+            PolygonClipper.Intersection(closedSubject, closedClip, FillRule.EvenOdd));
         AssertEquivalent(
-            PolygonClipper.Union(openSubject, openClip),
-            PolygonClipper.Union(closedSubject, closedClip));
+            PolygonClipper.Union(openSubject, openClip, FillRule.EvenOdd),
+            PolygonClipper.Union(closedSubject, closedClip, FillRule.EvenOdd));
         AssertEquivalent(
-            PolygonClipper.Difference(openSubject, openClip),
-            PolygonClipper.Difference(closedSubject, closedClip));
+            PolygonClipper.Difference(openSubject, openClip, FillRule.EvenOdd),
+            PolygonClipper.Difference(closedSubject, closedClip, FillRule.EvenOdd));
         AssertEquivalent(
-            PolygonClipper.Xor(openSubject, openClip),
-            PolygonClipper.Xor(closedSubject, closedClip));
+            PolygonClipper.Xor(openSubject, openClip, FillRule.EvenOdd),
+            PolygonClipper.Xor(closedSubject, closedClip, FillRule.EvenOdd));
     }
 
     private static Contour CreateRectangleContour(
@@ -64,6 +95,12 @@ public class PolygonClipperContourClosureTests
             {
                 Assert.Equal(leftContour[j], rightContour[j]);
             }
+        }
+
+        foreach (Contour contour in left.Concat(right))
+        {
+            Assert.True(contour.IsClosed);
+            Assert.NotEqual(contour[0], contour[^1]);
         }
     }
 
