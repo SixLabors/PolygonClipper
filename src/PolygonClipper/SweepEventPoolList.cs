@@ -128,10 +128,10 @@ internal abstract class PooledList<T> : IReadOnlyList<T>
 
             int target = (int)BitOperations.RoundUpToPowerOf2((uint)value);
             T[] newItems = new T[target];
-            if (this.Size > 0)
-            {
-                Array.Copy(this.Items, newItems, this.Size);
-            }
+
+            // Clear resets the active count but retains reusable objects. Copy
+            // those inactive slots too, including growth before the next run.
+            Array.Copy(this.Items, newItems, this.Items.Length);
 
             this.Items = newItems;
         }
