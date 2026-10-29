@@ -112,26 +112,31 @@ internal static class PolygonUtilities
 
         Vertex va = seg0.Target - a1;
         Vertex vb = seg1.Target - a2;
-        Vertex e = a2 - a1;
+        ExtendedPrecisionDouble ax = default;
+        ExtendedPrecisionDouble ay = default;
+        ExtendedPrecisionDouble bx = default;
+        ExtendedPrecisionDouble by = default;
+        ExtendedPrecisionDouble denominator = default;
 
-        double kross = Vertex.Cross(va, vb);
-        double sqrLenA = Vertex.Dot(va, va);
-
-        // Squaring a representable non-zero cross product can underflow to zero,
-        // incorrectly sending small crossing segments into the collinear branch.
-        if (kross != 0)
+        // Shared vertical or horizontal directions are exactly parallel. Other
+        // directions need the retained coordinate differences: rounding them
+        // first can make collinear source segments appear to cross.
+        if ((va.X != 0 || vb.X != 0) && (va.Y != 0 || vb.Y != 0))
         {
-            // Lines of the segments are not parallel
+            ax = ExtendedPrecisionDouble.Difference(seg0.Target.X, a1.X);
+            ay = ExtendedPrecisionDouble.Difference(seg0.Target.Y, a1.Y);
+            bx = ExtendedPrecisionDouble.Difference(seg1.Target.X, a2.X);
+            by = ExtendedPrecisionDouble.Difference(seg1.Target.Y, a2.Y);
+            denominator = (ax * by) - (ay * bx);
+        }
+
+        if (denominator.Value != 0)
+        {
             // Retain subtraction, determinant, and division roundoff until the
             // final coordinate is rounded. Independent segment pairs meeting at
             // one junction must construct the same point for event closure.
-            ExtendedPrecisionDouble ax = ExtendedPrecisionDouble.Difference(seg0.Target.X, a1.X);
-            ExtendedPrecisionDouble ay = ExtendedPrecisionDouble.Difference(seg0.Target.Y, a1.Y);
-            ExtendedPrecisionDouble bx = ExtendedPrecisionDouble.Difference(seg1.Target.X, a2.X);
-            ExtendedPrecisionDouble by = ExtendedPrecisionDouble.Difference(seg1.Target.Y, a2.Y);
             ExtendedPrecisionDouble ex = ExtendedPrecisionDouble.Difference(a2.X, a1.X);
             ExtendedPrecisionDouble ey = ExtendedPrecisionDouble.Difference(a2.Y, a1.Y);
-            ExtendedPrecisionDouble denominator = (ax * by) - (ay * bx);
             ExtendedPrecisionDouble numerator = (ex * by) - (ey * bx);
             ExtendedPrecisionDouble otherNumerator = (ex * ay) - (ey * ax);
             double start = numerator.Value;
@@ -169,42 +174,36 @@ internal static class PolygonUtilities
             return 1;
         }
 
-        // Lines are parallel; check if they are collinear
-        kross = Vertex.Cross(e, va);
-        if (kross != 0)
+        // Use the original coordinates for the collinearity decision too.
+        if (SignedArea(a1, seg0.Target, a2) != 0)
         {
-            // Lines of the segments are different
             return 0;
         }
 
-        // Segments are collinear, check for overlap
-        double sa = Vertex.Dot(va, e) / sqrLenA;
-        double sb = sa + (Vertex.Dot(va, vb) / sqrLenA);
-        double smin = Math.Min(sa, sb);
-        double smax = Math.Max(sa, sb);
-
-        if (smin <= 1 && smax >= 0)
+        // The bounding-box check already established overlap. Compare source
+        // coordinates along a non-constant axis, without normalized parameters.
+        // A short overlap near a long segment's end must not round to one point.
+        bool useX = va.X != 0;
+        double firstSource = useX ? a1.X : a1.Y;
+        double firstTarget = useX ? seg0.Target.X : seg0.Target.Y;
+        double secondSource = useX ? a2.X : a2.Y;
+        double secondTarget = useX ? seg1.Target.X : seg1.Target.Y;
+        bool firstForward = firstSource <= firstTarget;
+        bool secondForward = secondSource <= secondTarget;
+        Vertex firstMin = firstForward ? a1 : seg0.Target;
+        Vertex firstMax = firstForward ? seg0.Target : a1;
+        Vertex secondMin = secondForward ? a2 : seg1.Target;
+        Vertex secondMax = secondForward ? seg1.Target : a2;
+        Vertex minimum = Math.Min(firstSource, firstTarget) >= Math.Min(secondSource, secondTarget) ? firstMin : secondMin;
+        Vertex maximum = Math.Max(firstSource, firstTarget) <= Math.Max(secondSource, secondTarget) ? firstMax : secondMax;
+        pi0 = firstForward ? minimum : maximum;
+        if (minimum == maximum)
         {
-            if (smin == 1)
-            {
-                pi0 = seg0.Target;
-                return 1;
-            }
-
-            if (smax == 0)
-            {
-                pi0 = a1;
-                return 1;
-            }
-
-            // Overlap endpoints are existing source vertices. Reconstructing
-            // them through a parameter can move a shared vertex by one ULP.
-            pi0 = smin <= 0 ? a1 : sa <= sb ? a2 : seg1.Target;
-            pi1 = smax >= 1 ? seg0.Target : sa >= sb ? a2 : seg1.Target;
-            return 2;
+            return 1;
         }
 
-        return 0;
+        pi1 = firstForward ? maximum : minimum;
+        return 2;
     }
 
     /// <summary>

@@ -6,6 +6,52 @@ namespace SixLabors.PolygonClipper.Tests;
 public class PolygonUtilitiesTests
 {
     /// <summary>
+    /// Checks overlap when rounded directions suggest a crossing or an endpoint contact.
+    /// </summary>
+    /// <param name="largeCoordinates">Whether a short overlap lies near a long segment's endpoint.</param>
+    /// <param name="reverseFirst">Whether to reverse the first segment.</param>
+    /// <param name="reverseSecond">Whether to reverse the second segment.</param>
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, true)]
+    [InlineData(false, true, true)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, true)]
+    public void FindIntersection_CollinearRoundedDirections_ReturnsBothOverlapEndpoints(
+        bool largeCoordinates, bool reverseFirst, bool reverseSecond)
+    {
+        const double u = 1.0000000000000002;
+        Segment overlap = largeCoordinates
+            ? new(new Vertex(9999999999999998D, 9999999999999998D), new Vertex(1E16, 1E16))
+            : new(new Vertex(-u, -1), new Vertex(2 * u, 2));
+        Segment enclosing = largeCoordinates
+            ? new(new Vertex(-3E16, -3E16), new Vertex(1E16, 1E16))
+            : new(new Vertex(-2 * u, -2), new Vertex(2 * u, 2));
+        Segment first = reverseFirst ? overlap.Reverse() : overlap;
+        Segment second = reverseSecond ? enclosing.Reverse() : enclosing;
+
+        // Both cases have a non-empty interval in common. Direction and operand
+        // order cannot turn that interval into a single-point intersection.
+        foreach ((Segment a, Segment b) in new[] { (first, second), (second, first) })
+        {
+            int count = PolygonUtilities.FindIntersection(a, b, out Vertex start, out Vertex end);
+
+            Assert.Equal(2, count);
+            Assert.NotEqual(start, end);
+            Assert.True(start == overlap.Source || start == overlap.Target);
+            Assert.True(end == overlap.Source || end == overlap.Target);
+
+            int vertexCount = PolygonUtilities.FindIntersection(a.Source, a.Target, b.Source, b.Target, out Vertex vertexStart, out Vertex vertexEnd);
+            Assert.Equal(2, vertexCount);
+            Assert.Equal(start, vertexStart);
+            Assert.Equal(end, vertexEnd);
+        }
+    }
+
+    /// <summary>
     /// Checks source incidence when rounded coordinate differences obscure the orientation.
     /// </summary>
     [Fact]
