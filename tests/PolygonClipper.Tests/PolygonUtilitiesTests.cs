@@ -6,6 +6,37 @@ namespace SixLabors.PolygonClipper.Tests;
 public class PolygonUtilitiesTests
 {
     /// <summary>
+    /// Checks source incidence when rounded coordinate differences obscure the orientation.
+    /// </summary>
+    [Fact]
+    public void SignedArea_NearbySourceCorner_RetainsPositiveSign()
+    {
+        Vertex first = new(6.559375, 5.3171875);
+        Vertex second = new(-0.565625, 11.0828125);
+        Vertex corner = new(3.846028904999335, 7.51285572161238);
+
+        // Exact binary-rational arithmetic gives a positive determinant of about 3.0769E-15.
+        Assert.True(PolygonUtilities.SignedArea(first, second, corner) > 0);
+        Assert.True(PolygonUtilities.SignedArea(second, first, corner) < 0);
+    }
+
+    /// <summary>
+    /// Checks an interior crossing whose ordinary quotient rounds to an endpoint.
+    /// </summary>
+    [Fact]
+    public void FindIntersection_RoundedEndpointParameter_RetainsInteriorCrossing()
+    {
+        Segment first = new(new Vertex(3.846028904999335, 7.51285572161238), new Vertex(13.846028904999335, 7.51285572161238));
+        Segment second = new(new Vertex(6.559375, 5.3171875), new Vertex(-0.565625, 11.0828125));
+
+        int count = PolygonUtilities.FindIntersection(first, second, out Vertex intersection, out _);
+
+        // The exact intersection rounds one X step above the source corner.
+        Assert.Equal(1, count);
+        Assert.Equal(new Vertex(3.8460289049993355, 7.51285572161238), intersection);
+    }
+
+    /// <summary>
     /// Checks a determinant whose rounded products are equal but whose exact difference is one.
     /// </summary>
     [Fact]

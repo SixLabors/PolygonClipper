@@ -21,7 +21,29 @@ internal static class PolygonUtilities
     /// <returns>The <see cref="double"/> area.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static double SignedArea(in Vertex p0, in Vertex p1, in Vertex p2)
-        => Vertex.Cross(p0 - p2, p1 - p2);
+    {
+        Vertex a = p0 - p2;
+        Vertex b = p1 - p2;
+        double first = a.X * b.Y;
+        double second = a.Y * b.X;
+        double area = first - second;
+
+        // The orientation filter includes rounding in coordinate differences
+        // and products. Recover those differences only when cancellation can
+        // obscure the sign. The bound selects precision; it does not merge points.
+        const double errorFactor = 3.3306690738754716E-16D;
+        if (first == 0 || second == 0 || !double.IsFinite(area) ||
+            Math.Abs(area) > errorFactor * (Math.Abs(first) + Math.Abs(second)))
+        {
+            return area;
+        }
+
+        ExtendedPrecisionDouble ax = ExtendedPrecisionDouble.Difference(p0.X, p2.X);
+        ExtendedPrecisionDouble ay = ExtendedPrecisionDouble.Difference(p0.Y, p2.Y);
+        ExtendedPrecisionDouble bx = ExtendedPrecisionDouble.Difference(p1.X, p2.X);
+        ExtendedPrecisionDouble by = ExtendedPrecisionDouble.Difference(p1.Y, p2.Y);
+        return ((ax * by) - (ay * bx)).Value;
+    }
 
     /// <summary>
     /// Finds the intersection of two line segments, constraining results to their intersection bounding box.
@@ -99,33 +121,6 @@ internal static class PolygonUtilities
         if (kross != 0)
         {
             // Lines of the segments are not parallel
-            double s = Vertex.Cross(e, vb) / kross;
-            if (s is < 0 or > 1)
-            {
-                return 0;
-            }
-
-            double t = Vertex.Cross(e, va) / kross;
-            if (t is < 0 or > 1)
-            {
-                return 0;
-            }
-
-            // If s or t is exactly 0 or 1, the intersection is on an endpoint
-            if (s is 0 or 1)
-            {
-                // On an endpoint of line segment a
-                pi0 = s == 0 ? a1 : seg0.Target;
-                return 1;
-            }
-
-            if (t is 0 or 1)
-            {
-                // On an endpoint of line segment b
-                pi0 = t == 0 ? a2 : seg1.Target;
-                return 1;
-            }
-
             // Retain subtraction, determinant, and division roundoff until the
             // final coordinate is rounded. Independent segment pairs meeting at
             // one junction must construct the same point for event closure.
@@ -137,6 +132,33 @@ internal static class PolygonUtilities
             ExtendedPrecisionDouble ey = ExtendedPrecisionDouble.Difference(a2.Y, a1.Y);
             ExtendedPrecisionDouble denominator = (ax * by) - (ay * bx);
             ExtendedPrecisionDouble numerator = (ex * by) - (ey * bx);
+            ExtendedPrecisionDouble otherNumerator = (ex * ay) - (ey * ax);
+            double start = numerator.Value;
+            double end = (numerator - denominator).Value;
+            double otherStart = otherNumerator.Value;
+            double otherEnd = (otherNumerator - denominator).Value;
+            bool positive = denominator.Value > 0;
+            if (positive ? start < 0 || end > 0 || otherStart < 0 || otherEnd > 0
+                         : start > 0 || end < 0 || otherStart > 0 || otherEnd < 0)
+            {
+                return 0;
+            }
+
+            // A rounded quotient can equal one for an interior crossing.
+            // Preserve a source endpoint only when the retained numerator
+            // actually equals zero or the denominator.
+            if (start == 0 || end == 0)
+            {
+                pi0 = start == 0 ? a1 : seg0.Target;
+                return 1;
+            }
+
+            if (otherStart == 0 || otherEnd == 0)
+            {
+                pi0 = otherStart == 0 ? a2 : seg1.Target;
+                return 1;
+            }
+
             ExtendedPrecisionDouble parameter = numerator / denominator;
             ExtendedPrecisionDouble intersectionX = parameter * ax;
             ExtendedPrecisionDouble intersectionY = parameter * ay;
