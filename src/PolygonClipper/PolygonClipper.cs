@@ -340,7 +340,6 @@ public class PolygonClipper
 
             while (true)
             {
-                this.outgoing.Sort(SegmentComparer.CompareRays);
                 this.BundleOutgoing();
                 this.statusLine.ReplaceRange(first, blockCount, this.bundled.GetEventsSpan());
                 blockCount = this.bundled.Count;
@@ -803,18 +802,36 @@ public class PolygonClipper
     }
 
     /// <summary>
-    /// Combines coincident outgoing intervals without losing longer continuations.
+    /// Orders outgoing rays and combines coincident intervals without losing longer continuations.
     /// </summary>
     private void BundleOutgoing()
     {
+        Span<SweepEvent> outgoing = this.outgoing.GetEventsSpan();
+        int pairOrder = 0;
+
+        // Most crossings have two outgoing rays. Their order also tells us
+        // whether they coincide, so reuse that comparison when bundling.
+        if (outgoing.Length == 2)
+        {
+            pairOrder = SegmentComparer.CompareRays(outgoing[0], outgoing[1]);
+            if (pairOrder > 0)
+            {
+                (outgoing[0], outgoing[1]) = (outgoing[1], outgoing[0]);
+            }
+        }
+        else if (outgoing.Length > 2)
+        {
+            outgoing.Sort(SegmentComparer.CompareRays);
+        }
+
         this.bundled.Clear();
         int i = 0;
-        while (i < this.outgoing.Count)
+        while (i < outgoing.Length)
         {
-            SweepEvent edge = this.outgoing[i++];
-            while (i < this.outgoing.Count && SegmentComparer.CompareRays(edge, this.outgoing[i]) == 0)
+            SweepEvent edge = outgoing[i++];
+            while (i < outgoing.Length && (outgoing.Length == 2 ? pairOrder == 0 : SegmentComparer.CompareRays(edge, outgoing[i]) == 0))
             {
-                SweepEvent other = this.outgoing[i++];
+                SweepEvent other = outgoing[i++];
                 if (SweepEventComparer.Instance.Compare(other.End, edge.End) < 0)
                 {
                     // A staged neighbor check may already have found an earlier
@@ -1048,6 +1065,7 @@ public class PolygonClipper
     /// <param name="subjectRule">The subject's fill rule.</param>
     /// <param name="clipRule">The clipping operand's fill rule.</param>
     /// <returns>Whether the region belongs to the result.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool InResult(WindingCount count, BooleanOperation operation, FillRule subjectRule, FillRule clipRule)
     {
         return operation switch
@@ -1065,6 +1083,7 @@ public class PolygonClipper
     /// <param name="count">The signed winding count.</param>
     /// <param name="rule">The validated fill rule.</param>
     /// <returns>Whether the region is filled.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool Filled(int count, FillRule rule)
         => rule switch
         {

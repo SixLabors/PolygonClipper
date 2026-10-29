@@ -68,29 +68,8 @@ internal sealed class SweepEventPoolList : PooledList<SweepEvent>
     /// <summary>
     /// Gets the active event references.
     /// </summary>
-    /// <returns>A read-only span that is valid until this pool changes.</returns>
-    public ReadOnlySpan<SweepEvent> GetEventsSpan() => this.Items.AsSpan(0, this.Size);
-
-    /// <summary>
-    /// Orders outgoing intervals with the sweep's ray comparison.
-    /// </summary>
-    /// <param name="comparison">The ordering of outgoing rays.</param>
-    public void Sort(Comparison<SweepEvent> comparison)
-    {
-        // Ordinary crossings have two outgoing rays. They need one comparison,
-        // without entering the general sort used for larger shared vertices.
-        if (this.Size == 2)
-        {
-            if (comparison(this.Items[0], this.Items[1]) > 0)
-            {
-                (this.Items[0], this.Items[1]) = (this.Items[1], this.Items[0]);
-            }
-        }
-        else if (this.Size > 2)
-        {
-            this.Items.AsSpan(0, this.Size).Sort(comparison);
-        }
-    }
+    /// <returns>A span that is valid until this pool changes.</returns>
+    public Span<SweepEvent> GetEventsSpan() => this.Items.AsSpan(0, this.Size);
 
     /// <summary>
     /// Appends references owned by another sweep pool without copying its inactive slots.
