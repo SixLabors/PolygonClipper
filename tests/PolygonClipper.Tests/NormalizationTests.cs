@@ -2317,7 +2317,36 @@ public class NormalizationTests
                 new Vertex(-2, 1)
             ]]);
 
-        AssertContourVertexSignature(expected, actual);
+        // The square has area four. The added line is traversed once in each
+        // direction. It can remain attached to the square or form its own walk.
+        // Both representations must retain these seven directed boundary edges.
+        Segment[] boundary =
+        [
+            new(new Vertex(0, 0), new Vertex(2, 0)),
+            new(new Vertex(2, 0), new Vertex(2, 2)),
+            new(new Vertex(2, 2), new Vertex(0, 2)),
+            new(new Vertex(0, 2), new Vertex(0, 1)),
+            new(new Vertex(0, 1), new Vertex(0, 0)),
+            new(new Vertex(0, 1), new Vertex(-2, 1)),
+            new(new Vertex(-2, 1), new Vertex(0, 1))
+        ];
+        foreach (Polygon polygon in new[] { actual, expected })
+        {
+            List<Segment> edges = [];
+            foreach (Contour contour in polygon)
+            {
+                for (int i = 0; i < GetImplicitVertexCount(contour); i++)
+                {
+                    edges.Add(contour.GetSegment(i));
+                }
+            }
+
+            Assert.Equal(boundary.Length, edges.Count);
+            foreach (Segment edge in boundary)
+            {
+                Assert.Contains(edge, edges);
+            }
+        }
     }
 
     private static Contour CreateIssue1051Main()
