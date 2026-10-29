@@ -115,19 +115,34 @@ internal static class PolygonUtilities
             if (s is 0 or 1)
             {
                 // On an endpoint of line segment a
-                pi0 = MidPoint(a1, s, va);
+                pi0 = s == 0 ? a1 : seg0.Target;
                 return 1;
             }
 
             if (t is 0 or 1)
             {
                 // On an endpoint of line segment b
-                pi0 = MidPoint(a2, t, vb);
+                pi0 = t == 0 ? a2 : seg1.Target;
                 return 1;
             }
 
-            // Intersection of lines is a point on each segment
-            pi0 = a1 + (s * va);
+            // Retain subtraction, determinant, and division roundoff until the
+            // final coordinate is rounded. Independent segment pairs meeting at
+            // one junction must construct the same point for event closure.
+            ExtendedPrecisionDouble ax = ExtendedPrecisionDouble.Difference(seg0.Target.X, a1.X);
+            ExtendedPrecisionDouble ay = ExtendedPrecisionDouble.Difference(seg0.Target.Y, a1.Y);
+            ExtendedPrecisionDouble bx = ExtendedPrecisionDouble.Difference(seg1.Target.X, a2.X);
+            ExtendedPrecisionDouble by = ExtendedPrecisionDouble.Difference(seg1.Target.Y, a2.Y);
+            ExtendedPrecisionDouble ex = ExtendedPrecisionDouble.Difference(a2.X, a1.X);
+            ExtendedPrecisionDouble ey = ExtendedPrecisionDouble.Difference(a2.Y, a1.Y);
+            ExtendedPrecisionDouble denominator = (ax * by) - (ay * bx);
+            ExtendedPrecisionDouble numerator = (ex * by) - (ey * bx);
+            ExtendedPrecisionDouble parameter = numerator / denominator;
+            ExtendedPrecisionDouble intersectionX = parameter * ax;
+            ExtendedPrecisionDouble intersectionY = parameter * ay;
+            intersectionX += new ExtendedPrecisionDouble(a1.X);
+            intersectionY += new ExtendedPrecisionDouble(a1.Y);
+            pi0 = new Vertex(intersectionX.Value, intersectionY.Value);
             return 1;
         }
 
@@ -149,18 +164,20 @@ internal static class PolygonUtilities
         {
             if (smin == 1)
             {
-                pi0 = MidPoint(a1, smin, va);
+                pi0 = seg0.Target;
                 return 1;
             }
 
             if (smax == 0)
             {
-                pi0 = MidPoint(a1, smax, va);
+                pi0 = a1;
                 return 1;
             }
 
-            pi0 = MidPoint(a1, Math.Max(smin, 0), va);
-            pi1 = MidPoint(a1, Math.Min(smax, 1), va);
+            // Overlap endpoints are existing source vertices. Reconstructing
+            // them through a parameter can move a shared vertex by one ULP.
+            pi0 = smin <= 0 ? a1 : sa <= sb ? a2 : seg1.Target;
+            pi1 = smax >= 1 ? seg0.Target : sa >= sb ? a2 : seg1.Target;
             return 2;
         }
 

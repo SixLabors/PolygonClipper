@@ -5,6 +5,31 @@ namespace SixLabors.PolygonClipper.Tests;
 
 public class SweepEventComparerTests
 {
+    /// <summary>
+    /// Checks consistent order for collinear segments and equality for identical geometry.
+    /// </summary>
+    /// <param name="left">Whether both events start their segments.</param>
+    /// <param name="subject">Whether both events belong to the subject.</param>
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    public void DistinctCollinearEvents_CompareConsistently(bool left, bool subject)
+    {
+        PolygonType polygonType = subject ? PolygonType.Subject : PolygonType.Clipping;
+        double direction = left ? 1 : -1;
+        SweepEvent first = new(new Vertex(0, 0), left, new SweepEvent(new Vertex(2 * direction, 2 * direction), !left), polygonType);
+        SweepEvent second = new(new Vertex(0, 0), left, new SweepEvent(new Vertex(4 * direction, 4 * direction), !left), polygonType);
+        SweepEvent identical = new(first.Point, left, first.OtherEvent, polygonType);
+        SweepEventComparer events = new();
+
+        Assert.Equal(-1, Math.Sign(events.Compare(first, second)));
+        Assert.Equal(1, Math.Sign(events.Compare(second, first)));
+        Assert.Equal(0, events.Compare(first, identical));
+        Assert.Equal(0, events.Compare(identical, first));
+    }
+
     [Fact]
     public void SameEvent_CompareEqual()
     {

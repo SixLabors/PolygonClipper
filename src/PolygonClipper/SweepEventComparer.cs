@@ -59,7 +59,25 @@ internal sealed class SweepEventComparer : IComparer<SweepEvent>, IComparer
         }
 
         // Compare by polygon type: subject polygons have higher priority
-        return x.PolygonType != PolygonType.Subject && y.PolygonType == PolygonType.Subject ? 1 : -1;
+        int order = ((int)x.PolygonType).CompareTo((int)y.PolygonType);
+        if (order == 0)
+        {
+            // Collinear rays can have different lengths. Order their other
+            // endpoints consistently rather than declaring each event smaller.
+            order = x.OtherEvent.Point.X.CompareTo(y.OtherEvent.Point.X);
+            if (order == 0)
+            {
+                order = x.OtherEvent.Point.Y.CompareTo(y.OtherEvent.Point.Y);
+            }
+
+            // At either endpoint, the shorter collinear segment comes first.
+            if (!x.Left)
+            {
+                order = -order;
+            }
+        }
+
+        return order;
     }
 
     /// <inheritdoc/>
