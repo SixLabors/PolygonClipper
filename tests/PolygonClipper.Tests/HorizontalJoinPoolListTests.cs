@@ -5,6 +5,47 @@ namespace SixLabors.PolygonClipper.Tests;
 
 public class HorizontalJoinPoolListTests
 {
+    /// <summary>
+    /// Checks that growth preserves cached joins outside the active range.
+    /// </summary>
+    /// <param name="activeCount">The number of joins reused before growth.</param>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public void GrowthAfterClear_PreservesCachedJoins(int activeCount)
+    {
+        HorizontalJoinPoolList pool = new();
+        HorizontalJoin[] original = new HorizontalJoin[4];
+        for (int i = 0; i < original.Length; i++)
+        {
+            original[i] = pool.Add(CreatePoint(i, 0), CreatePoint(i + 1, 0));
+        }
+
+        int capacity = pool.Capacity;
+        pool.Clear();
+        for (int i = 0; i < activeCount; i++)
+        {
+            Assert.Same(original[i], pool.Add(CreatePoint(i, 1), CreatePoint(i + 1, 1)));
+        }
+
+        pool.EnsureCapacity(capacity + 1);
+
+        Assert.Equal(activeCount, pool.Count);
+        Assert.True(pool.Capacity > capacity);
+        for (int i = activeCount; i < original.Length; i++)
+        {
+            OutputPoint left = CreatePoint(i, 1);
+            OutputPoint right = CreatePoint(i + 1, 1);
+            HorizontalJoin reused = pool.Add(left, right);
+            Assert.Same(original[i], reused);
+            Assert.Same(left, reused.LeftToRight);
+            Assert.Same(right, reused.RightToLeft);
+        }
+
+        pool.Add(CreatePoint(4, 1), CreatePoint(5, 1));
+        Assert.Equal(5, pool.Count);
+    }
+
     private static OutputPoint CreatePoint(double x, double y)
         => new(new Vertex(x, y), new OutputRecord());
 
