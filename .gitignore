@@ -63,6 +63,7 @@ artifacts/
 
 # Test image output
 **/Images/ActualOutput
+**/Images/ReferenceOutput
 
 # StyleCop
 StyleCopReport.xml
