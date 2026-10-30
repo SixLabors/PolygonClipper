@@ -5,6 +5,22 @@ namespace SixLabors.PolygonClipper.Tests;
 
 public class PolygonStrokerTests
 {
+    /// <summary>
+    /// Checks that axis-aligned miter intersections retain a representable thin inner contour.
+    /// </summary>
+    [Fact]
+    public void Stroke_AxisAlignedMiter_PreservesThinInnerContour()
+    {
+        double left = -1D / 9_007_199_254_740_992D;
+        Contour source = [new(left, 0), new(2, 0), new(2, 4), new(left, 4), new(left, 0)];
+        Polygon actual = PolygonStroker.Stroke([source], 2, new() { LineJoin = LineJoin.Miter });
+
+        Assert.Equal(2, actual.Count);
+        Contour inner = Assert.Single(actual, contour => contour.GetBoundingBox().Max.X - contour.GetBoundingBox().Min.X < 1);
+        Assert.Equal(new Vertex(1 + left, 1), inner.GetBoundingBox().Min);
+        Assert.Equal(new Vertex(1, 3), inner.GetBoundingBox().Max);
+    }
+
     [Fact]
     public void ProcessPath_ClosedSquare_ReturnsGeometry()
     {

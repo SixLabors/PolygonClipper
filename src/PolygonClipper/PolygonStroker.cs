@@ -1225,12 +1225,27 @@ public sealed class PolygonStroker
     {
         Vertex ab = b - a;
         Vertex cd = d - c;
+
         double denominator = Vertex.Cross(ab, cd);
         if (Math.Abs(denominator) < IntersectionEpsilon)
         {
             // Parallel or numerically unstable near-parallel lines.
             intersection = default;
             return false;
+        }
+
+        // The parallel check also rejects offset lines whose endpoints round to one point.
+        // A nonparallel axis-aligned crossing uses existing coordinates without division error.
+        if (ab.X == 0 && cd.Y == 0)
+        {
+            intersection = new(a.X, c.Y);
+            return true;
+        }
+
+        if (ab.Y == 0 && cd.X == 0)
+        {
+            intersection = new(c.X, a.Y);
+            return true;
         }
 
         double t = Vertex.Cross(c - a, cd) / denominator;
