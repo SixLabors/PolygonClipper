@@ -38,6 +38,18 @@ public class GenericTestCases
             Polygon expected = result.Coordinates;
             Polygon actual = result.Operation(subject, clipping);
 
+            string group = Path.Combine(nameof(GenericTestCases), Path.GetFileNameWithoutExtension(testCaseFile));
+            string path = SvgTestOutput.SaveSvg(
+                group,
+                nameof(this.GenericTestCase),
+                $"Operation-{result.Name}",
+                subject,
+                clipping,
+                actual,
+                expected);
+
+            this.testOutputHelper.WriteLine(path);
+
             Assert.Equal(expected.Count, actual.Count);
             for (int i = 0; i < expected.Count; i++)
             {
@@ -97,6 +109,7 @@ public class GenericTestCases
 
             return new ExpectedResult
             {
+                Name = mode,
                 Operation = operation,
                 Coordinates = TestPolygonUtilities.ConvertToPolygon(feature.Geometry)
             };
@@ -104,6 +117,11 @@ public class GenericTestCases
 
     private sealed class ExpectedResult
     {
+        /// <summary>
+        /// Gets or sets the operation name stored in the GeoJSON fixture.
+        /// </summary>
+        public string Name { get; set; }
+
         public Func<Polygon, Polygon, Polygon> Operation { get; set; }
 
         public Polygon Coordinates { get; set; }

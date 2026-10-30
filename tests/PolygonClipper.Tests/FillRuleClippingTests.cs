@@ -303,8 +303,26 @@ public class FillRuleClippingTests
         // doubly covered 5-by-10 middle band and leaves two 3-by-10 pieces.
         Assert.Equal(110D, Area(nonZero));
         Assert.Equal(60D, Area(evenOdd));
-        AssertCoverage(subject, clip, nonZero, BooleanOperation.Intersection, FillRule.NonZero, FillRule.EvenOdd);
-        AssertCoverage(subject, clip, evenOdd, BooleanOperation.Intersection, FillRule.EvenOdd, FillRule.EvenOdd);
+        AssertCoverage(
+            nameof(this.DirectClipping_OverlappingContours_NeedsNoCleanupPass),
+            string.Empty,
+            string.Empty,
+            subject,
+            clip,
+            nonZero,
+            BooleanOperation.Intersection,
+            FillRule.NonZero,
+            FillRule.EvenOdd);
+        AssertCoverage(
+            nameof(this.DirectClipping_OverlappingContours_NeedsNoCleanupPass),
+            string.Empty,
+            string.Empty,
+            subject,
+            clip,
+            evenOdd,
+            BooleanOperation.Intersection,
+            FillRule.EvenOdd,
+            FillRule.EvenOdd);
     }
 
     /// <summary>
@@ -323,7 +341,16 @@ public class FillRuleClippingTests
         Assert.Equal(1250D, Area(result));
         Assert.Equal(new Vertex(25, 25), result.GetBoundingBox().Min);
         Assert.Equal(new Vertex(75, 75), result.GetBoundingBox().Max);
-        AssertCoverage(subject, clip, result, BooleanOperation.Intersection, FillRule.NonZero, FillRule.EvenOdd);
+        AssertCoverage(
+            nameof(this.DirectClipping_SelfIntersection_PreservesBothNonZeroLobes),
+            string.Empty,
+            string.Empty,
+            subject,
+            clip,
+            result,
+            BooleanOperation.Intersection,
+            FillRule.NonZero,
+            FillRule.EvenOdd);
     }
 
     /// <summary>
@@ -369,7 +396,16 @@ public class FillRuleClippingTests
             for (int operation = 0; operation < 4; operation++)
             {
                 Polygon result = Execute(subject, clip, (BooleanOperation)operation, (FillRule)rule, (FillRule)rule);
-                AssertCoverage(subject, clip, result, (BooleanOperation)operation, (FillRule)rule, (FillRule)rule);
+                AssertCoverage(
+                    nameof(this.DenseStars_ExplicitRules_MatchSourceCoverage),
+                    string.Empty,
+                    $"VertexCount-{vertexCount}",
+                    subject,
+                    clip,
+                    result,
+                    (BooleanOperation)operation,
+                    (FillRule)rule,
+                    (FillRule)rule);
             }
         }
     }
@@ -426,7 +462,16 @@ public class FillRuleClippingTests
             for (int rule = 0; rule < 2; rule++)
             {
                 Polygon result = Execute(subject, clip, (BooleanOperation)operation, (FillRule)rule, FillRule.NonZero);
-                AssertCoverage(subject, clip, result, (BooleanOperation)operation, (FillRule)rule, FillRule.NonZero);
+                AssertCoverage(
+                    nameof(this.GeographicFixtures_MixedRules_MatchSourceCoverage),
+                    Path.GetFileNameWithoutExtension(file),
+                    string.Empty,
+                    subject,
+                    clip,
+                    result,
+                    (BooleanOperation)operation,
+                    (FillRule)rule,
+                    FillRule.NonZero);
             }
         }
     }
@@ -447,7 +492,16 @@ public class FillRuleClippingTests
                 for (int clipRule = 0; clipRule < 4; clipRule++)
                 {
                     Polygon result = Execute(subject, clip, (BooleanOperation)operation, (FillRule)subjectRule, (FillRule)clipRule);
-                    AssertCoverage(subject, clip, result, (BooleanOperation)operation, (FillRule)subjectRule, (FillRule)clipRule);
+                    AssertCoverage(
+                        nameof(this.ExistingDefectFixtures_ExplicitRules_MatchSourceCoverage),
+                        Path.GetFileNameWithoutExtension(testCaseFile),
+                        string.Empty,
+                        subject,
+                        clip,
+                        result,
+                        (BooleanOperation)operation,
+                        (FillRule)subjectRule,
+                        (FillRule)clipRule);
                 }
             }
         }
@@ -471,7 +525,16 @@ public class FillRuleClippingTests
                     for (int operation = 0; operation < 4; operation++)
                     {
                         Polygon result = Execute(subject, clip, (BooleanOperation)operation, (FillRule)subjectRule, (FillRule)clipRule);
-                        AssertCoverage(subject, clip, result, (BooleanOperation)operation, (FillRule)subjectRule, (FillRule)clipRule);
+                        AssertCoverage(
+                            nameof(this.SeededSelfCrossingContours_MixedRules_MatchSourceCoverage),
+                            string.Empty,
+                            string.Empty,
+                            subject,
+                            clip,
+                            result,
+                            (BooleanOperation)operation,
+                            (FillRule)subjectRule,
+                            (FillRule)clipRule);
                     }
                 }
             }
@@ -575,7 +638,16 @@ public class FillRuleClippingTests
         (Polygon subject, Polygon clip) = Inputs(geometry);
         Polygon result = Execute(subject, clip, operation, subjectRule, clipRule);
 
-        AssertCoverage(subject, clip, result, operation, subjectRule, clipRule);
+        AssertCoverage(
+            nameof(this.BinaryOperations_MixedRules_MatchOriginalWinding),
+            string.Empty,
+            $"Geometry-{geometry}",
+            subject,
+            clip,
+            result,
+            operation,
+            subjectRule,
+            clipRule);
     }
 
     /// <summary>
@@ -616,14 +688,39 @@ public class FillRuleClippingTests
     /// <summary>
     /// Checks output against signed source coverage away from input boundaries.
     /// </summary>
+    /// <param name="testName">The test method name.</param>
+    /// <param name="sourceName">The input file name without an extension, or an empty string.</param>
+    /// <param name="inputDetails">The invariant input parameter details, or an empty string.</param>
     /// <param name="subject">The original subject contours.</param>
     /// <param name="clip">The original clipping contours.</param>
     /// <param name="result">The clipped geometry.</param>
     /// <param name="operation">The Boolean operation.</param>
     /// <param name="subjectRule">The subject rule.</param>
     /// <param name="clipRule">The clipping rule.</param>
-    private static void AssertCoverage(Polygon subject, Polygon clip, Polygon result, BooleanOperation operation, FillRule subjectRule, FillRule clipRule)
+    private static void AssertCoverage(
+        string testName,
+        string sourceName,
+        string inputDetails,
+        Polygon subject,
+        Polygon clip,
+        Polygon result,
+        BooleanOperation operation,
+        FillRule subjectRule,
+        FillRule clipRule)
     {
+        // Generated samples replace this test's current result. A failure leaves the failing geometry available.
+        string group = sourceName.Length == 0
+            ? nameof(FillRuleClippingTests)
+            : Path.Combine(nameof(FillRuleClippingTests), sourceName);
+
+        string details = $"Operation-{operation}_SubjectRule-{subjectRule}_ClipRule-{clipRule}";
+        if (inputDetails.Length > 0)
+        {
+            details = $"{inputDetails}_{details}";
+        }
+
+        string svgPath = SvgTestOutput.SaveSvg(group, testName, details, subject, clip, result);
+
         Box2 bounds = subject.GetBoundingBox().Add(clip.GetBoundingBox());
         for (int y = 0; y < 9; y++)
         {
@@ -649,7 +746,7 @@ public class FillRuleClippingTests
                 bool actual = Winding(result, point) != 0;
                 if (expected != actual)
                 {
-                    Assert.Fail($"{operation}, {subjectRule}/{clipRule}, point {point}: expected {expected}." +
+                    Assert.Fail($"{operation}, {subjectRule}/{clipRule}, point {point}: expected {expected}.\nSVG: {svgPath}" +
                         $"\nSubject: {subject.ToDebugString()}\nClip: {clip.ToDebugString()}\nResult: {result.ToDebugString()}");
                 }
             }

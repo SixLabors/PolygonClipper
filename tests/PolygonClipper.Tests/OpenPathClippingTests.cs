@@ -4,7 +4,7 @@
 namespace SixLabors.PolygonClipper.Tests;
 
 /// <summary>
-/// Checks open clipping against exact segment and rectangle constructions.
+/// Checks open clipping against exact points, line pieces and area boundaries.
 /// </summary>
 public class OpenPathClippingTests
 {
@@ -27,7 +27,7 @@ public class OpenPathClippingTests
         Polygon subject = [Open(left, right)];
         Polygon clip = [Open(bottom, top)];
 
-        Polygon result = Execute(subject, clip, operation);
+        Polygon result = Execute(subject, clip, operation, nameof(this.CrossingLines_ReturnPointOrCutContours), $"Operation-{operation}", null);
         if (operation == BooleanOperation.Intersection)
         {
             Contour intersection = Assert.Single(result);
@@ -71,7 +71,8 @@ public class OpenPathClippingTests
         Vertex d = new(15, 0);
         Contour second = reverse ? Open(d, b) : Open(b, d);
 
-        Polygon result = Execute([Open(a, c)], [second], operation);
+        string details = $"Operation-{operation}_Reverse-{reverse}";
+        Polygon result = Execute([Open(a, c)], [second], operation, nameof(this.CollinearOverlap_UsesLineMembership), details, null);
         switch (operation)
         {
             case BooleanOperation.Intersection:
@@ -278,7 +279,7 @@ public class OpenPathClippingTests
             vertical.Add(Open(new(i, -1), new(i, size)));
         }
 
-        Polygon result = Execute(horizontal, vertical, operation);
+        Polygon result = Execute(horizontal, vertical, operation, nameof(this.GridLines_AllCrossingsAreRetained), $"Operation-{operation}", null);
         if (operation == BooleanOperation.Intersection)
         {
             Assert.Equal(size * size, result.Count);
@@ -361,7 +362,14 @@ public class OpenPathClippingTests
             Vertex c = point - second;
             Vertex d = point + second;
 
-            Polygon result = Execute([Open(a, b)], [Open(c, d)], operation);
+            // Keep the current generated sample. A failure leaves its geometry in this same file.
+            Polygon result = Execute(
+                [Open(a, b)],
+                [Open(c, d)],
+                operation,
+                nameof(this.ConstructedCrossings_MatchKnownIntegerGeometry),
+                $"Operation-{operation}",
+                null);
             if (operation == BooleanOperation.Intersection)
             {
                 Assert.Equal(point, Assert.Single(Assert.Single(result)));
@@ -396,6 +404,312 @@ public class OpenPathClippingTests
     }
 
     /// <summary>
+    /// Checks four crossings between sampled waves and the bends between their cut endpoints.
+    /// </summary>
+    /// <param name="operation">The requested operation.</param>
+    /// <param name="reverse">Whether both input paths run backwards.</param>
+    [Theory]
+    [InlineData(BooleanOperation.Intersection, false)]
+    [InlineData(BooleanOperation.Intersection, true)]
+    [InlineData(BooleanOperation.Union, false)]
+    [InlineData(BooleanOperation.Union, true)]
+    [InlineData(BooleanOperation.Difference, false)]
+    [InlineData(BooleanOperation.Difference, true)]
+    [InlineData(BooleanOperation.Xor, false)]
+    [InlineData(BooleanOperation.Xor, true)]
+    public void SampledWaves_PreserveAllCrossingsAndBends(BooleanOperation operation, bool reverse)
+    {
+        Polygon subject =
+        [Open([
+            new(-12, 4), new(-10, 5), new(-8, 4), new(-6, -4), new(-4, -5), new(-2, -4),
+            new(0, 4), new(2, 5), new(4, 4), new(6, -4), new(8, -5), new(10, -4), new(12, 4)
+        ])];
+        Polygon clip =
+        [Open([
+            new(-12, -4), new(-10, -5), new(-8, -4), new(-6, 4), new(-4, 5), new(-2, 4),
+            new(0, -4), new(2, -5), new(4, -4), new(6, 4), new(8, 5), new(10, 4), new(12, -4)
+        ])];
+
+        // The paths are reflections in y = 0. Their crossing segments meet at their midpoints.
+        // The other segments occupy separate X intervals or remain on opposite sides of y = 0.
+        Polygon expected = operation == BooleanOperation.Intersection
+            ? [Open(new Vertex(-7, 0)), Open(new Vertex(-1, 0)), Open(new Vertex(5, 0)), Open(new Vertex(11, 0))]
+            :
+            [
+                Open(new(-12, 4), new(-10, 5), new(-8, 4), new(-7, 0)),
+                Open(new(-7, 0), new(-6, -4), new(-4, -5), new(-2, -4), new(-1, 0)),
+                Open(new(-1, 0), new(0, 4), new(2, 5), new(4, 4), new(5, 0)),
+                Open(new(5, 0), new(6, -4), new(8, -5), new(10, -4), new(11, 0)),
+                Open(new(11, 0), new(12, 4))
+            ];
+
+        if (operation is BooleanOperation.Union or BooleanOperation.Xor)
+        {
+            // Reflect the known subject pieces to obtain the clip pieces.
+            int subjectCount = expected.Count;
+            for (int i = 0; i < subjectCount; i++)
+            {
+                Contour reflected = new() { IsClosed = false };
+                foreach (Vertex vertex in expected[i])
+                {
+                    reflected.Add(new(vertex.X, -vertex.Y));
+                }
+
+                expected.Add(reflected);
+            }
+        }
+
+        if (reverse)
+        {
+            subject[0].Reverse();
+            clip[0].Reverse();
+        }
+
+        string details = $"Operation-{operation}_Reverse-{reverse}";
+        Polygon actual = Execute(subject, clip, operation, nameof(this.SampledWaves_PreserveAllCrossingsAndBends), details, expected);
+        AssertOpenPaths(actual, expected);
+    }
+
+    /// <summary>
+    /// Checks densely sampled curves whose four crossings are known polynomial roots.
+    /// </summary>
+    /// <param name="operation">The requested operation.</param>
+    /// <param name="reverse">Whether both input paths run backwards.</param>
+    [Theory]
+    [InlineData(BooleanOperation.Intersection, false)]
+    [InlineData(BooleanOperation.Intersection, true)]
+    [InlineData(BooleanOperation.Union, false)]
+    [InlineData(BooleanOperation.Union, true)]
+    [InlineData(BooleanOperation.Difference, false)]
+    [InlineData(BooleanOperation.Difference, true)]
+    [InlineData(BooleanOperation.Xor, false)]
+    [InlineData(BooleanOperation.Xor, true)]
+    public void SampledQuartic_PreservesFourVertexCrossings(BooleanOperation operation, bool reverse)
+    {
+        Contour first = new() { IsClosed = false };
+        Contour second = new() { IsClosed = false };
+        for (int sample = -16; sample <= 16; sample++)
+        {
+            Vertex point = SampleQuartic(sample);
+            first.Add(point);
+            second.Add(new(point.X, -point.Y));
+        }
+
+        Polygon subject = [first];
+        Polygon clip = [second];
+        Polygon expected;
+        if (operation == BooleanOperation.Intersection)
+        {
+            expected = [Open(new Vertex(-3, 0)), Open(new Vertex(-1, 0)), Open(new Vertex(1, 0)), Open(new Vertex(3, 0))];
+        }
+        else
+        {
+            expected = [];
+
+            // For y = (x^2 - 9)(x^2 - 1) / 16 and its reflection, the only crossings
+            // are x = -3, -1, 1 and 3. These fixed intervals define the expected pieces.
+            int[] endpoints = [-16, -12, -4, 4, 12, 16];
+            for (int i = 0; i < endpoints.Length - 1; i++)
+            {
+                Contour piece = new() { IsClosed = false };
+                for (int sample = endpoints[i]; sample <= endpoints[i + 1]; sample++)
+                {
+                    Vertex point = SampleQuartic(sample);
+                    piece.Add(point);
+                }
+
+                expected.Add(piece);
+                if (operation is BooleanOperation.Union or BooleanOperation.Xor)
+                {
+                    Contour reflection = new() { IsClosed = false };
+                    foreach (Vertex point in piece)
+                    {
+                        reflection.Add(new(point.X, -point.Y));
+                    }
+
+                    expected.Add(reflection);
+                }
+            }
+        }
+
+        if (reverse)
+        {
+            first.Reverse();
+            second.Reverse();
+        }
+
+        string details = $"Operation-{operation}_Reverse-{reverse}";
+        Polygon actual = Execute(subject, clip, operation, nameof(this.SampledQuartic_PreservesFourVertexCrossings), details, expected);
+        AssertOpenPaths(actual, expected);
+    }
+
+    /// <summary>
+    /// Checks repeated area and hole crossings, retained bends and isolated corner contacts.
+    /// </summary>
+    /// <param name="operation">The requested operation.</param>
+    /// <param name="reverse">Whether the source path runs backwards.</param>
+    [Theory]
+    [InlineData(BooleanOperation.Intersection, false)]
+    [InlineData(BooleanOperation.Intersection, true)]
+    [InlineData(BooleanOperation.Union, false)]
+    [InlineData(BooleanOperation.Union, true)]
+    [InlineData(BooleanOperation.Difference, false)]
+    [InlineData(BooleanOperation.Difference, true)]
+    [InlineData(BooleanOperation.Xor, false)]
+    [InlineData(BooleanOperation.Xor, true)]
+    public void CurvedPath_ClipsAgainstTwoHolesAndCornerContacts(BooleanOperation operation, bool reverse)
+    {
+        Polygon subject =
+        [Open([
+            new(-2, 2), new(1, 2), new(2, 3), new(4, 3), new(6, 2), new(8, 2), new(10, 3),
+            new(13, 3), new(14, 4), new(13, 6), new(10, 6), new(8, 7), new(6, 7), new(4, 6),
+            new(2, 6), new(-2, 8), new(0, 10), new(4, 11), new(8, 11), new(12, 10), new(14, 8)
+        ])];
+        Contour firstHole = Rectangle(3, 1, 5, 9);
+        Contour secondHole = Rectangle(7, 1, 9, 9);
+        firstHole.Reverse();
+        secondHole.Reverse();
+        Polygon clip = [Rectangle(0, 0, 12, 10), firstHole, secondHole];
+        clip[0].AddHoleIndex(1);
+        clip[0].AddHoleIndex(2);
+        firstHole.ParentIndex = secondHole.ParentIndex = 0;
+        firstHole.Depth = secondHole.Depth = 1;
+
+        // Vertical boundaries cut these segments at integer or half-integer coordinates.
+        // The upper arc touches (0, 10) and (12, 10), but remains outside between those points.
+        Polygon expected = operation == BooleanOperation.Intersection
+            ?
+            [
+                Open(new(0, 2), new(1, 2), new(2, 3), new(3, 3)),
+                Open(new(5, 2.5), new(6, 2), new(7, 2)),
+                Open(new(9, 2.5), new(10, 3), new(12, 3)),
+                Open(new(12, 6), new(10, 6), new(9, 6.5)),
+                Open(new(7, 7), new(6, 7), new(5, 6.5)),
+                Open(new(3, 6), new(2, 6), new(0, 7)),
+                Open(new Vertex(0, 10)),
+                Open(new Vertex(12, 10))
+            ]
+            :
+            [
+                Open(new(-2, 2), new(0, 2)),
+                Open(new(3, 3), new(4, 3), new(5, 2.5)),
+                Open(new(7, 2), new(8, 2), new(9, 2.5)),
+                Open(new(12, 3), new(13, 3), new(14, 4), new(13, 6), new(12, 6)),
+                Open(new(9, 6.5), new(8, 7), new(7, 7)),
+                Open(new(5, 6.5), new(4, 6), new(3, 6)),
+                Open(new(0, 7), new(-2, 8), new(0, 10)),
+                Open(new(0, 10), new(4, 11), new(8, 11), new(12, 10)),
+                Open(new(12, 10), new(14, 8))
+            ];
+
+        Polygon expectedLines = expected;
+        bool retainsArea = operation is BooleanOperation.Union or BooleanOperation.Xor;
+        if (retainsArea)
+        {
+            expected = clip.DeepClone();
+            foreach (Contour line in expectedLines)
+            {
+                expected.Add(line);
+            }
+        }
+
+        if (reverse)
+        {
+            subject[0].Reverse();
+        }
+
+        string details = $"Operation-{operation}_Reverse-{reverse}";
+        Polygon actual = Execute(subject, clip, operation, nameof(this.CurvedPath_ClipsAgainstTwoHolesAndCornerContacts), details, expected);
+        Polygon actualLines = [];
+        List<Contour> actualArea = [];
+        foreach (Contour contour in actual)
+        {
+            if (contour.IsClosed)
+            {
+                actualArea.Add(contour);
+            }
+            else
+            {
+                actualLines.Add(contour);
+            }
+        }
+
+        AssertOpenPaths(actualLines, expectedLines);
+        Assert.Equal(retainsArea ? 3 : 0, actualArea.Count);
+        if (retainsArea)
+        {
+            // Line clipping must retain the rectangle and its two holes.
+            foreach (Contour reference in clip)
+            {
+                Assert.Contains(actualArea, contour => contour.GetBoundingBox() == reference.GetBoundingBox() &&
+                    PolygonUtilities.Area(contour.AsVertexSpan()) == PolygonUtilities.Area(reference.AsVertexSpan()));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Checks a shared curved span and a separate crossing in the same pair of paths.
+    /// </summary>
+    /// <param name="operation">The requested operation.</param>
+    /// <param name="reverse">Whether both paths run backwards.</param>
+    [Theory]
+    [InlineData(BooleanOperation.Intersection, false)]
+    [InlineData(BooleanOperation.Intersection, true)]
+    [InlineData(BooleanOperation.Union, false)]
+    [InlineData(BooleanOperation.Union, true)]
+    [InlineData(BooleanOperation.Difference, false)]
+    [InlineData(BooleanOperation.Difference, true)]
+    [InlineData(BooleanOperation.Xor, false)]
+    [InlineData(BooleanOperation.Xor, true)]
+    public void SharedCurvedSpan_RetainsOverlapAndSeparateCrossing(BooleanOperation operation, bool reverse)
+    {
+        Polygon subject =
+        [Open(new(-6, 0), new(-4, 3), new(-2, 4), new(0, 3), new(2, 0), new(4, -3), new(6, -4), new(8, -3), new(10, 0))];
+        Polygon clip =
+        [Open(new(-6, -2), new(-4, 3), new(-2, 4), new(0, 3), new(2, 0), new(4, 2), new(6, 0), new(8, -3), new(10, -1))];
+
+        Polygon expected = operation == BooleanOperation.Intersection
+            ?
+            [
+                Open(new(-4, 3), new(-2, 4)),
+                Open(new(-2, 4), new(0, 3)),
+                Open(new(0, 3), new(2, 0)),
+                Open(new Vertex(8, -3))
+            ]
+            :
+            [
+                Open(new(-6, 0), new(-4, 3)),
+                Open(new(2, 0), new(4, -3), new(6, -4), new(8, -3)),
+                Open(new(8, -3), new(10, 0))
+            ];
+
+        if (operation is BooleanOperation.Union or BooleanOperation.Xor)
+        {
+            expected.Add(Open(new(-6, -2), new(-4, 3)));
+            expected.Add(Open(new(2, 0), new(4, 2), new(6, 0), new(8, -3)));
+            expected.Add(Open(new(8, -3), new(10, -1)));
+        }
+
+        if (operation == BooleanOperation.Union)
+        {
+            // Both operands meet at each shared vertex, so those vertices remain cut endpoints.
+            expected.Add(Open(new(-4, 3), new(-2, 4)));
+            expected.Add(Open(new(-2, 4), new(0, 3)));
+            expected.Add(Open(new(0, 3), new(2, 0)));
+        }
+
+        if (reverse)
+        {
+            subject[0].Reverse();
+            clip[0].Reverse();
+        }
+
+        string details = $"Operation-{operation}_Reverse-{reverse}";
+        Polygon actual = Execute(subject, clip, operation, nameof(this.SharedCurvedSpan_RetainsOverlapAndSeparateCrossing), details, expected);
+        AssertOpenPaths(actual, expected);
+    }
+
+    /// <summary>
     /// Builds an explicitly open input without adding a closing vertex.
     /// </summary>
     /// <param name="vertices">The source vertex sequence.</param>
@@ -412,6 +726,21 @@ public class OpenPathClippingTests
     }
 
     /// <summary>
+    /// Samples y = (x^2 - 9)(x^2 - 1) / 16 at quarter-unit X positions.
+    /// </summary>
+    /// <param name="sample">Four times the X coordinate.</param>
+    /// <returns>The exact double coordinates of this polynomial sample.</returns>
+    private static Vertex SampleQuartic(int sample)
+    {
+        double x = sample / 4D;
+        double squared = x * x;
+
+        // Quarter-unit inputs and the vertical scale of 1/16 use powers of two.
+        // Every source coordinate is exact, including the four zero crossings.
+        return new(x, (squared - 9) * (squared - 1) / 16D);
+    }
+
+    /// <summary>
     /// Builds a counterclockwise closed rectangle with implicit closure.
     /// </summary>
     /// <param name="left">The left coordinate.</param>
@@ -423,20 +752,75 @@ public class OpenPathClippingTests
         => [new(left, bottom), new(right, bottom), new(right, top), new(left, top)];
 
     /// <summary>
-    /// Executes the requested existing public operation.
+    /// Executes the public operation and saves the actual and available expected geometry.
     /// </summary>
     /// <param name="subject">The subject contours.</param>
     /// <param name="clip">The clip contours.</param>
     /// <param name="operation">The requested operation.</param>
+    /// <param name="testName">The test method name.</param>
+    /// <param name="details">The invariant parameter details for the file name.</param>
+    /// <param name="expected">The known expected geometry, or null when unavailable.</param>
     /// <returns>The clipped contours.</returns>
-    private static Polygon Execute(Polygon subject, Polygon clip, BooleanOperation operation)
-        => operation switch
+    private static Polygon Execute(
+        Polygon subject, Polygon clip, BooleanOperation operation, string testName, string details, Polygon expected)
+    {
+        Polygon result = operation switch
         {
             BooleanOperation.Intersection => PolygonClipper.Intersection(subject, clip, FillRule.NonZero),
             BooleanOperation.Union => PolygonClipper.Union(subject, clip, FillRule.NonZero),
             BooleanOperation.Difference => PolygonClipper.Difference(subject, clip, FillRule.NonZero),
             _ => PolygonClipper.Xor(subject, clip, FillRule.NonZero)
         };
+
+        if (expected is null)
+        {
+            SvgTestOutput.SaveSvg(nameof(OpenPathClippingTests), testName, details, subject, clip, result);
+        }
+        else
+        {
+            SvgTestOutput.SaveSvg(nameof(OpenPathClippingTests), testName, details, subject, clip, result, expected);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Checks every open contour's vertices in either direction, including points and bends.
+    /// </summary>
+    /// <param name="actual">The clipped open geometry.</param>
+    /// <param name="expected">The independently constructed open geometry.</param>
+    private static void AssertOpenPaths(Polygon actual, Polygon expected)
+    {
+        Assert.Equal(expected.Count, actual.Count);
+        Assert.All(actual, contour =>
+        {
+            Assert.False(contour.IsClosed);
+            Assert.Null(contour.ParentIndex);
+            Assert.Equal(0, contour.Depth);
+            Assert.Equal(0, contour.HoleCount);
+        });
+
+        foreach (Contour reference in expected)
+        {
+            Assert.Contains(actual, contour =>
+            {
+                if (contour.Count != reference.Count)
+                {
+                    return false;
+                }
+
+                bool forward = true;
+                bool backward = true;
+                for (int i = 0; i < reference.Count; i++)
+                {
+                    forward &= contour[i] == reference[i];
+                    backward &= contour[i] == reference[reference.Count - 1 - i];
+                }
+
+                return forward || backward;
+            });
+        }
+    }
 
     /// <summary>
     /// Checks exact undirected line pieces without depending on contour ordering or traversal direction.
