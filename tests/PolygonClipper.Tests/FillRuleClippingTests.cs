@@ -359,6 +359,7 @@ public class FillRuleClippingTests
     [Theory]
     [InlineData(31)]
     [InlineData(101)]
+    [InlineData(301)]
     public void DenseStars_ExplicitRules_MatchSourceCoverage(int vertexCount)
     {
         Polygon subject = GenericTestCases.BuildStarPolygon(vertexCount, 100D, 0D, 0D);

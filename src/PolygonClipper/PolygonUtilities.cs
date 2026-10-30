@@ -28,12 +28,16 @@ internal static class PolygonUtilities
         double second = a.Y * b.X;
         double area = first - second;
 
-        // The orientation filter includes rounding in coordinate differences
-        // and products. Recover those differences only when cancellation can
-        // obscure the sign. The bound selects precision; it does not merge points.
-        const double errorFactor = 3.3306690738754716E-16D;
+        // The two products can almost cancel. Rounding can then change the sign.
+        // For double arithmetic, u = 2^-53. The error factor is (3 + 16u)u.
+        // If the absolute area exceeds the bound below, its sign is reliable.
+        // Otherwise, the calculation needs higher precision to determine the sign.
+        // Source: https://www.cs.cmu.edu/afs/cs/project/quake/public/code/predicates.c
+        // exactinit defines this factor as ccwerrboundA. orient2d uses it.
+        const double unitRoundoff = 1D / 9_007_199_254_740_992D;
+        const double orientationErrorFactor = (3D + (16D * unitRoundoff)) * unitRoundoff;
         if (first == 0 || second == 0 || !double.IsFinite(area) ||
-            Math.Abs(area) > errorFactor * (Math.Abs(first) + Math.Abs(second)))
+            Math.Abs(area) > orientationErrorFactor * (Math.Abs(first) + Math.Abs(second)))
         {
             return area;
         }

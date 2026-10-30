@@ -8,6 +8,32 @@ namespace SixLabors.PolygonClipper.Tests;
 public class NormalizationTests
 {
     /// <summary>
+    /// Checks every boundary connection in the two dense-star union cases.
+    /// </summary>
+    /// <param name="vertexCount">The number of vertices in each source star.</param>
+    [Theory]
+    [InlineData(101)]
+    [InlineData(301)]
+    public void DenseStarUnion_PreservesBoundaryConnections(int vertexCount)
+    {
+        Polygon subject = GenericTestCases.BuildStarPolygon(vertexCount, 100D, 0D, 0D);
+        Polygon clip = GenericTestCases.BuildStarPolygon(vertexCount, 100D, 35D, 22D);
+
+        // Use the same six-decimal input scale as the comparison benchmark.
+        ClipperD reference = new(6) { PreserveCollinear = false };
+        reference.AddSubject(new PathsD(subject.Select(ProjectContour)));
+        reference.AddClip(new PathsD(clip.Select(ProjectContour)));
+        PathsD expected = [];
+        Assert.True(reference.Execute(ClipType.Union, Clipper2Lib.FillRule.EvenOdd, expected));
+
+        Polygon actual = PolygonClipper.Union(subject, clip, FillRule.EvenOdd);
+
+        // Contours can join differently at a shared vertex. Check every
+        // junction and segment instead of requiring the same contour count.
+        Assert.True(TestPolygonUtilities.HaveEquivalentBoundaryGraphs(actual.Select(ProjectContour), expected));
+    }
+
+    /// <summary>
     /// Tests that a simple rectangle (single contour, no holes) is preserved.
     /// </summary>
     [Fact]
