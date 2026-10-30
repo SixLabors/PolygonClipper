@@ -183,9 +183,10 @@ public sealed class PolygonStroker
     /// Strokes the source contours with the specified width and default options.
     /// </summary>
     /// <param name="polygon">The source contours, each with its own closure state.</param>
-    /// <param name="width">The stroke width.</param>
-    /// <returns>Closed stroke contours without a repeated closing vertex.</returns>
+    /// <param name="width">The finite signed stroke width. Zero produces no geometry.</param>
+    /// <returns>Closed stroke contours without a repeated closing vertex. Zero width returns no contours.</returns>
     /// <exception cref="ArgumentNullException">The polygon is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The width is not finite.</exception>
     public static Polygon Stroke(Polygon polygon, double width)
         => Stroke(polygon, width, DefaultStrokeOptions);
 
@@ -193,19 +194,21 @@ public sealed class PolygonStroker
     /// Strokes the source contours with the specified width and options.
     /// </summary>
     /// <param name="polygon">The source contours, each with its own closure state.</param>
-    /// <param name="width">The stroke width.</param>
+    /// <param name="width">The finite signed stroke width. Zero produces no geometry.</param>
     /// <param name="options">The join, cap, approximation, and output cleanup options.</param>
-    /// <returns>Closed stroke contours without a repeated closing vertex.</returns>
+    /// <returns>Closed stroke contours without a repeated closing vertex. Zero width returns no contours.</returns>
     /// <exception cref="ArgumentNullException">The polygon or options are null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The width is not finite.</exception>
     public static Polygon Stroke(Polygon polygon, double width, StrokeOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+        Guard.MustBeBetweenOrEqualTo(width, double.MinValue, double.MaxValue, nameof(width));
 
         StrokeOptionsKey key = new(options);
         PolygonStroker stroker = Rent(key, options);
         try
         {
-            stroker.Width = width;
+            stroker.SetHalfWidth(width * 0.5D);
             return stroker.Stroke(polygon);
         }
         finally
@@ -218,13 +221,13 @@ public sealed class PolygonStroker
     /// Strokes <paramref name="polygon"/> using this instance's configured options and width.
     /// </summary>
     /// <param name="polygon">The source contours, each with its own closure state.</param>
-    /// <returns>Closed stroke contours without a repeated closing vertex.</returns>
+    /// <returns>Closed stroke contours without a repeated closing vertex. Zero width returns no contours.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="polygon"/> is null.</exception>
     /// <remarks>Instance execution is not thread-safe for concurrent use.</remarks>
     public Polygon Stroke(Polygon polygon)
     {
         ArgumentNullException.ThrowIfNull(polygon);
-        if (polygon.Count == 0)
+        if (polygon.Count == 0 || this.strokeWidth == 0)
         {
             return [];
         }
@@ -289,26 +292,38 @@ public sealed class PolygonStroker
     /// <remarks>
     /// Positive values produce conventional outward stroking. Negative values are supported
     /// and flip the side orientation while preserving magnitude.
+    /// Zero width produces no geometry.
     /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The width is not finite.</exception>
     public double Width
     {
         get => this.strokeWidth * 2D;
         set
         {
-            this.strokeWidth = value * 0.5D;
-            if (this.strokeWidth < 0D)
-            {
-                this.widthAbs = -this.strokeWidth;
-                this.widthSign = -1;
-            }
-            else
-            {
-                this.widthAbs = this.strokeWidth;
-                this.widthSign = 1;
-            }
-
-            this.widthEps = this.strokeWidth / 1024D;
+            Guard.MustBeBetweenOrEqualTo(value, double.MinValue, double.MaxValue, nameof(value));
+            this.SetHalfWidth(value * 0.5D);
         }
+    }
+
+    /// <summary>
+    /// Sets the signed distance from the source path to each stroke side.
+    /// </summary>
+    /// <param name="halfWidth">The signed side distance from a finite public width.</param>
+    private void SetHalfWidth(double halfWidth)
+    {
+        this.strokeWidth = halfWidth;
+        if (this.strokeWidth < 0D)
+        {
+            this.widthAbs = -this.strokeWidth;
+            this.widthSign = -1;
+        }
+        else
+        {
+            this.widthAbs = this.strokeWidth;
+            this.widthSign = 1;
+        }
+
+        this.widthEps = this.strokeWidth / 1024D;
     }
 
     /// <summary>
