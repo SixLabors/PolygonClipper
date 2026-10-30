@@ -112,6 +112,14 @@ public class SvgTestOutputTests
             .Single(element => (string)element.Attribute("class") == "contour" && (int)element.Attribute("data-contour")! == 0).Attribute("d")!;
         Assert.StartsWith("M 20 380", expectedExterior);
         Assert.All(root.Descendants(Svg + "svg"), element => Assert.Equal("0 0 400 400", (string)element.Attribute("viewBox")!));
+
+        // A ten-unit exterior occupies 360 pixels. A 60-pixel scale bar must therefore
+        // represent 5/3 source units at every tested coordinate scale.
+        XElement scaleBar = root.Elements().Single(element => (string)element.Attribute("id") == "scale");
+        XElement bar = scaleBar.Elements(Svg + "line").Single(element => element.Attribute("data-units") is not null);
+        Assert.Equal(60D, (double)bar.Attribute("x2")! - (double)bar.Attribute("x1")!, 10);
+        Assert.Equal(5D / 3, (double)bar.Attribute("data-units")! / scale, 12);
+        Assert.EndsWith(" units", scaleBar.Element(Svg + "text")!.Value);
         Assert.Equal(before, actual.ToDebugString());
     }
 
@@ -156,6 +164,45 @@ public class SvgTestOutputTests
         {
             CultureInfo.CurrentCulture = previous;
         }
+    }
+
+    /// <summary>
+    /// Checks that coincident source vertices have a visible point marker.
+    /// </summary>
+    /// <param name="isClosed">The source closure state.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SaveSvg_CoincidentStrokeVertices_HavePointMarker(bool isClosed)
+    {
+        Contour contour = [new(5, 5), new(5, 5)];
+        contour.IsClosed = isClosed;
+        Polygon subject = [contour];
+        Polygon actual = PolygonStroker.Stroke(subject, 4, new() { LineCap = LineCap.Round });
+        string before = subject.ToDebugString();
+        string path = SvgTestOutput.SaveSvg(
+            nameof(SvgTestOutputTests),
+            nameof(this.SaveSvg_CoincidentStrokeVertices_HavePointMarker),
+            $"IsClosed-{isClosed}",
+            subject,
+            [],
+            actual);
+
+        XElement root = XDocument.Load(path).Root!;
+        XElement input = root.Elements().Single(element => (string)element.Attribute("id") == "inputs");
+        XElement outline = Assert.Single(input.Descendants(Svg + "path"));
+        XElement marker = Assert.Single(input.Descendants(Svg + "rect"), element => (string)element.Attribute("class") == "point");
+        double lineWidth = (double)outline.Attribute("stroke-width")!;
+        string[] projected = ((string)outline.Attribute("d")!).Split(' ');
+
+        Assert.Equal(lineWidth, (double)marker.Attribute("width")!);
+        Assert.Equal(lineWidth, (double)marker.Attribute("height")!);
+        Assert.Equal(double.Parse(projected[1], CultureInfo.InvariantCulture), (double)marker.Attribute("x")! + (lineWidth / 2), 10);
+        Assert.Equal(double.Parse(projected[2], CultureInfo.InvariantCulture), (double)marker.Attribute("y")! + (lineWidth / 2), 10);
+        Assert.Equal((string)outline.Attribute("stroke")!, (string)marker.Attribute("fill")!);
+        Assert.Equal(isClosed ? "M 5 5 L 5 5 Z" : "M 5 5 L 5 5", (string)outline.Attribute("data-source-d")!);
+        Assert.Equal(isClosed, (bool)outline.Attribute("data-closed")!);
+        Assert.Equal(before, subject.ToDebugString());
     }
 
     /// <summary>

@@ -13,7 +13,7 @@ SixLabors.PolygonClipper
 
 </div>
 
-SixLabors.PolygonClipper performs polygon clipping and stroking in C#.
+SixLabors.PolygonClipper performs polygon clipping, stroking and offsets in C#.
 It uses the Martinez-Rueda algorithm with double coordinates. It supports holes,
 self-intersections, overlapping edges, and multiple contours.
 
@@ -116,6 +116,25 @@ StrokeOptions options = new()
 
 // Build a stroke with width 12 and the specified joins and caps.
 Polygon result = PolygonStroker.Stroke(subject, width: 12, options);
+```
+
+## Offsets
+
+`PolygonOffsetter.Offset(polygon, delta, fillRule, options)` expands or contracts a filled polygon.
+Positive distance expands exterior boundaries and shrinks holes. Negative distance contracts exterior boundaries and expands holes.
+Collapsed holes and components disappear. Zero distance returns an independent, resolved copy of the source filled area.
+
+All source contours must be closed. The fill rule interprets the original source contours before their boundaries are offset.
+`OffsetOptions` selects the join style, miter limit and arc detail. Offset results always contain resolved boundaries.
+
+```csharp
+OffsetOptions offsetOptions = new() { LineJoin = LineJoin.Round };
+
+// Expand the NonZero-filled area by two coordinate units with the selected joins.
+Polygon expanded = PolygonOffsetter.Offset(subject, 2, FillRule.NonZero, offsetOptions);
+
+// Contract the same source area by two coordinate units.
+Polygon contracted = PolygonOffsetter.Offset(subject, -2, FillRule.NonZero, offsetOptions);
 ```
 
 ## Complexity

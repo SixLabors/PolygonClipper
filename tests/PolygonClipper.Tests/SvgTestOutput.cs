@@ -119,6 +119,51 @@ internal static class SvgTestOutput
             AddGeometry(AddPanel(root, 2, "expected", "Expected"), expected, "#7e22ce", origin, scale, extent);
         }
 
+        // Auto-fit preserves relative size within a file but changes pixels per unit between files.
+        // Show a source-unit scale below the input geometry so that difference stays visible.
+        const double requestedBarWidth = 60;
+        int drawingWidth = PanelSize - (2 * Padding);
+        double barUnits = Math.Max(double.Epsilon, scale * (extent * (requestedBarWidth / drawingWidth)));
+
+        // A subnormal source distance can round to zero. Use at least one representable unit,
+        // then project that actual distance so the bar and its label still describe the same scale.
+        double barWidth = ((barUnits / scale) / extent) * drawingWidth;
+        double barEnd = Padding + barWidth;
+        int barY = PanelSize + TitleHeight - (Padding / 2);
+        root.Add(new XElement(
+            Svg + "g",
+            new XAttribute("id", "scale"),
+            new XAttribute("stroke", "#475569"),
+            new XElement(
+                Svg + "line",
+                new XAttribute("x1", Padding),
+                new XAttribute("x2", barEnd),
+                new XAttribute("y1", barY),
+                new XAttribute("y2", barY),
+                new XAttribute("data-units", barUnits)),
+            new XElement(
+                Svg + "line",
+                new XAttribute("x1", Padding),
+                new XAttribute("x2", Padding),
+                new XAttribute("y1", barY - 3),
+                new XAttribute("y2", barY + 3)),
+            new XElement(
+                Svg + "line",
+                new XAttribute("x1", barEnd),
+                new XAttribute("x2", barEnd),
+                new XAttribute("y1", barY - 3),
+                new XAttribute("y2", barY + 3)),
+            new XElement(
+                Svg + "text",
+                new XAttribute("x", barEnd + 10),
+                new XAttribute("y", barY),
+                new XAttribute("font-family", "sans-serif"),
+                new XAttribute("font-size", 11),
+                new XAttribute("dominant-baseline", "middle"),
+                new XAttribute("stroke", "none"),
+                new XAttribute("fill", "#475569"),
+                FormattableString.Invariant($"{barUnits:G6} units"))));
+
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
         new XDocument(root).Save(outputPath);
         return outputPath;
@@ -186,8 +231,15 @@ internal static class SvgTestOutput
 
             StringBuilder path = new();
             StringBuilder source = new();
+            Vertex first = contour[0];
+            bool singlePoint = true;
+
             foreach (Vertex vertex in contour)
             {
+                // Repeated coincident vertices still describe one point. A zero-length
+                // SVG path has no visible outline, so it needs the same point marker.
+                singlePoint = singlePoint && vertex == first;
+
                 Vertex point = Project(vertex, origin, scale, extent);
                 string command = path.Length == 0 ? "M " : " L ";
                 path.Append(command).Append(point.X.ToString("R", CultureInfo.InvariantCulture))
@@ -219,7 +271,7 @@ internal static class SvgTestOutput
                 new XElement(Svg + "title", $"Contour {i}. {(contour.IsClosed ? "Closed" : "Open")}. Depth {contour.Depth}."));
 
             group.Add(outline);
-            if (contour.Count == 1)
+            if (singlePoint)
             {
                 // Center the square on the point and match the contour line thickness.
                 Vertex point = Project(contour[0], origin, scale, extent);

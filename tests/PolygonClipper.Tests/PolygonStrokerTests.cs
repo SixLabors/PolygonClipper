@@ -14,6 +14,13 @@ public class PolygonStrokerTests
         double left = -1D / 9_007_199_254_740_992D;
         Contour source = [new(left, 0), new(2, 0), new(2, 4), new(left, 4), new(left, 0)];
         Polygon actual = PolygonStroker.Stroke([source], 2, new() { LineJoin = LineJoin.Miter });
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.Stroke_AxisAlignedMiter_PreservesThinInnerContour),
+            string.Empty,
+            [source],
+            [],
+            actual);
 
         Assert.Equal(2, actual.Count);
         Contour inner = Assert.Single(actual, contour => contour.GetBoundingBox().Max.X - contour.GetBoundingBox().Min.X < 1);
@@ -36,6 +43,13 @@ public class PolygonStrokerTests
         ];
 
         Polygon result = PolygonStroker.Stroke([square], width);
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.ProcessPath_ClosedSquare_ReturnsGeometry),
+            string.Empty,
+            [square],
+            [],
+            result);
 
         Assert.True(result.Count > 0);
         Assert.True(result[0].Count >= 4);
@@ -52,7 +66,16 @@ public class PolygonStrokerTests
             new(5, 5)
         ];
 
-        Polygon result = PolygonStroker.Stroke([new Contour(points.Length) { points[0], points[1] }], width);
+        Polygon input = [new Contour(points.Length) { points[0], points[1] }];
+        Polygon result = PolygonStroker.Stroke(input, width);
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.ProcessPath_DegenerateTwoPointPath_ReturnsPointCap),
+            string.Empty,
+            input,
+            [],
+            result);
+
         Assert.True(result.Count > 0);
         Contour contour = result[0];
 
@@ -72,6 +95,13 @@ public class PolygonStrokerTests
         ]];
 
         Polygon result = PolygonStroker.Stroke(input, width: 2D);
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.ProcessPolygonAndClip_SimplePolygon_ReturnsNonEmptyResult),
+            string.Empty,
+            input,
+            [],
+            result);
 
         Assert.True(result.Count > 0);
     }
@@ -106,6 +136,21 @@ public class PolygonStrokerTests
 
         Polygon openResult = PolygonStroker.Stroke(open, width, options);
         Polygon closedResult = PolygonStroker.Stroke(closed, width, options);
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.Stroke_OpenPolylineWithThreeVertices_IsNotForcedClosed),
+            "IsClosed-False",
+            open,
+            [],
+            openResult);
+
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.Stroke_OpenPolylineWithThreeVertices_IsNotForcedClosed),
+            "IsClosed-True",
+            closed,
+            [],
+            closedResult);
 
         AssertPolygonIsValid(openResult);
         AssertPolygonIsValid(closedResult);
@@ -132,8 +177,23 @@ public class PolygonStrokerTests
         StrokeOptions options = new() { LineJoin = LineJoin.Miter, NormalizeOutput = normalizeOutput };
 
         Polygon open = PolygonStroker.Stroke([source], 2, options);
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.Stroke_ThreePointSource_ClosureSelectsFinalSegment),
+            $"NormalizeOutput-{normalizeOutput}_IsClosed-False",
+            [source],
+            [],
+            open);
+
         source.IsClosed = true;
         Polygon closed = PolygonStroker.Stroke([source], 2, options);
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.Stroke_ThreePointSource_ClosureSelectsFinalSegment),
+            $"NormalizeOutput-{normalizeOutput}_IsClosed-True",
+            [source],
+            [],
+            closed);
 
         // The diagonal belongs only to the closed source's final-to-first segment.
         Assert.Equal(Containment.Outside, ClassifyPoint(open, new Vertex(5, 5), 1E-10));
@@ -168,10 +228,25 @@ public class PolygonStrokerTests
         StrokeOptions options = new() { LineJoin = LineJoin.Miter, LineCap = LineCap.Butt, NormalizeOutput = true };
 
         Polygon open = PolygonStroker.Stroke([source], width, options);
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.Stroke_OpenEndpoints_DoNotSelectClosure),
+            FormattableString.Invariant($"EndY-{endY}_Width-{width}_IsClosed-False"),
+            [source],
+            [],
+            open);
+
         Assert.False(source.IsClosed);
         Assert.Equal(5, source.Count);
         source.IsClosed = true;
         Polygon closed = PolygonStroker.Stroke([source], width, options);
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.Stroke_OpenEndpoints_DoNotSelectClosure),
+            FormattableString.Invariant($"EndY-{endY}_Width-{width}_IsClosed-True"),
+            [source],
+            [],
+            closed);
 
         // A miter joins the closed bottom-left corner. The two butt caps leave
         // this point outside the open stroke, even when the endpoints coincide.
@@ -194,9 +269,25 @@ public class PolygonStrokerTests
         Contour source = [new Vertex(0, 0), new Vertex(10, 0), new Vertex(10, 10), new Vertex(0, 10)];
         StrokeOptions options = new() { LineJoin = LineJoin.Miter, NormalizeOutput = normalizeOutput };
         Polygon implicitClosure = PolygonStroker.Stroke([source], 2, options);
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.Stroke_ClosedDuplicateEndpoint_DoesNotChangeGeometry),
+            $"NormalizeOutput-{normalizeOutput}_RepeatedEndpoint-False",
+            [source],
+            [],
+            implicitClosure);
+
         source.Add(source[0]);
 
         Polygon explicitClosure = PolygonStroker.Stroke([source], 2, options);
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.Stroke_ClosedDuplicateEndpoint_DoesNotChangeGeometry),
+            $"NormalizeOutput-{normalizeOutput}_RepeatedEndpoint-True",
+            [source],
+            [],
+            explicitClosure,
+            implicitClosure);
 
         AssertSameStroke(implicitClosure, explicitClosure);
         AssertPolygonIsValid(implicitClosure);
@@ -216,6 +307,13 @@ public class PolygonStrokerTests
         StrokeOptions options = new() { LineJoin = LineJoin.Miter, NormalizeOutput = true };
 
         Polygon result = PolygonStroker.Stroke([square, segment], 2, options);
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.Stroke_MixedClosure_ResolvesCombinedArea),
+            string.Empty,
+            [square, segment],
+            [],
+            result);
 
         // The square band has area 12*12 - 8*8 = 80. The segment adds 20*2 = 40,
         // with two 2*2 overlaps. Their union therefore has area 112.
@@ -244,6 +342,21 @@ public class PolygonStrokerTests
 
         Polygon stroke = PolygonStroker.Stroke(filled, 2, new StrokeOptions { LineJoin = LineJoin.Miter });
         Polygon resolved = PolygonClipper.Normalize(stroke, FillRule.Positive);
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.Stroke_BooleanOutput_RequiresNoClosureConversion),
+            "Output-Raw",
+            filled,
+            [],
+            stroke);
+
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.Stroke_BooleanOutput_RequiresNoClosureConversion),
+            "Output-Resolved",
+            filled,
+            [],
+            resolved);
 
         AssertPolygonIsValid(filled);
         AssertPolygonIsValid(stroke);
@@ -265,6 +378,31 @@ public class PolygonStrokerTests
         Polygon defaults = PolygonStroker.Stroke(source, 2);
         Polygon explicitOptions = PolygonStroker.Stroke(source, 2, options);
         Polygon instance = stroker.Stroke(source);
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.Stroke_DefaultExplicitAndInstanceOptions_Agree),
+            "Options-Default",
+            source,
+            [],
+            defaults);
+
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.Stroke_DefaultExplicitAndInstanceOptions_Agree),
+            "Options-Explicit",
+            source,
+            [],
+            explicitOptions,
+            defaults);
+
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.Stroke_DefaultExplicitAndInstanceOptions_Agree),
+            "Options-Instance",
+            source,
+            [],
+            instance,
+            defaults);
 
         AssertSameStroke(defaults, explicitOptions);
         AssertSameStroke(defaults, instance);
@@ -287,9 +425,24 @@ public class PolygonStrokerTests
         source.IsClosed = isClosed;
         StrokeOptions options = new() { LineJoin = LineJoin.Miter };
         Polygon raw = PolygonStroker.Stroke([source], width, options);
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.Stroke_OutputCleanup_PreservesNonZeroArea),
+            FormattableString.Invariant($"Width-{width}_IsClosed-{isClosed}_NormalizeOutput-False"),
+            [source],
+            [],
+            raw);
+
         options.NormalizeOutput = true;
 
         Polygon cleaned = PolygonStroker.Stroke([source], width, options);
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.Stroke_OutputCleanup_PreservesNonZeroArea),
+            FormattableString.Invariant($"Width-{width}_IsClosed-{isClosed}_NormalizeOutput-True"),
+            [source],
+            [],
+            cleaned);
 
         double area = 0;
         foreach (Contour contour in cleaned)
@@ -317,6 +470,7 @@ public class PolygonStrokerTests
     public void Stroke_NullOptions_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>("options", () => PolygonStroker.Stroke([], 2, null!));
+        Assert.Throws<ArgumentNullException>("options", () => new PolygonStroker(null!));
     }
 
     /// <summary>
@@ -337,6 +491,13 @@ public class PolygonStrokerTests
         source.IsClosed = isClosed;
 
         Polygon result = PolygonStroker.Stroke([source], 4, new StrokeOptions { LineCap = cap });
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.Stroke_TwoEqualVertices_PreservesPointCap),
+            $"IsClosed-{isClosed}_Cap-{cap}",
+            [source],
+            [],
+            result);
 
         Contour footprint = Assert.Single(result);
         Assert.Equal(isClosed, source.IsClosed);
@@ -371,6 +532,13 @@ public class PolygonStrokerTests
         source.IsClosed = isClosed;
 
         Polygon result = PolygonStroker.Stroke([source], 2, new StrokeOptions { LineCap = LineCap.Square });
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.Stroke_TwoDistinctVertices_PreservesSegmentCaps),
+            $"IsClosed-{isClosed}",
+            [source],
+            [],
+            result);
 
         Assert.Single(result);
         Assert.Equal(new Vertex(-1, -1), result.GetBoundingBox().Min);
@@ -389,10 +557,30 @@ public class PolygonStrokerTests
     public void Stroke_FewerThanTwoVertices_ReturnsEmpty(bool isClosed)
     {
         Contour source = new() { IsClosed = isClosed };
-        Assert.Empty(PolygonStroker.Stroke([source], 2));
+        Polygon empty = PolygonStroker.Stroke([source], 2);
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.Stroke_FewerThanTwoVertices_ReturnsEmpty),
+            $"IsClosed-{isClosed}_VertexCount-0",
+            [source],
+            [],
+            empty,
+            []);
+
+        Assert.Empty(empty);
 
         source.Add(new Vertex(5, 5));
-        Assert.Empty(PolygonStroker.Stroke([source], 2));
+        Polygon single = PolygonStroker.Stroke([source], 2);
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.Stroke_FewerThanTwoVertices_ReturnsEmpty),
+            $"IsClosed-{isClosed}_VertexCount-1",
+            [source],
+            [],
+            single,
+            []);
+
+        Assert.Empty(single);
         Assert.Equal(isClosed, source.IsClosed);
     }
 
@@ -426,6 +614,14 @@ public class PolygonStrokerTests
         Polygon input = [inputContour];
         Polygon actual = PolygonStroker.Stroke(input, width, options);
 
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.ProcessPolygonAndClip_FoldBackOpenPath_ProducesValidStroke),
+            string.Empty,
+            input,
+            [],
+            actual);
+
         AssertPolygonIsValid(actual);
         AssertStrokeCoversInputCenterline(input, actual, samplesPerSegment: 3);
     }
@@ -444,6 +640,14 @@ public class PolygonStrokerTests
 
         Polygon input = [inputContour];
         Polygon actual = PolygonStroker.Stroke(input, width, options);
+
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.ProcessPolygonAndClip_FigureNinePath_ProducesValidStroke),
+            string.Empty,
+            input,
+            [],
+            actual);
 
         AssertPolygonIsValid(actual);
         AssertStrokeCoversInputCenterline(input, actual, samplesPerSegment: 3);
@@ -777,6 +981,14 @@ public class PolygonStrokerTests
 ];
 
         Polygon actual = PolygonStroker.Stroke(input, width);
+
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonStrokerTests),
+            nameof(this.ProcessPolygonAndClip_CompoundCircleGlyphPath_ProducesValidStroke),
+            string.Empty,
+            input,
+            [],
+            actual);
 
         AssertPolygonIsValid(actual);
         AssertStrokeCoversInputCenterline(input, actual, samplesPerSegment: 4);

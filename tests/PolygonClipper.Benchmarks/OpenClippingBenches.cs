@@ -7,35 +7,41 @@ using Clipper2Lib;
 namespace SixLabors.PolygonClipper.Benchmarks;
 
 /*
- * Comparison results: 30 October 2026.
- * Windows 11. AMD Ryzen AI Max+ 395. .NET 10.0.14. BenchmarkDotNet 0.15.8.
- * V2 build: 4f814c3 with the orientation-bound formula. release/1.x: cb06839. Clipper2: 4be4655.
- * Mean: milliseconds per operation. Op/s: operations per second. B/op: allocated bytes per operation.
- * Input preparation occurs before measurement. ClipperD uses precision 6.
- * Each case uses 12 measured iterations, a 250 ms iteration target, and one launch. All samples remain included.
- * The setup checks exact output edges for every open-path case.
- * The .NET counters measure managed bytes. release/1.x and Rust have no matching open-path API.
- * Warmup: 10 iterations. The 1,000-path, 13-vertex transposed case uses a repeat with 30 iterations for both engines.
- *
- * Paths | Vertices/path | Transpose | Engine   | Mean (ms) | Op/s       | B/op
- * ------+---------------+-----------+----------+-----------+------------+--------
- * 10    | 2             | False     | Clipper2 | 0.002487  | 402069.493 | 13680
- * 10    | 2             | False     | V2       | 0.009797  | 102068.642 | 2872
- * 10    | 2             | True      | Clipper2 | 0.002442  | 409562.862 | 15272
- * 10    | 2             | True      | V2       | 0.009971  | 100295.413 | 2872
- * 10    | 13            | False     | Clipper2 | 0.009040  | 110623.884 | 43592
- * 10    | 13            | False     | V2       | 0.028162  | 35508.975  | 7072
- * 10    | 13            | True      | Clipper2 | 0.005468  | 182885.680 | 32808
- * 10    | 13            | True      | V2       | 0.035768  | 27958.106  | 7072
- * 1000  | 2             | False     | Clipper2 | 0.199499  | 5012.556   | 1098600
- * 1000  | 2             | False     | V2       | 1.083615  | 922.837    | 264232
- * 1000  | 2             | True      | Clipper2 | 0.576339  | 1735.091   | 1274864
- * 1000  | 2             | True      | V2       | 1.235454  | 809.419    | 264232
- * 1000  | 13            | False     | Clipper2 | 3.402228  | 293.925    | 3899782
- * 1000  | 13            | False     | V2       | 4.668755  | 214.190    | 612232
- * 1000  | 13            | True      | Clipper2 | 2.569250  | 389.219    | 3002254
- * 1000  | 13            | True      | V2       | 5.211886  | 191.869    | 612232
- */
+BenchmarkDotNet v0.15.8, Windows 11 (10.0.26300.9818)
+AMD RYZEN AI MAX+ 395 w/ Radeon 8060S 3.00GHz, 1 CPU, 32 logical and 16 physical cores
+.NET SDK 11.0.100-preview.7.26381.103
+  [Host]   : .NET 10.0.14 (10.0.14, 10.0.1426.52326), X64 RyuJIT x86-64-v4
+  ShortRun : .NET 10.0.14 (10.0.14, 10.0.1426.52326), X64 RyuJIT x86-64-v4
+
+Job=ShortRun  IterationCount=3  LaunchCount=1
+WarmupCount=3
+
+| Method                     | PathCount | VerticesPerPath | Transpose | Mean         | Error         | StdDev      | Op/s      | Ratio | RatioSD | Gen0     | Gen1     | Gen2     | Allocated  | Alloc Ratio |
+|--------------------------- |---------- |---------------- |---------- |-------------:|--------------:|------------:|----------:|------:|--------:|---------:|---------:|---------:|-----------:|------------:|
+| PolygonClipperIntersection | 10        | 2               | False     |    10.041 us |      6.363 us |   0.3488 us |  99,591.4 |  3.84 |    0.17 |   0.1678 |        - |        - |    2.84 KB |        0.21 |
+| Clipper2Intersection       | 10        | 2               | False     |     2.617 us |      1.762 us |   0.0966 us | 382,076.6 |  1.00 |    0.05 |   0.8163 |   0.0267 |        - |   13.36 KB |        1.00 |
+|                            |           |                 |           |              |               |             |           |       |         |          |          |          |            |             |
+| PolygonClipperIntersection | 10        | 2               | True      |    11.112 us |     31.236 us |   1.7122 us |  89,995.8 |  4.11 |    0.57 |   0.1678 |        - |        - |    2.84 KB |        0.19 |
+| Clipper2Intersection       | 10        | 2               | True      |     2.706 us |      2.357 us |   0.1292 us | 369,564.4 |  1.00 |    0.06 |   0.9117 |   0.0343 |        - |   14.91 KB |        1.00 |
+|                            |           |                 |           |              |               |             |           |       |         |          |          |          |            |             |
+| PolygonClipperIntersection | 10        | 13              | False     |    29.653 us |     14.059 us |   0.7706 us |  33,723.5 |  2.98 |    0.08 |   0.3967 |        - |        - |    6.94 KB |        0.16 |
+| Clipper2Intersection       | 10        | 13              | False     |     9.945 us |      2.376 us |   0.1302 us | 100,556.0 |  1.00 |    0.02 |   2.5940 |   0.2747 |        - |   42.57 KB |        1.00 |
+|                            |           |                 |           |              |               |             |           |       |         |          |          |          |            |             |
+| PolygonClipperIntersection | 10        | 13              | True      |    35.715 us |     12.425 us |   0.6811 us |  27,999.5 |  5.94 |    0.17 |   0.3662 |        - |        - |    6.94 KB |        0.22 |
+| Clipper2Intersection       | 10        | 13              | True      |     6.019 us |      2.905 us |   0.1592 us | 166,136.7 |  1.00 |    0.03 |   1.9608 |   0.1678 |        - |   32.04 KB |        1.00 |
+|                            |           |                 |           |              |               |             |           |       |         |          |          |          |            |             |
+| PolygonClipperIntersection | 1000      | 2               | False     | 1,202.917 us |  1,173.842 us |  64.3422 us |     831.3 |  5.81 |    0.27 |  15.6250 |   5.8594 |        - |  258.07 KB |        0.24 |
+| Clipper2Intersection       | 1000      | 2               | False     |   207.058 us |     27.796 us |   1.5236 us |   4,829.6 |  1.00 |    0.01 |  65.4297 |  50.2930 |        - | 1072.85 KB |        1.00 |
+|                            |           |                 |           |              |               |             |           |       |         |          |          |          |            |             |
+| PolygonClipperIntersection | 1000      | 2               | True      | 1,340.080 us |    949.095 us |  52.0231 us |     746.2 |  2.13 |    0.12 |  15.6250 |   5.8594 |        - |  258.07 KB |        0.21 |
+| Clipper2Intersection       | 1000      | 2               | True      |   629.687 us |    598.724 us |  32.8181 us |   1,588.1 |  1.00 |    0.06 |  76.1719 |  65.4297 |        - | 1244.98 KB |        1.00 |
+|                            |           |                 |           |              |               |             |           |       |         |          |          |          |            |             |
+| PolygonClipperIntersection | 1000      | 13              | False     | 5,080.375 us |  1,062.886 us |  58.2604 us |     196.8 |  1.41 |    0.03 |  31.2500 |   7.8125 |        - |  597.91 KB |        0.16 |
+| Clipper2Intersection       | 1000      | 13              | False     | 3,600.080 us |  1,497.421 us |  82.0787 us |     277.8 |  1.00 |    0.03 | 316.4063 | 312.5000 | 109.3750 | 3808.37 KB |        1.00 |
+|                            |           |                 |           |              |               |             |           |       |         |          |          |          |            |             |
+| PolygonClipperIntersection | 1000      | 13              | True      | 5,290.140 us |    385.407 us |  21.1255 us |     189.0 |  1.62 |    0.26 |  31.2500 |   7.8125 |        - |  597.91 KB |        0.20 |
+| Clipper2Intersection       | 1000      | 13              | True      | 3,353.168 us | 12,912.942 us | 707.8019 us |     298.2 |  1.03 |    0.25 | 234.3750 | 230.4688 |  74.2188 | 2931.89 KB |        1.00 |
+*/
 
 /// <summary>
 /// Compares open line clipping against the same closed rectangle and hole.

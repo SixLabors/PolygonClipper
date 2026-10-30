@@ -7,27 +7,26 @@ using Clipper2Lib;
 namespace SixLabors.PolygonClipper.Benchmarks;
 
 /*
- * Comparison results: 30 October 2026.
- * Windows 11. AMD Ryzen AI Max+ 395. .NET 10.0.14. BenchmarkDotNet 0.15.8.
- * V2 build: 4f814c3 with the orientation-bound formula. release/1.x: cb06839. Clipper2: 4be4655.
- * Mean: milliseconds per operation. Op/s: operations per second. B/op: allocated bytes per operation.
- * Input preparation occurs before measurement. ClipperD uses precision 6.
- * Each case uses 12 measured iterations, a 250 ms iteration target, and one launch. All samples remain included.
- * All comparisons below use Positive cleanup on one star. Warmup: 10 iterations.
- * release/1.x uses its Clipper2-derived cleanup. V2 uses its shared Martinez sweep.
- *
- * Vertices | Engine      | Mean (ms)  | Op/s     | B/op
- * ---------+-------------+------------+----------+---------
- * 101      | V2          | 1.751403   | 570.971  | 8648
- * 101      | release/1.x | 0.516666   | 1935.486 | 13760
- * 101      | Clipper2    | 0.449719   | 2223.613 | 210728
- * 301      | V2          | 17.035385  | 58.701   | 33272
- * 301      | release/1.x | 5.714182   | 175.003  | 40032
- * 301      | Clipper2    | 5.731402   | 174.477  | 2352348
- * 1001     | V2          | 205.407133 | 4.868    | 66064
- * 1001     | release/1.x | 84.452671  | 11.841   | 17449540
- * 1001     | Clipper2    | 76.949340  | 12.996   | 17525094
- */
+BenchmarkDotNet v0.15.8, Windows 11 (10.0.26300.9818)
+AMD RYZEN AI MAX+ 395 w/ Radeon 8060S 3.00GHz, 1 CPU, 32 logical and 16 physical cores
+.NET SDK 11.0.100-preview.7.26381.103
+  [Host]   : .NET 10.0.14 (10.0.14, 10.0.1426.52326), X64 RyuJIT x86-64-v4
+  ShortRun : .NET 10.0.14 (10.0.14, 10.0.1426.52326), X64 RyuJIT x86-64-v4
+
+Job=ShortRun  IterationCount=3  LaunchCount=1
+WarmupCount=3
+
+| Method        | VertexCount | Mean         | Error       | StdDev      | Op/s      | Ratio | RatioSD | Gen0      | Gen1      | Gen2      | Allocated   | Alloc Ratio |
+|-------------- |------------ |-------------:|------------:|------------:|----------:|------:|--------:|----------:|----------:|----------:|------------:|------------:|
+| Normalize     | 101         |   1,828.4 us |    229.6 us |    12.58 us |   546.932 |  3.64 |    0.08 |         - |         - |         - |     3.52 KB |        0.02 |
+| Clipper2Union | 101         |     502.5 us |    223.6 us |    12.26 us | 1,989.877 |  1.00 |    0.03 |   12.2070 |    3.9063 |         - |   205.76 KB |        1.00 |
+|               |             |              |             |             |           |       |         |           |           |           |             |             |
+| Normalize     | 301         |  19,279.5 us |  6,815.6 us |   373.58 us |    51.869 |  3.20 |    0.06 |         - |         - |         - |    10.57 KB |       0.005 |
+| Clipper2Union | 301         |   6,027.2 us |    676.2 us |    37.06 us |   165.916 |  1.00 |    0.01 |  492.1875 |  492.1875 |  492.1875 |  2297.18 KB |       1.000 |
+|               |             |              |             |             |           |       |         |           |           |           |             |             |
+| Normalize     | 1001        | 203,995.7 us | 30,961.7 us | 1,697.11 us |     4.902 |  2.54 |    0.07 |         - |         - |         - |    48.99 KB |       0.003 |
+| Clipper2Union | 1001        |  80,238.6 us | 44,367.1 us | 2,431.91 us |    12.463 |  1.00 |    0.04 | 1857.1429 | 1857.1429 | 1857.1429 | 17115.08 KB |       1.000 |
+*/
 
 /// <summary>
 /// Benchmarks normalization performance for star polygons.

@@ -571,9 +571,10 @@ public class PolygonClipper
             }
         }
 
-        // Boundary events are completed at their right endpoints. Restore the
-        // ordering expected by the existing connector in O(B log B), rather
-        // than making its nearly-sorted repair loop sort reversed history.
+        // The queue visits points in order. DivideSegment only queues future
+        // crossings; a repaired tail starts at its old end, at or after this point.
+        // Boundary points never change, so only rays at each point need sorting.
+        // Wait until all pairs close because ray order uses the opposite endpoint.
         resultEvents.Sort(resultComparer);
         Polygon result = this.ConnectEdges(resultEvents);
         for (int i = 0; i < result.Count; i++)
@@ -644,11 +645,11 @@ public class PolygonClipper
     /// <param name="clipRule">The clipping operand's fill rule.</param>
     private static void ValidateFillArguments(Polygon subject, Polygon clip, BooleanOperation operation, FillRule subjectRule, FillRule clipRule)
     {
-        ArgumentNullException.ThrowIfNull(subject);
-        ArgumentNullException.ThrowIfNull(clip);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan((uint)operation, (uint)BooleanOperation.Xor, nameof(operation));
-        ArgumentOutOfRangeException.ThrowIfGreaterThan((uint)subjectRule, (uint)FillRule.Negative, nameof(subjectRule));
-        ArgumentOutOfRangeException.ThrowIfGreaterThan((uint)clipRule, (uint)FillRule.Negative, nameof(clipRule));
+        Guard.NotNull(subject, nameof(subject));
+        Guard.NotNull(clip, nameof(clip));
+        Guard.MustBeLessThanOrEqualTo((uint)operation, (uint)BooleanOperation.Xor, nameof(operation));
+        Guard.MustBeLessThanOrEqualTo((uint)subjectRule, (uint)FillRule.Negative, nameof(subjectRule));
+        Guard.MustBeLessThanOrEqualTo((uint)clipRule, (uint)FillRule.Negative, nameof(clipRule));
     }
 
     /// <summary>
@@ -813,10 +814,7 @@ public class PolygonClipper
                 // Open ingestion also validates the terminal vertex, which is
                 // never a start and must not bypass the public finite-coordinate contract.
                 Vertex terminal = contour[contour.Count - 1];
-                if (!double.IsFinite(terminal.X) || !double.IsFinite(terminal.Y))
-                {
-                    throw new ArgumentException("Polygon coordinates must be finite.", nameof(polygon));
-                }
+                Guard.IsTrue(double.IsFinite(terminal.X) && double.IsFinite(terminal.Y), nameof(polygon), "Polygon coordinates must be finite.");
 
                 if (contour.Count == 1)
                 {
@@ -842,10 +840,7 @@ public class PolygonClipper
                 Segment segment = contour.GetSegment(j);
                 Vertex start = segment.Source;
                 Vertex end = segment.Target;
-                if (!double.IsFinite(start.X) || !double.IsFinite(start.Y))
-                {
-                    throw new ArgumentException("Polygon coordinates must be finite.", nameof(polygon));
-                }
+                Guard.IsTrue(double.IsFinite(start.X) && double.IsFinite(start.Y), nameof(polygon), "Polygon coordinates must be finite.");
 
                 bounds = bounds.Add(new Box2(start));
                 if (start == end)
@@ -1297,6 +1292,13 @@ public class PolygonClipper
         // Every iteration-map slot is assigned, but processed flags must
         // start clear because pooled storage can contain flags from a prior run.
         processed.Clear();
+
+        // Each traced edge consumes two events. One shared scratch span can
+        // therefore hold any contour, including its repeated closing vertex.
+        // Trace into pooled memory first, then allocate the exact vertex count.
+        // This replaces repeated list growth, clearing and copying for large contours.
+        using Buffer<Vertex> vertexBuffer = new((resultEvents.Count / 2) + 1);
+        Span<Vertex> vertices = vertexBuffer.GetSpan();
         for (int i = 0; i < resultEvents.Count; i++)
         {
             if (processed[i])
@@ -1305,11 +1307,10 @@ public class PolygonClipper
             }
 
             int contourId = result.Count;
-            Contour contour = this.InitializeContourFromContext(resultEvents[i], result, contourId);
-
             int pos = i;
             Vertex initial = resultEvents[i].Point;
-            contour.Add(initial);
+            vertices[0] = initial;
+            int vertexCount = 1;
 
             // Main loop to process the contour
             do
@@ -1320,7 +1321,7 @@ public class PolygonClipper
                 MarkProcessed(resultEvents[pos], processed, pos, contourId);
 
                 Vertex point = resultEvents[pos].Point;
-                contour.Add(point);
+                vertices[vertexCount++] = point;
 
                 // Closing the contour needs no further edge. Searching here
                 // would revisit processed rays at a shared starting vertex.
@@ -1336,6 +1337,12 @@ public class PolygonClipper
                 }
             }
             while (true);
+
+            Contour contour = this.InitializeContourFromContext(resultEvents[i], result, contourId, vertexCount);
+            for (int j = 0; j < vertexCount; j++)
+            {
+                contour.Add(vertices[j]);
+            }
 
             result.Add(contour);
         }
@@ -1483,12 +1490,11 @@ public class PolygonClipper
     /// <param name="sweepEvent">The current sweep event.</param>
     /// <param name="polygon">The collection of contours processed so far.</param>
     /// <param name="contourId">The ID for the new contour.</param>
+    /// <param name="vertexCount">The number of traced vertices, including the closing vertex.</param>
     /// <returns>The initialized <see cref="Contour"/>.</returns>
-    private Contour InitializeContourFromContext(SweepEvent sweepEvent, Polygon polygon, int contourId)
+    private Contour InitializeContourFromContext(SweepEvent sweepEvent, Polygon polygon, int contourId, int vertexCount)
     {
-        // A triangle needs three vertices and its closing vertex during tracing.
-        // Reserve those slots instead of growing the list on the first Add.
-        Contour contour = new(4);
+        Contour contour = new(vertexCount);
         if (this.contourOutput == ContourOutput.Nested)
         {
             if (sweepEvent.PrevInResult is SweepEvent lower)

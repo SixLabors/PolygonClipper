@@ -7,66 +7,30 @@ using Clipper2Lib;
 namespace SixLabors.PolygonClipper.Benchmarks;
 
 /*
- * Comparison results: 30 October 2026.
- * Windows 11. AMD Ryzen AI Max+ 395. .NET 10.0.14. BenchmarkDotNet 0.15.8.
- * V2 build: 4f814c3 with the orientation-bound formula. release/1.x: cb06839. Clipper2: 4be4655.
- * Mean: milliseconds per operation. Op/s: operations per second. B/op: allocated bytes per operation.
- * Input preparation occurs before measurement. ClipperD uses precision 6.
- * Each case uses 12 measured iterations, a 250 ms iteration target, and one launch. All samples remain included.
- * Rust: rust-geo-booleanop 0.3.2 at b9bbdbb. rustc 1.98.0. Release build. geo-types 0.7.20.
- * Rust timings include the native call and output destruction. Rust supports EvenOdd only.
- * The .NET counters measure managed bytes. A separate Rust build counts requested native bytes.
- * The comparison harness measures the fill rules and engines shown below on the same pair of stars.
- * Warmup: 10 iterations, except the four variable 101-vertex cases, which use a repeat with 30 iterations.
- * Those repeats cover Union with EvenOdd and NonZero, and Intersection and Difference with EvenOdd.
- * Every supported engine uses the same longer warmup in each repeated case.
- * release/1.x NonZero includes its required input preparation.
- * Both dense-star EvenOdd unions pass the boundary checks despite different contour grouping.
- *
- * Vertices | Fill rule | Operation    | Engine      | Mean (ms)   | Op/s    | B/op
- * ---------+-----------+--------------+-------------+-------------+---------+----------
- * 101      | EvenOdd   | Union        | V2          | 9.531152    | 104.919 | 1221184
- * 101      | EvenOdd   | Union        | release/1.x | 33.957776   | 29.448  | 10058513
- * 101      | EvenOdd   | Union        | Clipper2    | 37.183475   | 26.894  | 5454480
- * 101      | EvenOdd   | Union        | Rust        | 28.678877   | 34.869  | 12025868
- * 101      | EvenOdd   | Intersection | V2          | 10.124404   | 98.771  | 1979952
- * 101      | EvenOdd   | Intersection | release/1.x | 35.579118   | 28.106  | 11013441
- * 101      | EvenOdd   | Intersection | Clipper2    | 6.114008    | 163.559 | 5081410
- * 101      | EvenOdd   | Intersection | Rust        | 29.568188   | 33.820  | 14123564
- * 101      | EvenOdd   | Difference   | V2          | 9.295369    | 107.580 | 1539000
- * 101      | EvenOdd   | Difference   | release/1.x | 34.142293   | 29.289  | 10492458
- * 101      | EvenOdd   | Difference   | Clipper2    | 6.015985    | 166.224 | 4180303
- * 101      | EvenOdd   | Difference   | Rust        | 30.183794   | 33.130  | 13713340
- * 101      | EvenOdd   | Xor          | V2          | 23.045433   | 43.393  | 10778162
- * 101      | EvenOdd   | Xor          | release/1.x | 33.714825   | 29.661  | 12728260
- * 101      | EvenOdd   | Xor          | Clipper2    | 10.867327   | 92.019  | 8527564
- * 101      | EvenOdd   | Xor          | Rust        | 35.518577   | 28.154  | 18811516
- * 101      | NonZero   | Union        | V2          | 7.799769    | 128.209 | 213480
- * 101      | NonZero   | Union        | release/1.x | 4.803016    | 208.202 | 1125464
- * 101      | NonZero   | Union        | Clipper2    | 3.329548    | 300.341 | 874861
- * 301      | EvenOdd   | Union        | V2          | 113.486163  | 8.812   | 34139832
- * 301      | EvenOdd   | Union        | release/1.x | 445.814992  | 2.243   | 88329168
- * 301      | EvenOdd   | Union        | Clipper2    | 1942.372475 | 0.515   | 40570064
- * 301      | EvenOdd   | Union        | Rust        | 419.326683  | 2.385   | 104351676
- * 301      | EvenOdd   | Intersection | V2          | 143.969358  | 6.946   | 55822008
- * 301      | EvenOdd   | Intersection | release/1.x | 495.890125  | 2.017   | 96940976
- * 301      | EvenOdd   | Intersection | Clipper2    | 123.051400  | 8.127   | 44447544
- * 301      | EvenOdd   | Intersection | Rust        | 468.113050  | 2.136   | 121501628
- * 301      | EvenOdd   | Difference   | V2          | 137.709375  | 7.262   | 45124380
- * 301      | EvenOdd   | Difference   | release/1.x | 459.630592  | 2.176   | 92145616
- * 301      | EvenOdd   | Difference   | Clipper2    | 103.656529  | 9.647   | 36238448
- * 301      | EvenOdd   | Difference   | Rust        | 440.715792  | 2.269   | 117719484
- * 301      | EvenOdd   | Xor          | V2          | 265.359167  | 3.768   | 94318776
- * 301      | EvenOdd   | Xor          | release/1.x | 560.481942  | 1.784   | 111897144
- * 301      | EvenOdd   | Xor          | Clipper2    | 266.766542  | 3.749   | 73402336
- * 301      | EvenOdd   | Xor          | Rust        | 555.358192  | 1.801   | 159997324
- * 301      | NonZero   | Union        | V2          | 72.203506   | 13.850  | 1879008
- * 301      | NonZero   | Union        | release/1.x | 50.096682   | 19.961  | 11411998
- * 301      | NonZero   | Union        | Clipper2    | 72.272604   | 13.837  | 6609810
- * 1001     | NonZero   | Union        | V2          | 923.958408  | 1.082   | 63130176
- * 1001     | NonZero   | Union        | release/1.x | 852.718975  | 1.173   | 151387784
- * 1001     | NonZero   | Union        | Clipper2    | 2850.236992 | 0.351   | 61347952
- */
+BenchmarkDotNet v0.15.8, Windows 11 (10.0.26300.9818)
+AMD RYZEN AI MAX+ 395 w/ Radeon 8060S 3.00GHz, 1 CPU, 32 logical and 16 physical cores
+.NET SDK 11.0.100-preview.7.26381.103
+  [Host]   : .NET 10.0.14 (10.0.14, 10.0.1426.52326), X64 RyuJIT x86-64-v4
+  ShortRun : .NET 10.0.14 (10.0.14, 10.0.1426.52326), X64 RyuJIT x86-64-v4
+
+Job=ShortRun  IterationCount=3  LaunchCount=1
+WarmupCount=3
+
+| Method                     | VertexCount | Mean         | Error        | StdDev      | Op/s     | Gen0       | Gen1       | Gen2      | Allocated     |
+|--------------------------- |------------ |-------------:|-------------:|------------:|---------:|-----------:|-----------:|----------:|--------------:|
+| PolygonClipperUnion        | 101         |    10.241 ms |    14.189 ms |   0.7778 ms |  97.6464 |    46.8750 |    15.6250 |         - |     984.86 KB |
+| PolygonClipperIntersection | 101         |     9.785 ms |     3.148 ms |   0.1726 ms | 102.2006 |    93.7500 |    46.8750 |         - |    1769.23 KB |
+| PolygonClipperDifference   | 101         |     8.865 ms |     1.617 ms |   0.0886 ms | 112.8081 |    78.1250 |    15.6250 |         - |    1330.24 KB |
+| PolygonClipperXor          | 101         |    19.532 ms |     7.799 ms |   0.4275 ms |  51.1991 |  1312.5000 |  1312.5000 |  843.7500 |   11968.01 KB |
+| PolygonClipperUnion        | 301         |   122.200 ms |   128.921 ms |   7.0666 ms |   8.1833 |  2600.0000 |  2600.0000 | 1200.0000 |   33225.89 KB |
+| PolygonClipperIntersection | 301         |   170.792 ms |   109.231 ms |   5.9873 ms |   5.8551 |  3333.3333 |  3333.3333 | 1333.3333 |   57243.84 KB |
+| PolygonClipperDifference   | 301         |   156.373 ms |   170.076 ms |   9.3224 ms |   6.3950 |  3250.0000 |  3250.0000 | 1500.0000 |   48985.99 KB |
+| PolygonClipperXor          | 301         |   277.201 ms |    61.909 ms |   3.3934 ms |   3.6075 |  6000.0000 |  5500.0000 | 2000.0000 |  106509.15 KB |
+| PolygonClipperUnion        | 1001        | 1,853.955 ms | 1,062.212 ms |  58.2234 ms |   0.5394 | 21000.0000 | 20000.0000 | 5000.0000 |  421820.51 KB |
+| PolygonClipperIntersection | 1001        | 2,498.312 ms |   270.235 ms |  14.8125 ms |   0.4003 | 34000.0000 | 32000.0000 | 6000.0000 |  738265.43 KB |
+| PolygonClipperDifference   | 1001        | 2,083.018 ms |   226.483 ms |  12.4143 ms |   0.4801 | 28000.0000 | 26000.0000 | 5000.0000 |  539974.69 KB |
+| PolygonClipperXor          | 1001        | 3,337.877 ms | 3,338.490 ms | 182.9939 ms |   0.2996 | 54000.0000 | 48000.0000 | 6000.0000 | 1080092.26 KB |
+*/
 
 /// <summary>
 /// Benchmarks PolygonClipper boolean operations using two overlapping star polygons.

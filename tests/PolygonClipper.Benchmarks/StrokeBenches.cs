@@ -6,6 +6,28 @@ using Clipper2Lib;
 
 namespace SixLabors.PolygonClipper.Benchmarks;
 
+/*
+BenchmarkDotNet v0.15.8, Windows 11 (10.0.26300.9818)
+AMD RYZEN AI MAX+ 395 w/ Radeon 8060S 3.00GHz, 1 CPU, 32 logical and 16 physical cores
+.NET SDK 11.0.100-preview.7.26381.103
+  [Host]   : .NET 10.0.14 (10.0.14, 10.0.1426.52326), X64 RyuJIT x86-64-v4
+  ShortRun : .NET 10.0.14 (10.0.14, 10.0.1426.52326), X64 RyuJIT x86-64-v4
+
+Job=ShortRun  IterationCount=3  LaunchCount=1
+WarmupCount=3
+
+| Method                              | VertexCount | Mean            | Error         | StdDev        | Op/s        | Ratio | RatioSD | Gen0      | Gen1      | Gen2      | Allocated   | Alloc Ratio |
+|------------------------------------ |------------ |----------------:|--------------:|--------------:|------------:|------:|--------:|----------:|----------:|----------:|------------:|------------:|
+| PolygonStrokerProcessPolygonAndClip | 101         |        86.35 us |      10.28 us |      0.564 us | 11,581.2627 |  0.01 |    0.00 |    8.7891 |         - |         - |   144.85 KB |        0.08 |
+| Clipper2InflatePaths                | 101         |     6,711.66 us |   6,421.82 us |    352.002 us |    148.9944 |  1.00 |    0.06 |  117.1875 |  117.1875 |  117.1875 |  1804.44 KB |        1.00 |
+|                                     |             |                 |               |               |             |       |         |           |           |           |             |             |
+| PolygonStrokerProcessPolygonAndClip | 301         |       263.81 us |      58.59 us |      3.211 us |  3,790.6037 | 0.004 |    0.00 |   27.3438 |   13.1836 |         - |   448.83 KB |        0.07 |
+| Clipper2InflatePaths                | 301         |    66,415.27 us |  48,388.21 us |  2,652.321 us |     15.0568 | 1.001 |    0.05 |  625.0000 |  500.0000 |  500.0000 |  6144.33 KB |        1.00 |
+|                                     |             |                 |               |               |             |       |         |           |           |           |             |             |
+| PolygonStrokerProcessPolygonAndClip | 1001        |     1,199.12 us |     178.09 us |      9.762 us |    833.9431 | 0.000 |    0.00 |  498.0469 |  498.0469 |  498.0469 |  1921.08 KB |        0.06 |
+| Clipper2InflatePaths                | 1001        | 2,556,662.97 us | 375,556.20 us | 20,585.503 us |      0.3911 | 1.000 |    0.01 | 3000.0000 | 2000.0000 | 2000.0000 | 32250.45 KB |        1.00 |
+*/
+
 /// <summary>
 /// Benchmarks stroke generation and clipping against Clipper2 path inflation.
 /// </summary>

@@ -27,6 +27,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="SixLabors.PolygonClipper.Tests" Key="$(SixLaborsPublicKey)" />
+    <InternalsVisibleTo Include="PolygonClipper.Benchmarks" Key="$(SixLaborsPublicKey)" />
   </ItemGroup>
 
 </Project>

@@ -60,10 +60,42 @@ internal sealed class SweepEventPoolList : PooledList<SweepEvent>
     }
 
     /// <summary>
-    /// Orders completed boundary events for edge connection.
+    /// Orders completed boundary events at each sweep point for edge connection.
     /// </summary>
     /// <param name="comparer">The edge connector's event ordering.</param>
-    public void Sort(SweepEventComparer comparer) => this.Items.AsSpan(0, this.Size).Sort(comparer);
+    /// <remarks>The input points must already be in sweep order.</remarks>
+    public void Sort(SweepEventComparer comparer)
+    {
+        Span<SweepEvent> events = this.GetEventsSpan();
+        int first = 0;
+        while (first < events.Length)
+        {
+            int after = first + 1;
+            Vertex point = events[first].Point;
+            while (after < events.Length && events[after].Point == point)
+            {
+                after++;
+            }
+
+            // RunSweep appends immutable boundary points in queue order.
+            // Only rays at the same point need ordering after their pairs close.
+            // Most vertices have two rays. Compare that pair without a general sort.
+            int count = after - first;
+            if (count == 2)
+            {
+                if (comparer.Compare(events[first], events[first + 1]) > 0)
+                {
+                    (events[first], events[first + 1]) = (events[first + 1], events[first]);
+                }
+            }
+            else if (count > 2)
+            {
+                events.Slice(first, count).Sort(comparer);
+            }
+
+            first = after;
+        }
+    }
 
     /// <summary>
     /// Gets the active event references.
