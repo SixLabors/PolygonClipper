@@ -11,7 +11,8 @@ namespace SixLabors.PolygonClipper;
 /// Represents a collection of contours.
 /// </summary>
 /// <remarks>
-/// Filled-area operations implicitly close every contour. Stroking respects each contour's closure state.
+/// Each contour's closure state distinguishes filled boundaries from open paths.
+/// Clipping can also return isolated points as open contours with one vertex.
 /// </remarks>
 #pragma warning disable CA1710 // Identifiers should have correct suffix
 public sealed class Polygon : IReadOnlyCollection<Contour>
@@ -90,6 +91,12 @@ public sealed class Polygon : IReadOnlyCollection<Contour>
             this.Add(contour);
         }
     }
+
+    /// <summary>
+    /// Reserves space for a known result contour count without adding contours.
+    /// </summary>
+    /// <param name="capacity">The total number of contours to accommodate.</param>
+    internal void EnsureCapacity(int capacity) => this.contours.EnsureCapacity(capacity);
 
     /// <summary>
     /// Gets the bounding box.

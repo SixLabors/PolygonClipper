@@ -20,7 +20,7 @@ self-intersections, overlapping edges, and multiple contours.
 ## Clipping
 
 The Boolean operations are `Intersection`, `Union`, `Difference`, and `Xor`.
-Each combines a subject polygon with a clip polygon.
+Each combines a subject polygon with a clip polygon. Both operands can contain open and closed contours.
 Each accepts `EvenOdd`, `NonZero`, `Positive`, or `Negative` filling.
 
 ```csharp
@@ -49,15 +49,15 @@ Polygon result = PolygonClipper.Intersection(subject, clip, FillRule.EvenOdd, Fi
 These operations apply the fill rules during the clipping sweep. They do not require
 an input normalization pass. Coordinates must be finite doubles.
 
-Fill rules interpret the input contours. Every result uses positive orientation:
+Fill rules interpret closed input contours. Closed results use positive orientation:
 counterclockwise exterior contours and islands, with clockwise holes, in Cartesian coordinates.
 Use `NonZero`, `EvenOdd`, or `Positive` filling to consume the resolved area.
 `Negative` selects negatively wound input; it does not request negatively oriented output.
 
 ## Normalization
 
-`Normalize(polygon, fillRule)` cleans one polygon. It resolves self-intersections and overlaps,
-removes zero-area retraces, and returns the full contour hierarchy.
+`Normalize(polygon, fillRule)` cleans one polygon. It resolves self-intersections and overlaps in filled boundaries
+and retains their full contour hierarchy. It also resolves overlapping open paths without filling them.
 It reads the original contour directions without changing the input or applying a preparation pass.
 
 ```csharp
@@ -68,6 +68,32 @@ Polygon result = PolygonClipper.Normalize(subject, FillRule.NonZero);
 Clipping accepts raw contours and their fill rules directly. It does not require `Normalize` first.
 The positive output orientation follows [Clipper2's output convention](https://www.angusj.com/clipper2/Docs/Overview.htm).
 
+## Open paths
+
+`Contour.IsClosed` controls the closing edge for both clipping and stroking.
+Closed contours enclose filled areas. Open contours contain consecutive line segments with no filled interior.
+Fill rules do not change open path membership.
+
+All clipping operations return `Polygon`. Each result contour identifies its geometry:
+
+- A closed contour is a filled boundary. Its first vertex is not repeated at the end.
+- An open contour with two or more vertices is a line piece.
+- An open contour with one vertex is an isolated point.
+
+Clipping splits linework at intersections and retains the cut endpoints in each resulting piece.
+Ordinary source bends stay connected. An explicit line cycle remains open and retains its repeated terminal vertex.
+Open contours have no parent or holes. Covered linework and points are omitted when a retained area already represents them.
+
+```csharp
+Contour horizontal = [new Vertex(-2, 0), new Vertex(2, 0)];
+horizontal.IsClosed = false;
+Contour vertical = [new Vertex(0, -2), new Vertex(0, 2)];
+vertical.IsClosed = false;
+
+// Return one open contour containing the crossing point (0, 0).
+Polygon result = PolygonClipper.Intersection([horizontal], [vertical], FillRule.NonZero);
+```
+
 ## Stroking
 
 `PolygonStroker` creates stroke polygons with configurable joins, caps, and width.
@@ -75,8 +101,7 @@ Each source contour has an `IsClosed` property, which defaults to `true`.
 Set it to `false` for an open source path. Endpoint coordinates and stroke width do not select closure.
 One polygon can contain both open and closed stroke inputs.
 
-Boolean operations use the filled area of each contour and implicitly close open inputs.
-Both Boolean and stroke output contain closed contours without a repeated closing vertex.
+Stroke output contains closed contours without a repeated closing vertex.
 When `NormalizeOutput` is enabled, stroke cleanup calls `Normalize` with `NonZero` filling.
 This preserves the raw outlines' filled area for either sign of stroke width.
 

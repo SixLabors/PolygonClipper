@@ -12,8 +12,8 @@ namespace SixLabors.PolygonClipper;
 /// Represents an open or closed sequence of vertices.
 /// </summary>
 /// <remarks>
-/// Stroking respects <see cref="IsClosed"/>. Filled-area operations implicitly close the
-/// contour regardless of that value. A repeated closing vertex is optional on input.
+/// <see cref="IsClosed"/> controls the closing edge for clipping and stroking.
+/// An open contour with one vertex represents a point. A repeated closing vertex is optional for closed input.
 /// </remarks>
 [DebuggerDisplay("Count = {Count}")]
 #pragma warning disable CA1710 // Identifiers should have correct suffix
@@ -60,8 +60,9 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     /// Gets or sets a value indicating whether the source contour is closed.
     /// </summary>
     /// <remarks>
-    /// The default is true. Stroking respects this value.
-    /// Filled-area operations implicitly close the contour regardless of this value.
+    /// The default is <see langword="true"/>.
+    /// When true, clipping and stroking connect the last vertex to the first vertex.
+    /// When false, no closing segment is added. Clipping treats the contour as lines or a point, with no filled area.
     /// </remarks>
     public bool IsClosed { get; set; } = true;
 

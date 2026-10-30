@@ -7,24 +7,27 @@ using System.Runtime.InteropServices;
 namespace SixLabors.PolygonClipper;
 
 /// <summary>
-/// Performs Boolean operations on the filled areas of directed contours.
+/// Performs Boolean clipping on closed filled boundaries and open paths.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Intersection, union, difference, and exclusive-or interpret the original contour directions using the selected fill rules.
+/// Fill rules interpret the original directions of closed contours. Open contours have no filled interior.
 /// Input vertices and hierarchy are not modified. Results own their contour data.
 /// </para>
 /// <para>
 /// Instance members are not thread-safe for concurrent use.
 /// </para>
 /// <para>
-/// Fill rules interpret the input contours. Output uses positive orientation regardless of the input rules:
+/// Closed output uses positive orientation regardless of the input rules:
 /// counterclockwise exteriors and islands, and clockwise holes in Cartesian coordinates.
 /// Use NonZero, EvenOdd, or Positive filling to reuse that resolved area.
-/// Contours use implicit closure without a repeated closing vertex.
+/// Closed output uses implicit closure without a repeated closing vertex.
+/// Open output has no closing edge. A one-vertex open contour represents an isolated point intersection.
+/// Line pieces retain their cut endpoints. An explicit line cycle retains its repeated terminal vertex and remains open.
 /// </para>
 /// <para>
 /// Normalize returns the full containment hierarchy. Binary operations group each exterior contour with its holes.
+/// Open output has no parent or holes. Closed-only clipping returns filled-area boundaries.
 /// </para>
 /// <para>
 /// Coordinates must be finite. Only coordinates used by an operation are validated.
@@ -56,9 +59,23 @@ public class PolygonClipper
     private readonly SweepEventPoolList outgoing = [];
     private readonly SweepEventPoolList bundled = [];
     private readonly SweepEventPoolList pendingBoundaries = [];
-    private readonly Stack<PriorityQueue<WindingCount, Vertex>> endpointQueues = new();
+    private readonly Stack<PriorityQueue<EndpointContribution, Vertex>> endpointQueues = new();
     private int retainedEndpointCapacity;
     private int activeBoundaryCount;
+
+    // Output buffers are initialized only for open input. Live membership and
+    // endpoint changes stay on the source intervals held by the status line.
+    private List<Vertex> openPoints = null!;
+    private List<OpenNode> openNodes = null!;
+    private List<OpenEdge> openEdges = null!;
+    private int openPointLines;
+    private int openPointAreas;
+    private bool openPointAreaBoundary;
+    private bool openPointAreaResult;
+    private bool openPointLineResult;
+    private int openPointNode;
+    private int openLineEndpoints;
+    private bool hasOpenContours;
 
     private Polygon? subject;
     private Polygon? clipping;
@@ -105,98 +122,109 @@ public class PolygonClipper
     }
 
     /// <summary>
-    /// Intersects two filled areas using a common fill rule.
+    /// Supplies a compile-time switch for open output in the shared sweep.
+    /// </summary>
+    private interface IOpenPathMode
+    {
+        /// <summary>
+        /// Gets a value indicating whether the sweep collects open output.
+        /// </summary>
+        static abstract bool Enabled { get; }
+    }
+
+    /// <summary>
+    /// Intersects two operands using a common fill rule for their closed contours.
     /// </summary>
     /// <param name="subject">The left-hand operand.</param>
     /// <param name="clip">The right-hand operand.</param>
     /// <param name="fillRule">The rule interpreting both operands.</param>
-    /// <returns>The filled area common to both operands.</returns>
+    /// <returns>The shared filled areas, open line pieces, and isolated open-path intersection points.</returns>
     public static Polygon Intersection(Polygon subject, Polygon clip, FillRule fillRule)
         => Intersection(subject, clip, fillRule, fillRule);
 
     /// <summary>
-    /// Intersects two filled areas using independent fill rules.
+    /// Intersects two operands using independent fill rules for their closed contours.
     /// </summary>
     /// <param name="subject">The left-hand operand.</param>
     /// <param name="clip">The right-hand operand.</param>
     /// <param name="subjectFillRule">The subject's fill rule.</param>
     /// <param name="clipFillRule">The clipping operand's fill rule.</param>
-    /// <returns>The filled area common to both operands.</returns>
+    /// <returns>The shared filled areas, open line pieces, and isolated open-path intersection points.</returns>
     public static Polygon Intersection(Polygon subject, Polygon clip, FillRule subjectFillRule, FillRule clipFillRule)
         => ExecuteFillOperation(subject, clip, BooleanOperation.Intersection, subjectFillRule, clipFillRule, ContourOutput.Grouped);
 
     /// <summary>
-    /// Unites two filled areas using a common fill rule.
+    /// Unites two operands using a common fill rule for their closed contours.
     /// </summary>
     /// <param name="subject">The left-hand operand.</param>
     /// <param name="clip">The right-hand operand.</param>
     /// <param name="fillRule">The rule interpreting both operands.</param>
-    /// <returns>The filled area belonging to either operand.</returns>
+    /// <returns>The filled areas and open path pieces belonging to either operand.</returns>
     public static Polygon Union(Polygon subject, Polygon clip, FillRule fillRule)
         => Union(subject, clip, fillRule, fillRule);
 
     /// <summary>
-    /// Unites two filled areas using independent fill rules.
+    /// Unites two operands using independent fill rules for their closed contours.
     /// </summary>
     /// <param name="subject">The left-hand operand.</param>
     /// <param name="clip">The right-hand operand.</param>
     /// <param name="subjectFillRule">The subject's fill rule.</param>
     /// <param name="clipFillRule">The clipping operand's fill rule.</param>
-    /// <returns>The filled area belonging to either operand.</returns>
+    /// <returns>The filled areas and open path pieces belonging to either operand.</returns>
     public static Polygon Union(Polygon subject, Polygon clip, FillRule subjectFillRule, FillRule clipFillRule)
         => ExecuteFillOperation(subject, clip, BooleanOperation.Union, subjectFillRule, clipFillRule, ContourOutput.Grouped);
 
     /// <summary>
-    /// Subtracts one filled area from another using a common fill rule.
+    /// Subtracts one operand from another using a common fill rule for their closed contours.
     /// </summary>
     /// <param name="subject">The area to retain.</param>
     /// <param name="clip">The area to subtract.</param>
     /// <param name="fillRule">The rule interpreting both operands.</param>
-    /// <returns>The subject area outside the clipping operand.</returns>
+    /// <returns>The subject's retained filled areas and open path pieces, including their cut endpoints.</returns>
     public static Polygon Difference(Polygon subject, Polygon clip, FillRule fillRule)
         => Difference(subject, clip, fillRule, fillRule);
 
     /// <summary>
-    /// Subtracts one filled area from another using independent fill rules.
+    /// Subtracts one operand from another using independent fill rules for their closed contours.
     /// </summary>
     /// <param name="subject">The area to retain.</param>
     /// <param name="clip">The area to subtract.</param>
     /// <param name="subjectFillRule">The subject's fill rule.</param>
     /// <param name="clipFillRule">The clipping operand's fill rule.</param>
-    /// <returns>The subject area outside the clipping operand.</returns>
+    /// <returns>The subject's retained filled areas and open path pieces, including their cut endpoints.</returns>
     public static Polygon Difference(Polygon subject, Polygon clip, FillRule subjectFillRule, FillRule clipFillRule)
         => ExecuteFillOperation(subject, clip, BooleanOperation.Difference, subjectFillRule, clipFillRule, ContourOutput.Grouped);
 
     /// <summary>
-    /// Computes exclusive filled coverage using a common fill rule.
+    /// Computes exclusive geometry using a common fill rule for closed contours.
     /// </summary>
     /// <param name="subject">The left-hand operand.</param>
     /// <param name="clip">The right-hand operand.</param>
     /// <param name="fillRule">The rule interpreting both operands.</param>
-    /// <returns>The filled area belonging to exactly one operand.</returns>
+    /// <returns>The selected filled areas and open path pieces, including their cut endpoints.</returns>
     public static Polygon Xor(Polygon subject, Polygon clip, FillRule fillRule)
         => Xor(subject, clip, fillRule, fillRule);
 
     /// <summary>
-    /// Computes exclusive filled coverage using independent fill rules.
+    /// Computes exclusive geometry using independent fill rules for closed contours.
     /// </summary>
     /// <param name="subject">The left-hand operand.</param>
     /// <param name="clip">The right-hand operand.</param>
     /// <param name="subjectFillRule">The subject's fill rule.</param>
     /// <param name="clipFillRule">The clipping operand's fill rule.</param>
-    /// <returns>The filled area belonging to exactly one operand.</returns>
+    /// <returns>The selected filled areas and open path pieces, including their cut endpoints.</returns>
     public static Polygon Xor(Polygon subject, Polygon clip, FillRule subjectFillRule, FillRule clipFillRule)
         => ExecuteFillOperation(subject, clip, BooleanOperation.Xor, subjectFillRule, clipFillRule, ContourOutput.Grouped);
 
     /// <summary>
-    /// Resolves self-intersections and overlaps using the specified fill rule.
+    /// Resolves self-intersections and overlaps using the specified fill rule for closed contours.
     /// </summary>
     /// <param name="polygon">The source contours. Their vertices and directions are not modified.</param>
     /// <param name="fillRule">The rule that determines the source polygon's filled area.</param>
     /// <returns>
-    /// Closed contours with their full containment hierarchy.
+    /// Filled boundaries with their full containment hierarchy, plus uncovered open path pieces and isolated points.
     /// Exterior contours and islands are counterclockwise. Holes are clockwise.
-    /// The first vertex is not repeated at the end of a contour.
+    /// Closed contours do not repeat their first vertex at the end.
     /// </returns>
     /// <remarks>
     /// The fill rule interprets the input. Output orientation is positive even when the input rule is Negative.
@@ -207,19 +235,16 @@ public class PolygonClipper
         => ExecuteFillOperation(polygon, EmptyFillOperand, BooleanOperation.Union, fillRule, FillRule.EvenOdd, ContourOutput.Nested);
 
     /// <summary>
-    /// Executes the configured Boolean operation using the operand fill rules.
+    /// Executes the configured Boolean operation using the operand fill rules for closed contours.
     /// </summary>
-    /// <returns>The connected filled boundaries.</returns>
+    /// <returns>The clipped filled boundaries, open paths, and isolated points.</returns>
     /// <remarks>Instance execution is not thread-safe for concurrent use.</remarks>
     public Polygon Run()
     {
         Polygon subject = this.subject!;
         Polygon clip = this.clipping!;
         BooleanOperation operation = this.operation;
-        FillRule subjectRule = this.subjectFillRule;
-        FillRule clipRule = this.clipFillRule;
         SweepEventPoolList resultEvents = this.sortedEvents;
-        SweepEventComparer resultComparer = this.comparer;
         resultEvents.Clear();
 
         this.ResetSweep();
@@ -238,6 +263,31 @@ public class PolygonClipper
 
         Box2 subjectBounds = this.ProcessSegments(subject, true);
         Box2 clipBounds = this.ProcessSegments(clip, false);
+
+        // The value-type mode makes open output a compile-time choice for the JIT.
+        // Both modes use the same Martinez sweep. Closed-only machine code does
+        // not carry point/line output checks or their extra live local variables.
+        return this.hasOpenContours
+            ? this.RunSweep<WithOpenPaths>(subjectBounds, clipBounds)
+            : this.RunSweep<WithoutOpenPaths>(subjectBounds, clipBounds);
+    }
+
+    /// <summary>
+    /// Runs the shared clipping sweep with open output enabled only for inputs that contain open contours.
+    /// </summary>
+    /// <typeparam name="TOpenPaths">The compile-time switch for open output.</typeparam>
+    /// <param name="subjectBounds">The subject bounds collected during ingestion.</param>
+    /// <param name="clipBounds">The clipping bounds collected during ingestion.</param>
+    /// <returns>The clipped geometry.</returns>
+    private Polygon RunSweep<TOpenPaths>(Box2 subjectBounds, Box2 clipBounds)
+        where TOpenPaths : struct, IOpenPathMode
+    {
+        BooleanOperation operation = this.operation;
+        FillRule subjectRule = this.subjectFillRule;
+        FillRule clipRule = this.clipFillRule;
+        SweepEventPoolList resultEvents = this.sortedEvents;
+        SweepEventComparer resultComparer = this.comparer;
+        bool open = TOpenPaths.Enabled;
         if (operation == BooleanOperation.Intersection && !subjectBounds.Intersects(clipBounds))
         {
             return [];
@@ -269,6 +319,13 @@ public class PolygonClipper
             }
 
             Vertex point = next.Point;
+            if (open)
+            {
+                this.openPointLines = this.openPointAreas = 0;
+                this.openPointAreaBoundary = this.openPointAreaResult = this.openPointLineResult = false;
+                this.openPointNode = -1;
+            }
+
             bool sourcePoint = next.IsStart || point == queuedEdge.SourceEnd;
             this.outgoing.Clear();
             this.pendingBoundaries.Clear();
@@ -276,7 +333,14 @@ public class PolygonClipper
             int lastEnd = -1;
             if (next.IsStart)
             {
-                this.outgoing.Add(queuedEdge);
+                if (open && queuedEdge.Point == queuedEdge.SourceEnd)
+                {
+                    this.ObserveOpenSource(queuedEdge);
+                }
+                else
+                {
+                    this.outgoing.Add(queuedEdge);
+                }
             }
             else
             {
@@ -297,7 +361,14 @@ public class PolygonClipper
 
                 if (valid && next.IsStart)
                 {
-                    this.outgoing.Add(queuedEdge);
+                    if (open && queuedEdge.Point == queuedEdge.SourceEnd)
+                    {
+                        this.ObserveOpenSource(queuedEdge);
+                    }
+                    else
+                    {
+                        this.outgoing.Add(queuedEdge);
+                    }
                 }
                 else if (valid)
                 {
@@ -307,6 +378,16 @@ public class PolygonClipper
             }
 
             int first = lastEnd < 0 ? this.statusLine.FindLower(point) : firstEnd;
+            if (open)
+            {
+                foreach (SweepEvent source in this.outgoing)
+                {
+                    this.ObserveOpenSource(source);
+                }
+
+                this.ObserveOpenRegion(first == 0 ? default : this.statusLine[first - 1].Above);
+            }
+
             while (first > 0 && this.statusLine[first - 1].ContainsPoint(point))
             {
                 first--;
@@ -323,7 +404,7 @@ public class PolygonClipper
             // prefix and every surviving prefix above the block stay valid.
             for (int i = first; i < after; i++)
             {
-                this.StageIncoming(this.statusLine[i], point);
+                this.StageIncoming(this.statusLine[i], point, open);
             }
 
             int statusCount = this.statusLine.Count;
@@ -367,14 +448,14 @@ public class PolygonClipper
                 {
                     SweepEvent incoming = this.statusLine[--first];
                     blockCount++;
-                    this.StageIncoming(incoming, point);
+                    this.StageIncoming(incoming, point, open);
                 }
 
                 if (upperIncident)
                 {
                     SweepEvent incoming = this.statusLine[first + blockCount];
                     blockCount++;
-                    this.StageIncoming(incoming, point);
+                    this.StageIncoming(incoming, point, open);
                 }
             }
 
@@ -396,6 +477,11 @@ public class PolygonClipper
                 winding = winding.Add(edge.Delta);
                 edge.Above = winding;
                 bool above = InResult(winding, operation, subjectRule, clipRule);
+                if (open)
+                {
+                    this.SelectOpenOutgoing(edge, winding.Subtract(edge.Delta), below, above);
+                }
+
                 if (below != above)
                 {
                     // Interior crossings emit nothing and need no output
@@ -459,6 +545,11 @@ public class PolygonClipper
                 }
             }
 
+            if (open && this.openPointLines != 0)
+            {
+                this.CompleteOpenPoint(point);
+            }
+
             // Each source interval owns at most one valid queued start or end.
             // Above twice the interval count, at least half the heap is obsolete.
             // Rebuild only then, so each scan is paid for by discarded versions
@@ -501,6 +592,11 @@ public class PolygonClipper
             {
                 contour.SetClockwise();
             }
+        }
+
+        if (open)
+        {
+            this.AppendOpenOutput(result);
         }
 
         return result;
@@ -634,10 +730,11 @@ public class PolygonClipper
     private int GetRetainedEventCapacityScore()
         => this.sortedEvents.Capacity + this.eventStorage.Capacity + this.segments.Capacity + this.statusLine.RetainedCapacity +
            this.outgoing.Capacity + this.bundled.Capacity +
-           this.pendingBoundaries.Capacity + this.retainedEndpointCapacity;
+           this.pendingBoundaries.Capacity + this.retainedEndpointCapacity +
+           (this.openPoints?.Capacity ?? 0) + (this.openNodes?.Capacity ?? 0) + (this.openEdges?.Capacity ?? 0);
 
     /// <summary>
-    /// Counts the edges of an implicitly closed filled boundary.
+    /// Counts the edges selected by a contour's explicit closure state.
     /// </summary>
     /// <param name="contour">The contour to inspect.</param>
     /// <returns>The number of segments to iterate.</returns>
@@ -645,6 +742,11 @@ public class PolygonClipper
     private static int GetContourSegmentCount(Contour contour)
     {
         int count = contour.Count;
+        if (!contour.IsClosed)
+        {
+            return Math.Max(0, count - 1);
+        }
+
         if (count < 3)
         {
             return 0;
@@ -658,6 +760,15 @@ public class PolygonClipper
     /// </summary>
     private void ResetSweep()
     {
+        if (this.hasOpenContours)
+        {
+            this.openPoints.Clear();
+            this.openNodes.Clear();
+            this.openEdges.Clear();
+            this.openLineEndpoints = 0;
+        }
+
+        this.hasOpenContours = false;
         this.eventStorage.Clear();
         this.statusLine.Reset(0);
         this.outgoing.Clear();
@@ -666,7 +777,7 @@ public class PolygonClipper
         this.activeBoundaryCount = 0;
         for (int i = 0; i < this.segments.Count; i++)
         {
-            if (this.segments[i].Ends is PriorityQueue<WindingCount, Vertex> ends)
+            if (this.segments[i].Ends is PriorityQueue<EndpointContribution, Vertex> ends)
             {
                 this.ReturnEndpoints(ends);
             }
@@ -690,6 +801,35 @@ public class PolygonClipper
         for (int i = 0; i < polygon.Count; i++)
         {
             Contour contour = polygon[i];
+            bool open = !contour.IsClosed;
+            if (open && contour.Count > 0)
+            {
+                this.openPoints ??= [];
+                this.openNodes ??= [];
+                this.openEdges ??= [];
+                this.hasOpenContours = true;
+
+                // Closed ingestion visits every vertex as a segment start.
+                // Open ingestion also validates the terminal vertex, which is
+                // never a start and must not bypass the public finite-coordinate contract.
+                Vertex terminal = contour[contour.Count - 1];
+                if (!double.IsFinite(terminal.X) || !double.IsFinite(terminal.Y))
+                {
+                    throw new ArgumentException("Polygon coordinates must be finite.", nameof(polygon));
+                }
+
+                if (contour.Count == 1)
+                {
+                    bounds = bounds.Add(new Box2(terminal));
+                    SweepEvent source = this.segments.Add(terminal, terminal, default);
+                    source.Lines = subject ? new(1, 0) : new(0, 1);
+                    this.eventStorage.Add(new QueueEntry(terminal, source, true));
+                    continue;
+                }
+
+                bounds = bounds.Add(new Box2(terminal));
+            }
+
             int count = GetContourSegmentCount(contour);
             if (count == 0)
             {
@@ -710,6 +850,13 @@ public class PolygonClipper
                 bounds = bounds.Add(new Box2(start));
                 if (start == end)
                 {
+                    if (open)
+                    {
+                        SweepEvent source = this.segments.Add(start, end, default);
+                        source.Lines = subject ? new(1, 0) : new(0, 1);
+                        this.eventStorage.Add(new QueueEntry(start, source, true));
+                    }
+
                     continue;
                 }
 
@@ -723,8 +870,15 @@ public class PolygonClipper
                 // Lexicographic direction is the formal x+epsilon*y sweep
                 // direction, including vertical source segments. Epsilon is
                 // never evaluated or applied to the stored double coordinates.
-                WindingCount delta = subject ? new(direction, 0) : new(0, direction);
+                // Open edges participate in intersection events without changing
+                // area winding. Their unsigned operand counts are tracked separately.
+                WindingCount delta = open ? default : subject ? new(direction, 0) : new(0, direction);
                 SweepEvent edge = this.segments.Add(start, end, delta);
+                if (open)
+                {
+                    edge.Lines = subject ? new(1, 0) : new(0, 1);
+                }
+
                 this.eventStorage.Add(new QueueEntry(start, edge, true));
             }
         }
@@ -737,8 +891,17 @@ public class PolygonClipper
     /// </summary>
     /// <param name="incoming">The incident active interval.</param>
     /// <param name="point">The staged event point.</param>
-    private void StageIncoming(SweepEvent incoming, Vertex point)
+    /// <param name="open">Whether open output is collected in this sweep.</param>
+    // Open-path bookkeeping pushes this method above the JIT's normal inline budget.
+    // Keep interval retirement in the sweep loop, as it was for closed-only clipping.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void StageIncoming(SweepEvent incoming, Vertex point, bool open)
     {
+        if (open)
+        {
+            this.StageOpenIncoming(incoming, point);
+        }
+
         incoming.Active = false;
         incoming.Version++;
         incoming.EndQueued = false;
@@ -758,12 +921,14 @@ public class PolygonClipper
     /// <param name="point">The complete event point.</param>
     private void ContinueAt(SweepEvent incoming, Vertex point)
     {
-        if (incoming.Ends is PriorityQueue<WindingCount, Vertex> ends)
+        if (incoming.Ends is PriorityQueue<EndpointContribution, Vertex> ends)
         {
             WindingCount delta = incoming.Delta;
-            while (ends.TryPeek(out WindingCount ending, out Vertex endpoint) && endpoint == point)
+            WindingCount lines = incoming.Lines;
+            while (ends.TryPeek(out EndpointContribution ending, out Vertex endpoint) && endpoint == point)
             {
-                delta = delta.Subtract(ending);
+                delta = delta.Subtract(ending.Area);
+                lines = lines.Subtract(ending.Lines);
                 ends.Dequeue();
             }
 
@@ -775,6 +940,7 @@ public class PolygonClipper
             }
 
             incoming.Delta = delta;
+            incoming.Lines = lines;
             incoming.SourceEnd = FirstEndpoint(ends);
         }
         else if (SweepEventComparer.Instance.Compare(point, incoming.SourceEnd) >= 0)
@@ -841,22 +1007,23 @@ public class PolygonClipper
                 {
                     // The common duplicate-edge case needs no endpoint ledger.
                     edge.Delta = edge.Delta.Add(other.Delta);
+                    edge.Lines = edge.Lines.Add(other.Lines);
                     continue;
                 }
 
                 if (edge.Ends is null)
                 {
                     edge.Ends = this.RentEndpoints();
-                    if (!edge.Delta.IsZero)
+                    if (!edge.Delta.IsZero || !edge.Lines.IsZero)
                     {
-                        edge.Ends.Enqueue(edge.Delta, edge.SourceEnd);
+                        edge.Ends.Enqueue(new EndpointContribution(edge.Delta, edge.Lines), edge.SourceEnd);
                     }
                 }
 
-                PriorityQueue<WindingCount, Vertex> ends = edge.Ends;
-                if (other.Ends is PriorityQueue<WindingCount, Vertex> otherEnds)
+                PriorityQueue<EndpointContribution, Vertex> ends = edge.Ends;
+                if (other.Ends is PriorityQueue<EndpointContribution, Vertex> otherEnds)
                 {
-                    foreach ((WindingCount delta, Vertex endpoint) in otherEnds.UnorderedItems)
+                    foreach ((EndpointContribution delta, Vertex endpoint) in otherEnds.UnorderedItems)
                     {
                         ends.Enqueue(delta, endpoint);
                     }
@@ -864,15 +1031,16 @@ public class PolygonClipper
                     other.Ends = null;
                     this.ReturnEndpoints(otherEnds);
                 }
-                else if (!other.Delta.IsZero)
+                else if (!other.Delta.IsZero || !other.Lines.IsZero)
                 {
-                    ends.Enqueue(other.Delta, other.SourceEnd);
+                    ends.Enqueue(new EndpointContribution(other.Delta, other.Lines), other.SourceEnd);
                 }
 
                 edge.Delta = edge.Delta.Add(other.Delta);
+                edge.Lines = edge.Lines.Add(other.Lines);
             }
 
-            if (edge.Ends is PriorityQueue<WindingCount, Vertex> ledger)
+            if (edge.Ends is PriorityQueue<EndpointContribution, Vertex> ledger)
             {
                 if (ledger.Count == 0)
                 {
@@ -887,7 +1055,7 @@ public class PolygonClipper
                     edge.End = edge.SourceEnd;
                 }
             }
-            else if (edge.Delta.IsZero)
+            else if (edge.Delta.IsZero && edge.Lines.IsZero)
             {
                 continue;
             }
@@ -903,7 +1071,7 @@ public class PolygonClipper
     /// </summary>
     /// <param name="ends">The non-empty endpoint queue.</param>
     /// <returns>The earliest endpoint.</returns>
-    private static Vertex FirstEndpoint(PriorityQueue<WindingCount, Vertex> ends)
+    private static Vertex FirstEndpoint(PriorityQueue<EndpointContribution, Vertex> ends)
     {
         ends.TryPeek(out _, out Vertex endpoint);
         return endpoint;
@@ -913,9 +1081,9 @@ public class PolygonClipper
     /// Rents endpoint storage without allocating tree nodes for each contribution.
     /// </summary>
     /// <returns>An empty reusable priority queue.</returns>
-    private PriorityQueue<WindingCount, Vertex> RentEndpoints()
+    private PriorityQueue<EndpointContribution, Vertex> RentEndpoints()
     {
-        if (this.endpointQueues.TryPop(out PriorityQueue<WindingCount, Vertex>? ends))
+        if (this.endpointQueues.TryPop(out PriorityQueue<EndpointContribution, Vertex>? ends))
         {
             this.retainedEndpointCapacity -= ends.EnsureCapacity(0);
             return ends;
@@ -928,7 +1096,7 @@ public class PolygonClipper
     /// Returns endpoint storage after its interval releases ownership.
     /// </summary>
     /// <param name="ends">The queue no longer referenced by a live interval.</param>
-    private void ReturnEndpoints(PriorityQueue<WindingCount, Vertex> ends)
+    private void ReturnEndpoints(PriorityQueue<EndpointContribution, Vertex> ends)
     {
         // Retain the array for the next bundle. Include it in the clipper's
         // capacity limit so a large overlap cannot pin unbounded scratch storage.
@@ -1036,6 +1204,10 @@ public class PolygonClipper
             // crossing on the same x coordinate. Represent that piece as a
             // new forward interval with the opposite signed contribution.
             SweepEvent tail = this.segments.Add(edge.SourceEnd, intersection, default(WindingCount).Subtract(edge.Delta));
+
+            // Line membership is unsigned even when this tiny area contribution reverses.
+            tail.Lines = edge.Lines;
+
             this.events.Enqueue(new QueueEntry(tail.Point, tail, true));
             edge.SourceEnd = intersection;
         }
@@ -1057,7 +1229,7 @@ public class PolygonClipper
     /// <param name="clipRule">The clipping operand's fill rule.</param>
     /// <returns>Whether the region belongs to the result.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool InResult(WindingCount count, BooleanOperation operation, FillRule subjectRule, FillRule clipRule)
+    internal static bool InResult(WindingCount count, BooleanOperation operation, FillRule subjectRule, FillRule clipRule)
     {
         return operation switch
         {
@@ -1075,7 +1247,7 @@ public class PolygonClipper
     /// <param name="rule">The validated fill rule.</param>
     /// <returns>Whether the region is filled.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool Filled(int count, FillRule rule)
+    internal static bool Filled(int count, FillRule rule)
         => rule switch
         {
             FillRule.EvenOdd => (count & 1) != 0,
@@ -1426,103 +1598,338 @@ public class PolygonClipper
     }
 
     /// <summary>
-    /// Stores separate subject and clip contributions without cross-operand cancellation.
+    /// Retains an isolated point or marks the line junctions at a completed event.
     /// </summary>
-    internal readonly struct WindingCount
+    /// <param name="point">The completed event point.</param>
+    private void CompleteOpenPoint(Vertex point)
     {
-        /// <summary>
-        /// The subject winding.
-        /// </summary>
-        public readonly int Subject;
-
-        /// <summary>
-        /// The clipping operand winding.
-        /// </summary>
-        public readonly int Clip;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="WindingCount"/> struct.
-        /// </summary>
-        /// <param name="subject">The subject component.</param>
-        /// <param name="clip">The clipping component.</param>
-        public WindingCount(int subject, int clip)
+        if (this.openPointNode >= 0)
         {
-            this.Subject = subject;
-            this.Clip = clip;
+            ref OpenNode node = ref CollectionsMarshal.AsSpan(this.openNodes)[this.openPointNode];
+            node.Split = this.openPointLines == 3 || this.openPointAreaBoundary;
+            if (node.Degree != 2 || node.Split)
+            {
+                this.openLineEndpoints += node.Degree;
+            }
         }
 
-        /// <summary>
-        /// Gets a value indicating whether both contributions cancel.
-        /// </summary>
-        public bool IsZero => this.Subject == 0 && this.Clip == 0;
-
-        /// <summary>
-        /// Adds an interval's contribution.
-        /// </summary>
-        /// <param name="other">The contribution to add.</param>
-        /// <returns>The summed winding.</returns>
-        public WindingCount Add(WindingCount other) => new(this.Subject + other.Subject, this.Clip + other.Clip);
-
-        /// <summary>
-        /// Removes contributions terminating at an endpoint.
-        /// </summary>
-        /// <param name="other">The terminating contributions.</param>
-        /// <returns>The remaining winding.</returns>
-        public WindingCount Subtract(WindingCount other) => new(this.Subject - other.Subject, this.Clip - other.Clip);
+        int membership = this.openPointLines | this.openPointAreas;
+        if (!this.openPointAreaResult && !this.openPointLineResult && SelectOpenMembership((membership & 1) != 0, (membership & 2) != 0, this.operation))
+        {
+            this.openPoints.Add(point);
+        }
     }
 
     /// <summary>
-    /// Stores a versioned endpoint in the existing priority queue.
+    /// Completes an open output piece before its live interval is continued or reused.
     /// </summary>
-    internal readonly struct QueueEntry
+    /// <param name="incoming">The incoming interval.</param>
+    /// <param name="point">The completed endpoint.</param>
+    private void StageOpenIncoming(SweepEvent incoming, Vertex point)
     {
-        /// <summary>
-        /// The queued geometric point.
-        /// </summary>
-        public readonly Vertex Point;
-
-        /// <summary>
-        /// The source pool index, complemented for a start record.
-        /// </summary>
-        private readonly int sourceIndex;
-
-        /// <summary>
-        /// The interval version when queued.
-        /// </summary>
-        public readonly int Version;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="QueueEntry"/> struct.
-        /// </summary>
-        /// <param name="point">The endpoint.</param>
-        /// <param name="edge">The interval.</param>
-        /// <param name="isStart">Whether the record starts the interval.</param>
-        public QueueEntry(Vertex point, SweepEvent edge, bool isStart)
+        // Keep open output construction outside the closed-only sweep's hot loop.
+        // The same sweep supplies its completed points, intervals, and area membership.
+        this.ObserveOpenSource(incoming);
+        this.ObserveOpenRegion(incoming.Above);
+        this.ObserveOpenRegion(incoming.Above.Subtract(incoming.Delta));
+        if (incoming.LineIncluded && incoming.Point != point)
         {
-            this.Point = point;
-
-            // Pool indices remain stable until the operation ends. Encoding
-            // start/end in their sign keeps every version bit and removes the
-            // managed reference, so heap movement needs no GC write barriers.
-            this.sourceIndex = isStart ? ~edge.ContourId : edge.ContourId;
-            this.Version = edge.Version;
+            int end = this.GetOpenPointNode(point);
+            ref OpenNode first = ref CollectionsMarshal.AsSpan(this.openNodes)[incoming.LineStartNode];
+            ref OpenNode last = ref CollectionsMarshal.AsSpan(this.openNodes)[end];
+            int index = this.openEdges.Count;
+            this.openEdges.Add(new OpenEdge(incoming.LineStartNode, end, first.First, last.First));
+            first.First = last.First = index;
+            last.Degree++;
+            this.openPointLineResult = true;
         }
 
+        incoming.LineIncluded = false;
+    }
+
+    /// <summary>
+    /// Selects an outgoing line piece and reserves its output incidence at this event.
+    /// </summary>
+    /// <param name="edge">The outgoing interval.</param>
+    /// <param name="areaWindingBelow">The area winding below the interval.</param>
+    /// <param name="areaBelow">Whether the result contains the area below the interval.</param>
+    /// <param name="areaAbove">Whether the result contains the area above the interval.</param>
+    private void SelectOpenOutgoing(SweepEvent edge, WindingCount areaWindingBelow, bool areaBelow, bool areaAbove)
+    {
+        this.ObserveOpenSource(edge);
+        this.ObserveOpenRegion(areaWindingBelow);
+        this.ObserveOpenRegion(edge.Above);
+        if (edge.Lines.IsZero)
+        {
+            edge.LineIncluded = false;
+        }
+        else
+        {
+            // A boundary belongs to a filled operand when either adjacent sector
+            // is filled. A retained area already represents any line on its boundary.
+            bool lineSubject = edge.Lines.Subject > 0 || Filled(areaWindingBelow.Subject, this.subjectFillRule) ||
+                Filled(edge.Above.Subject, this.subjectFillRule);
+            bool lineClip = edge.Lines.Clip > 0 || Filled(areaWindingBelow.Clip, this.clipFillRule) ||
+                Filled(edge.Above.Clip, this.clipFillRule);
+            edge.LineIncluded = !areaBelow && !areaAbove && SelectOpenMembership(lineSubject, lineClip, this.operation);
+            if (edge.LineIncluded)
+            {
+                edge.LineStartNode = this.GetOpenPointNode(edge.Point);
+
+                // The completed point already knows each selected outgoing ray.
+                // Count its incidence now; its adjacency link is completed when
+                // the interval ends. No coordinate dictionary or second pass is needed.
+                CollectionsMarshal.AsSpan(this.openNodes)[edge.LineStartNode].Degree++;
+            }
+        }
+
+        this.openPointLineResult |= edge.LineIncluded;
+    }
+
+    /// <summary>
+    /// Includes a source endpoint or a one-vertex input in the current point event.
+    /// </summary>
+    /// <param name="edge">The incident source interval.</param>
+    private void ObserveOpenSource(SweepEvent edge)
+    {
+        WindingCount lines = edge.Lines;
+        this.openPointLines |= (lines.Subject > 0 ? 1 : 0) | (lines.Clip > 0 ? 2 : 0);
+        this.openPointAreaBoundary |= !edge.Delta.IsZero;
+    }
+
+    /// <summary>
+    /// Records filled sectors without treating line contributions as winding.
+    /// </summary>
+    /// <param name="winding">The winding in an incident sector.</param>
+    private void ObserveOpenRegion(WindingCount winding)
+    {
+        this.openPointAreas |= (Filled(winding.Subject, this.subjectFillRule) ? 1 : 0) |
+            (Filled(winding.Clip, this.clipFillRule) ? 2 : 0);
+        this.openPointAreaResult |= InResult(winding, this.operation, this.subjectFillRule, this.clipFillRule);
+    }
+
+    /// <summary>
+    /// Applies the Boolean operation to line or point membership without signed area winding.
+    /// </summary>
+    /// <param name="subject">Whether the subject contains this location.</param>
+    /// <param name="clip">Whether the clipping operand contains this location.</param>
+    /// <param name="operation">The Boolean operation.</param>
+    /// <returns>Whether this location belongs to the result.</returns>
+    private static bool SelectOpenMembership(bool subject, bool clip, BooleanOperation operation)
+        => InResult(new(subject ? 1 : 0, clip ? 1 : 0), operation, FillRule.NonZero, FillRule.NonZero);
+
+    /// <summary>
+    /// Appends open contours and isolated points after the closed contours have their final hierarchy indices.
+    /// </summary>
+    /// <param name="result">The result that owns the generated contours.</param>
+    private void AppendOpenOutput(Polygon result)
+    {
+        // Every non-cycle line has two endpoint incidences. Complete-point
+        // processing counted them, so reserve their contours without another
+        // graph scan. Endpoint-free cycles can grow the result normally.
+        result.EnsureCapacity(result.Count + (this.openLineEndpoints / 2) + this.openPoints.Count);
+
+        // Join ordinary degree-two source vertices. Every intersection node
+        // and branch remains an endpoint, so separate pieces retain their cut vertex.
+        for (int i = 0; i < this.openNodes.Count; i++)
+        {
+            OpenNode node = this.openNodes[i];
+            if (node.Degree == 2 && !node.Split)
+            {
+                continue;
+            }
+
+            int edge = node.First;
+            while (edge >= 0)
+            {
+                if (!this.openEdges[edge].Visited)
+                {
+                    result.Add(this.TraceOpenPath(i, edge));
+                }
+
+                edge = this.NextOpenEdge(edge, i);
+            }
+        }
+
+        // A line can form a cycle without an implicit closing edge. Trace the
+        // remaining cycles and retain their explicit terminal source vertex.
+        for (int i = 0; i < this.openEdges.Count; i++)
+        {
+            if (!this.openEdges[i].Visited)
+            {
+                result.Add(this.TraceOpenPath(this.openEdges[i].Start, i));
+            }
+        }
+
+        foreach (Vertex point in this.openPoints)
+        {
+            Contour contour = new(1) { IsClosed = false };
+            contour.Add(point);
+            result.Add(contour);
+        }
+    }
+
+    /// <summary>
+    /// Gets the current complete point's output node without a coordinate lookup.
+    /// </summary>
+    /// <param name="point">The shared endpoint.</param>
+    /// <returns>The stable output node index.</returns>
+    private int GetOpenPointNode(Vertex point)
+    {
+        if (this.openPointNode < 0)
+        {
+            // The sweep completes every incidence at this exact point before
+            // advancing. All selected rays therefore share this one node index.
+            this.openPointNode = this.openNodes.Count;
+            this.openNodes.Add(new OpenNode(point));
+        }
+
+        return this.openPointNode;
+    }
+
+    /// <summary>
+    /// Gets the next edge in one node's incident list.
+    /// </summary>
+    /// <param name="edge">The current incident edge.</param>
+    /// <param name="node">The node owning this adjacency list.</param>
+    /// <returns>The next incident edge index, or -1 at the end.</returns>
+    private int NextOpenEdge(int edge, int node)
+    {
+        OpenEdge current = this.openEdges[edge];
+        return current.Start == node ? current.NextStart : current.NextEnd;
+    }
+
+    /// <summary>
+    /// Traces a maximal unbranched line between cut endpoints.
+    /// </summary>
+    /// <param name="start">The first node.</param>
+    /// <param name="index">The first unvisited incident edge.</param>
+    /// <returns>An open contour that owns its vertices.</returns>
+    private Contour TraceOpenPath(int start, int index)
+    {
+        Contour contour = new(2) { IsClosed = false };
+        contour.Add(this.openNodes[start].Point);
+        int node = start;
+        while (true)
+        {
+            ref OpenEdge edge = ref CollectionsMarshal.AsSpan(this.openEdges)[index];
+            edge.Visited = true;
+            node = edge.Start == node ? edge.End : edge.Start;
+            OpenNode next = this.openNodes[node];
+            contour.Add(next.Point);
+            if (node == start || next.Degree != 2 || next.Split)
+            {
+                return contour;
+            }
+
+            index = next.First == index ? this.NextOpenEdge(index, node) : next.First;
+        }
+    }
+
+    /// <summary>
+    /// Removes open output work when the JIT compiles the closed-only sweep.
+    /// </summary>
+    private readonly struct WithoutOpenPaths : IOpenPathMode
+    {
         /// <summary>
-        /// Gets a value indicating whether this record starts a source interval.
+        /// Gets a value indicating whether the sweep collects open output.
         /// </summary>
-        public bool IsStart => this.sourceIndex < 0;
+        public static bool Enabled => false;
+    }
+
+    /// <summary>
+    /// Includes open output work when the JIT compiles the shared sweep.
+    /// </summary>
+    private readonly struct WithOpenPaths : IOpenPathMode
+    {
+        /// <summary>
+        /// Gets a value indicating whether the sweep collects open output.
+        /// </summary>
+        public static bool Enabled => true;
+    }
+
+    /// <summary>
+    /// Stores the incident output edges of one exact vertex.
+    /// </summary>
+    private struct OpenNode
+    {
+        /// <summary>
+        /// The node coordinate.
+        /// </summary>
+        public Vertex Point;
 
         /// <summary>
-        /// Gets the stable index in the source interval pool.
+        /// The first incident edge index, or -1 for a new node.
         /// </summary>
-        public int EdgeIndex => this.sourceIndex < 0 ? ~this.sourceIndex : this.sourceIndex;
+        public int First;
 
         /// <summary>
-        /// Checks whether the source interval still owns this queued record.
+        /// The number of incident output edges.
         /// </summary>
-        /// <param name="edge">The interval at <see cref="EdgeIndex"/>.</param>
-        /// <returns>Whether the interval version and activity match.</returns>
-        public bool IsValid(SweepEvent edge) => this.Version == edge.Version && (this.IsStart || edge.Active);
+        public int Degree;
+
+        /// <summary>
+        /// Whether this event must remain a cut endpoint.
+        /// </summary>
+        public bool Split;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="OpenNode"/> struct.
+        /// </summary>
+        /// <param name="point">The exact output vertex.</param>
+        public OpenNode(Vertex point)
+        {
+            this.Point = point;
+            this.First = -1;
+            this.Degree = 0;
+            this.Split = false;
+        }
+    }
+
+    /// <summary>
+    /// Stores one undirected line piece and its two adjacency links.
+    /// </summary>
+    private struct OpenEdge
+    {
+        /// <summary>
+        /// The first endpoint's node index.
+        /// </summary>
+        public int Start;
+
+        /// <summary>
+        /// The second endpoint's node index.
+        /// </summary>
+        public int End;
+
+        /// <summary>
+        /// The next edge incident to Start.
+        /// </summary>
+        public int NextStart;
+
+        /// <summary>
+        /// The next edge incident to End.
+        /// </summary>
+        public int NextEnd;
+
+        /// <summary>
+        /// Whether output traversal has consumed this edge.
+        /// </summary>
+        public bool Visited;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="OpenEdge"/> struct.
+        /// </summary>
+        /// <param name="start">The first endpoint index.</param>
+        /// <param name="end">The second endpoint index.</param>
+        /// <param name="nextStart">The previous adjacency head at Start.</param>
+        /// <param name="nextEnd">The previous adjacency head at End.</param>
+        public OpenEdge(int start, int end, int nextStart, int nextEnd)
+        {
+            this.Start = start;
+            this.End = end;
+            this.NextStart = nextStart;
+            this.NextEnd = nextEnd;
+            this.Visited = false;
+        }
     }
 }

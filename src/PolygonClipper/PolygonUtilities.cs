@@ -1,7 +1,6 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -64,7 +63,7 @@ internal static class PolygonUtilities
         pi0 = default;
         pi1 = default;
 
-        if (!TryGetIntersectionBoundingBox(seg0.Source, seg0.Target, seg1.Source, seg1.Target, out Box2? bbox))
+        if (!TryGetIntersectionBoundingBox(seg0.Source, seg0.Target, seg1.Source, seg1.Target, out Box2 bbox))
         {
             return 0;
         }
@@ -72,10 +71,13 @@ internal static class PolygonUtilities
         // A vertical segment and a horizontal segment intersect at existing
         // source coordinates. The overlapping bounds identify that point
         // exactly, so determinant construction and division add no information.
-        if ((seg0.IsVertical() && seg1.Source.Y == seg1.Target.Y) ||
-            (seg1.IsVertical() && seg0.Source.Y == seg0.Target.Y))
+        // Their overlap has zero width. Most diagonal crossings can skip the
+        // axis checks using bounds that the intersection already requires.
+        if (bbox.Min.X == bbox.Max.X &&
+            ((seg0.IsVertical() && seg1.Source.Y == seg1.Target.Y) ||
+             (seg1.IsVertical() && seg0.Source.Y == seg0.Target.Y)))
         {
-            pi0 = bbox.Value.Min;
+            pi0 = bbox.Min;
             return 1;
         }
 
@@ -83,12 +85,12 @@ internal static class PolygonUtilities
 
         if (interResult == 1)
         {
-            pi0 = ConstrainToBoundingBox(pi0, bbox.Value);
+            pi0 = ConstrainToBoundingBox(pi0, bbox);
         }
         else if (interResult == 2)
         {
-            pi0 = ConstrainToBoundingBox(pi0, bbox.Value);
-            pi1 = ConstrainToBoundingBox(pi1, bbox.Value);
+            pi0 = ConstrainToBoundingBox(pi0, bbox);
+            pi1 = ConstrainToBoundingBox(pi1, bbox);
         }
 
         return interResult;
@@ -224,7 +226,7 @@ internal static class PolygonUtilities
     /// <param name="a2">The second point of the first segment.</param>
     /// <param name="b1">The first point of the second segment.</param>
     /// <param name="b2">The second point of the second segment.</param>
-    /// <param name="result">The intersection bounding box if one exists, otherwise null.</param>
+    /// <param name="result">The intersection bounds when the method returns true.</param>
     /// <returns>
     /// <see langword="true"/> if the segments intersect; otherwise, <see langword="false"/>.
     /// </returns>
@@ -233,7 +235,7 @@ internal static class PolygonUtilities
         in Vertex a2,
         in Vertex b1,
         in Vertex b2,
-        [NotNullWhen(true)] out Box2? result)
+        out Box2 result)
     {
         Vertex minA = Vertex.Min(a1, a2);
         Vertex maxA = Vertex.Max(a1, a2);
@@ -249,7 +251,7 @@ internal static class PolygonUtilities
             return true;
         }
 
-        result = null;
+        result = default;
         return false;
     }
 

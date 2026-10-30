@@ -8,7 +8,7 @@ namespace SixLabors.PolygonClipper;
 /// <summary>
 /// Compares two <see cref="SweepEvent"/> instances for sorting in the event queue.
 /// </summary>
-internal sealed class SweepEventComparer : IComparer<SweepEvent>, IComparer<PolygonClipper.QueueEntry>, IComparer<Vertex>, IComparer
+internal sealed class SweepEventComparer : IComparer<SweepEvent>, IComparer<QueueEntry>, IComparer<Vertex>, IComparer
 {
     /// <summary>
     /// The shared comparer for point, queue, and boundary event order.
@@ -82,7 +82,7 @@ internal sealed class SweepEventComparer : IComparer<SweepEvent>, IComparer<Poly
     }
 
     /// <inheritdoc/>
-    public int Compare(PolygonClipper.QueueEntry x, PolygonClipper.QueueEntry y)
+    public int Compare(QueueEntry x, QueueEntry y)
     {
         int order = this.Compare(x.Point, y.Point);
         if (order == 0)

@@ -21,14 +21,14 @@ public class SweepEventPoolListTests
         SweepEvent[] original = new SweepEvent[4];
         for (int i = 0; i < original.Length; i++)
         {
-            original[i] = pool.Add(new Vertex(i, 0), new Vertex(i + 1, 0), new PolygonClipper.WindingCount(1, 0));
+            original[i] = pool.Add(new Vertex(i, 0), new Vertex(i + 1, 0), new WindingCount(1, 0));
         }
 
         int capacity = pool.Capacity;
         pool.Clear();
         for (int i = 0; i < activeCount; i++)
         {
-            Assert.Same(original[i], pool.Add(new Vertex(i, 1), new Vertex(i + 1, 1), new PolygonClipper.WindingCount(0, 1)));
+            Assert.Same(original[i], pool.Add(new Vertex(i, 1), new Vertex(i + 1, 1), new WindingCount(0, 1)));
         }
 
         pool.EnsureCapacity(capacity + 1);
@@ -37,13 +37,13 @@ public class SweepEventPoolListTests
         Assert.True(pool.Capacity > capacity);
         for (int i = activeCount; i < original.Length; i++)
         {
-            SweepEvent reused = pool.Add(new Vertex(i, 1), new Vertex(i + 1, 1), new PolygonClipper.WindingCount(0, 1));
+            SweepEvent reused = pool.Add(new Vertex(i, 1), new Vertex(i + 1, 1), new WindingCount(0, 1));
             Assert.Same(original[i], reused);
             Assert.Equal(new Vertex(i, 1), reused.Point);
             Assert.Equal(new Vertex(i + 1, 1), reused.End);
         }
 
-        pool.Add(new Vertex(4, 1), new Vertex(5, 1), new PolygonClipper.WindingCount(0, 1));
+        pool.Add(new Vertex(4, 1), new Vertex(5, 1), new WindingCount(0, 1));
         Assert.Equal(5, pool.Count);
     }
 }

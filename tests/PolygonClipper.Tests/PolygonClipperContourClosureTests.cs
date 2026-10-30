@@ -6,7 +6,7 @@ namespace SixLabors.PolygonClipper.Tests;
 public class PolygonClipperContourClosureTests
 {
     /// <summary>
-    /// Checks source closure independently of duplicate endpoint representation for all fill rules.
+    /// Checks that explicit closure selects filled boundaries or open lines.
     /// </summary>
     /// <param name="rule">The fill rule for both operands.</param>
     [Theory]
@@ -14,7 +14,7 @@ public class PolygonClipperContourClosureTests
     [InlineData(FillRule.NonZero)]
     [InlineData(FillRule.Positive)]
     [InlineData(FillRule.Negative)]
-    public void FilledOperations_SourceClosureFlags_DoNotChangeOutput(FillRule rule)
+    public void FilledOperations_SourceClosureFlags_SelectPathGeometry(FillRule rule)
     {
         Polygon subject = [CreateRectangleContour(0, 0, 10, 10, false)];
         Polygon clip = [CreateRectangleContour(5, 5, 15, 15, false)];
@@ -23,11 +23,27 @@ public class PolygonClipperContourClosureTests
         openSubject[0].IsClosed = false;
         openClip[0].IsClosed = false;
 
-        AssertEquivalent(PolygonClipper.Intersection(subject, clip, rule), PolygonClipper.Intersection(openSubject, openClip, rule));
-        AssertEquivalent(PolygonClipper.Union(subject, clip, rule), PolygonClipper.Union(openSubject, openClip, rule));
-        AssertEquivalent(PolygonClipper.Difference(subject, clip, rule), PolygonClipper.Difference(openSubject, openClip, rule));
-        AssertEquivalent(PolygonClipper.Xor(subject, clip, rule), PolygonClipper.Xor(openSubject, openClip, rule));
-        AssertEquivalent(PolygonClipper.Normalize(subject, rule), PolygonClipper.Normalize(openSubject, rule));
+        Polygon closed = PolygonClipper.Intersection(subject, clip, rule);
+        if (rule == FillRule.Negative)
+        {
+            Assert.Empty(closed);
+        }
+        else
+        {
+            Contour boundary = Assert.Single(closed);
+            Assert.True(boundary.IsClosed);
+            Assert.Equal(4, boundary.Count);
+            Assert.Contains(new Vertex(5, 5), boundary);
+            Assert.Contains(new Vertex(10, 5), boundary);
+            Assert.Contains(new Vertex(10, 10), boundary);
+            Assert.Contains(new Vertex(5, 10), boundary);
+        }
+
+        // The two open three-sided paths share only (10, 5). Their omitted
+        // closing sides must not manufacture the filled rectangle above.
+        Contour point = Assert.Single(PolygonClipper.Intersection(openSubject, openClip, rule));
+        Assert.False(point.IsClosed);
+        Assert.Equal(new Vertex(10, 5), Assert.Single(point));
 
         Assert.False(openSubject[0].IsClosed);
         Assert.False(openClip[0].IsClosed);

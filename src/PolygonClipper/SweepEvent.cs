@@ -120,17 +120,32 @@ internal sealed class SweepEvent
     /// <summary>
     /// Gets or sets the signed subject and clip contributions of this interval.
     /// </summary>
-    public PolygonClipper.WindingCount Delta { get => this.interval.Delta; set => this.interval.Delta = value; }
+    public WindingCount Delta { get => this.interval.Delta; set => this.interval.Delta = value; }
+
+    /// <summary>
+    /// Gets or sets the unsigned open-path contributions from each operand.
+    /// </summary>
+    public WindingCount Lines { get => this.interval.Lines; set => this.interval.Lines = value; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether this interval contributes an open output piece.
+    /// </summary>
+    public bool LineIncluded { get => this.interval.LineIncluded; set => this.interval.LineIncluded = value; }
+
+    /// <summary>
+    /// Gets or sets the output node where the selected open piece starts.
+    /// </summary>
+    public int LineStartNode { get => this.interval.LineStartNode; set => this.interval.LineStartNode = value; }
 
     /// <summary>
     /// Gets or sets the winding immediately above this live interval.
     /// </summary>
-    public PolygonClipper.WindingCount Above { get => this.interval.Above; set => this.interval.Above = value; }
+    public WindingCount Above { get => this.interval.Above; set => this.interval.Above = value; }
 
     /// <summary>
     /// Gets or sets the endpoint changes retained for a coincident bundle.
     /// </summary>
-    public PriorityQueue<PolygonClipper.WindingCount, Vertex> Ends { get => this.interval.Ends; set => this.interval.Ends = value; }
+    public PriorityQueue<EndpointContribution, Vertex> Ends { get => this.interval.Ends; set => this.interval.Ends = value; }
 
     /// <summary>
     /// Gets or sets the immutable output record for the current contributing piece.
@@ -261,7 +276,7 @@ internal sealed class SweepEvent
     /// <param name="end">The source endpoint.</param>
     /// <param name="id">The stable interval identity.</param>
     /// <param name="delta">The signed operand contributions.</param>
-    public void InitializeInterval(Vertex start, Vertex end, int id, PolygonClipper.WindingCount delta)
+    public void InitializeInterval(Vertex start, Vertex end, int id, WindingCount delta)
     {
         this.interval ??= new IntervalState();
         this.Point = start;
@@ -270,6 +285,9 @@ internal sealed class SweepEvent
         this.SourceEnd = end;
         this.Support = new Segment(start, end);
         this.Delta = delta;
+        this.Lines = default;
+        this.LineIncluded = false;
+        this.LineStartNode = 0;
         this.Above = default;
         this.Ends = null;
         this.Boundary = null;
@@ -322,17 +340,32 @@ internal sealed class SweepEvent
         /// <summary>
         /// Gets or sets the signed subject and clip contributions of this interval.
         /// </summary>
-        public PolygonClipper.WindingCount Delta { get; set; }
+        public WindingCount Delta { get; set; }
+
+        /// <summary>
+        /// Gets or sets the unsigned open-path contributions from each operand.
+        /// </summary>
+        public WindingCount Lines { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether this interval contributes an open output piece.
+        /// </summary>
+        public bool LineIncluded { get; set; }
+
+        /// <summary>
+        /// Gets or sets the output node where the selected open piece starts.
+        /// </summary>
+        public int LineStartNode { get; set; }
 
         /// <summary>
         /// Gets or sets the winding immediately above this live interval.
         /// </summary>
-        public PolygonClipper.WindingCount Above { get; set; }
+        public WindingCount Above { get; set; }
 
         /// <summary>
         /// Gets or sets the endpoint changes retained for a coincident bundle.
         /// </summary>
-        public PriorityQueue<PolygonClipper.WindingCount, Vertex> Ends { get; set; }
+        public PriorityQueue<EndpointContribution, Vertex> Ends { get; set; }
 
         /// <summary>
         /// Gets or sets the immutable output record for the current contributing piece.

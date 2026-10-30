@@ -19,7 +19,7 @@ internal sealed class SweepEventPoolList : PooledList<SweepEvent>
     /// <param name="end">The source terminal point.</param>
     /// <param name="delta">The signed operand contributions.</param>
     /// <returns>The initialized live interval.</returns>
-    public SweepEvent Add(Vertex start, Vertex end, PolygonClipper.WindingCount delta)
+    public SweepEvent Add(Vertex start, Vertex end, WindingCount delta)
     {
         this.TryGrow();
         SweepEvent segment = this.Items[this.Size];
