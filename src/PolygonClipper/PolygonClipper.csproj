@@ -9,8 +9,8 @@
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <RepositoryUrl Condition="'$(RepositoryUrl)' == ''">https://github.com/SixLabors/PolygonClipper/</RepositoryUrl>
     <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
-    <PackageTags></PackageTags>
-    <Description></Description>
+    <PackageTags>Polygon Clipping Boolean Geometry Stroking Offset Winding</PackageTags>
+    <Description>A .NET library for polygon clipping, stroking, and offsets with double coordinates and explicit fill rules.</Description>
     <Configurations>Debug;Release</Configurations>
     <IsTrimmable>true</IsTrimmable>
   </PropertyGroup>
@@ -22,8 +22,7 @@
   </PropertyGroup>
 
   <PropertyGroup>
-    <!--Bump to v1.0 prior to tagged release.-->
-    <MinVerMinimumMajorMinor>1.0</MinVerMinimumMajorMinor>
+    <MinVerMinimumMajorMinor>2.0</MinVerMinimumMajorMinor>
   </PropertyGroup>
 
   <Choose>
