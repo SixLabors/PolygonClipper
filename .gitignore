@@ -61,6 +61,10 @@ project.lock.json
 project.fragment.lock.json
 artifacts/
 
+# Test image output
+**/Images/ActualOutput
+**/Images/ReferenceOutput
+
 # StyleCop
 StyleCopReport.xml
 

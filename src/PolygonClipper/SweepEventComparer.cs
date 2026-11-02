@@ -8,11 +8,28 @@ namespace SixLabors.PolygonClipper;
 /// <summary>
 /// Compares two <see cref="SweepEvent"/> instances for sorting in the event queue.
 /// </summary>
-internal sealed class SweepEventComparer : IComparer<SweepEvent>, IComparer
+internal sealed class SweepEventComparer : IComparer<SweepEvent>, IComparer<QueueEntry>, IComparer<Vertex>, IComparer
 {
+    /// <summary>
+    /// The shared comparer for point, queue, and boundary event order.
+    /// </summary>
+    public static readonly SweepEventComparer Instance = new();
+
+    /// <inheritdoc/>
+    public int Compare(Vertex x, Vertex y)
+    {
+        int order = x.X.CompareTo(y.X);
+        return order == 0 ? x.Y.CompareTo(y.Y) : order;
+    }
+
     /// <inheritdoc/>
     public int Compare(SweepEvent? x, SweepEvent? y)
     {
+        if (ReferenceEquals(x, y))
+        {
+            return 0;
+        }
+
         if (x == null)
         {
             return -1;
@@ -23,21 +40,10 @@ internal sealed class SweepEventComparer : IComparer<SweepEvent>, IComparer
             return 1;
         }
 
-        // Compare by x-coordinate
-        if (x.Point.X > y.Point.X)
+        int pointOrder = this.Compare(x.Point, y.Point);
+        if (pointOrder != 0)
         {
-            return 1;
-        }
-
-        if (x.Point.X < y.Point.X)
-        {
-            return -1;
-        }
-
-        // Compare by y-coordinate when x-coordinates are the same
-        if (x.Point.Y != y.Point.Y)
-        {
-            return x.Point.Y > y.Point.Y ? 1 : -1;
+            return pointOrder;
         }
 
         // Compare left vs. right endpoint
@@ -54,7 +60,42 @@ internal sealed class SweepEventComparer : IComparer<SweepEvent>, IComparer
         }
 
         // Compare by polygon type: subject polygons have higher priority
-        return x.PolygonType != PolygonType.Subject && y.PolygonType == PolygonType.Subject ? 1 : -1;
+        int order = ((int)x.PolygonType).CompareTo((int)y.PolygonType);
+        if (order == 0)
+        {
+            // Collinear rays can have different lengths. Order their other
+            // endpoints consistently rather than declaring each event smaller.
+            order = x.OtherEvent.Point.X.CompareTo(y.OtherEvent.Point.X);
+            if (order == 0)
+            {
+                order = x.OtherEvent.Point.Y.CompareTo(y.OtherEvent.Point.Y);
+            }
+
+            // At either endpoint, the shorter collinear segment comes first.
+            if (!x.Left)
+            {
+                order = -order;
+            }
+        }
+
+        return order;
+    }
+
+    /// <inheritdoc/>
+    public int Compare(QueueEntry x, QueueEntry y)
+    {
+        int order = this.Compare(x.Point, y.Point);
+        if (order == 0)
+        {
+            order = x.EdgeIndex.CompareTo(y.EdgeIndex);
+        }
+
+        if (order == 0)
+        {
+            order = x.Version.CompareTo(y.Version);
+        }
+
+        return order == 0 ? x.IsStart.CompareTo(y.IsStart) : order;
     }
 
     /// <inheritdoc/>

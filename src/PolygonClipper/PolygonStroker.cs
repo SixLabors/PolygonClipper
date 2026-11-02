@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace SixLabors.PolygonClipper;
@@ -8,23 +9,17 @@ namespace SixLabors.PolygonClipper;
 #pragma warning disable SA1201 // Elements should appear in the correct order
 
 /// <summary>
-/// Generates polygonal stroke geometry for contours with configurable joins and caps.
+/// Generates closed stroke contours with configurable width, joins, and caps.
 /// </summary>
 /// <remarks>
-/// This type performs two phases:
-/// <list type="number">
-/// <item><description>Expand each source contour into one or two stroke-side outlines with joins/caps.</description></item>
-/// <item><description>
-/// Optionally resolve generated overlaps/self-intersections using
-/// <see cref="PolygonClipper.Normalize(Polygon)"/> with positive fill semantics.
-/// </description></item>
-/// </list>
-/// The emitted contours are implicitly closed (first vertex is not duplicated at the end).
+/// Each source contour's <see cref="Contour.IsClosed"/> selects a closure join or endpoint caps.
+/// Returned contours are closed and do not repeat the first vertex at the end.
 /// <para>
-/// The static <see cref="Stroke(Polygon,double,StrokeOptions?)"/> method is the recommended
-/// entry point. It routes calls through an internal thread-local pool of reusable stroker
-/// instances and automatically resets temporary state between calls.
+/// Two remaining source vertices produce a capped segment, even for closed source input.
+/// Two coincident input vertices produce a round footprint for round caps and a square footprint for other caps.
+/// Other inputs with fewer than two remaining vertices produce no stroke.
 /// </para>
+/// <para><see cref="NormalizeOutput"/> controls whether overlaps and self-intersections are resolved before return.</para>
 /// <para>Instance members are not thread-safe for concurrent use.</para>
 /// </remarks>
 public sealed class PolygonStroker
@@ -67,24 +62,38 @@ public sealed class PolygonStroker
     private double widthEps = 0.5D / 1024D;
     private int widthSign = 1;
 
+    // Width and arc detail stay fixed while a path is outlined. Reuse the same
+    // angular step without changing the per-arc angle or vertex calculations.
+    private double arcStep;
+
+    // Offsets emit one side and retain overlaps at inner corners until Martinez resolves them.
+    private bool offsetBoundary;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="PolygonStroker"/> class with the specified stroke options.
     /// </summary>
     /// <param name="options">The stroke options.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is null.</exception>
     /// <remarks>
-    /// This constructor is intended for advanced/manual usage.
-    /// For typical call patterns, prefer the static <see cref="Stroke(Polygon,double,StrokeOptions?)"/>
-    /// method to use internal pooling automatically.
+    /// Set <see cref="Width"/> before calling <see cref="Stroke(Polygon)"/> to select the stroke width.
     /// </remarks>
     public PolygonStroker(StrokeOptions options)
+        : this(new StrokeOptionsKey(options))
     {
-        ArgumentNullException.ThrowIfNull(options);
-        this.NormalizeOutput = options.NormalizeOutput;
-        this.LineJoin = options.LineJoin;
-        this.LineCap = options.LineCap;
-        this.MiterLimit = options.MiterLimit;
-        this.ArcDetailScale = options.ArcDetailScale;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PolygonStroker"/> class from captured pool settings.
+    /// </summary>
+    /// <param name="key">The captured stroke or offset settings.</param>
+    private PolygonStroker(in StrokeOptionsKey key)
+    {
+        this.NormalizeOutput = key.NormalizeOutput;
+        this.LineJoin = key.LineJoin;
+        this.LineCap = key.LineCap;
+        this.MiterLimit = key.MiterLimit;
+        this.ArcDetailScale = key.ArcDetailScale;
+        this.SetHalfWidth(this.strokeWidth);
     }
 
     /// <summary>
@@ -92,47 +101,90 @@ public sealed class PolygonStroker
     /// </summary>
     private enum Status
     {
-        /// <summary>Initial setup and input normalization.</summary>
+        /// <summary>
+        /// Initial setup and input normalization.
+        /// </summary>
         Initial,
 
-        /// <summary>Ready to emit the first command for the contour.</summary>
+        /// <summary>
+        /// Ready to emit the first command for the contour.
+        /// </summary>
         Ready,
 
-        /// <summary>Emit start-cap vertices for open contours.</summary>
+        /// <summary>
+        /// Emit start-cap vertices for open contours.
+        /// </summary>
         Cap1,
 
-        /// <summary>Emit end-cap vertices for open contours.</summary>
+        /// <summary>
+        /// Emit end-cap vertices for open contours.
+        /// </summary>
         Cap2,
 
-        /// <summary>Emit joins for the first stroke side.</summary>
+        /// <summary>
+        /// Emit joins for the first stroke side.
+        /// </summary>
         Outline1,
 
-        /// <summary>Switch from first side to second side for closed paths.</summary>
+        /// <summary>
+        /// Switch from first side to second side for closed paths.
+        /// </summary>
         CloseFirst,
 
-        /// <summary>Emit joins for the second stroke side.</summary>
+        /// <summary>
+        /// Emit joins for the second stroke side.
+        /// </summary>
         Outline2,
 
-        /// <summary>Flush buffered vertices from the current join/cap computation.</summary>
+        /// <summary>
+        /// Flush buffered vertices from the current join/cap computation.
+        /// </summary>
         OutVertices,
 
-        /// <summary>Emit end-poly marker for first stroke side.</summary>
+        /// <summary>
+        /// Emit end-poly marker for first stroke side.
+        /// </summary>
         EndPoly1,
 
-        /// <summary>Emit end-poly marker for second stroke side.</summary>
+        /// <summary>
+        /// Emit end-poly marker for second stroke side.
+        /// </summary>
         EndPoly2,
 
-        /// <summary>Stop emitting commands.</summary>
+        /// <summary>
+        /// Stop emitting commands.
+        /// </summary>
         Stop
     }
 
     private readonly struct StrokeOptionsKey : IEquatable<StrokeOptionsKey>
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="StrokeOptionsKey"/> struct from stroke settings.
+        /// </summary>
+        /// <param name="options">The settings supplied to a public stroke entry point.</param>
+        /// <exception cref="ArgumentNullException">The options are null.</exception>
         public StrokeOptionsKey(StrokeOptions options)
         {
+            Guard.NotNull(options, nameof(options));
             this.NormalizeOutput = options.NormalizeOutput;
             this.LineJoin = options.LineJoin;
             this.LineCap = options.LineCap;
+            this.MiterLimit = options.MiterLimit;
+            this.ArcDetailScale = options.ArcDetailScale;
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="StrokeOptionsKey"/> struct from offset settings.
+        /// </summary>
+        /// <param name="options">The join and arc settings supplied by the offset entry point.</param>
+        public StrokeOptionsKey(OffsetOptions options)
+        {
+            // Offsets use one closed side and resolve it in Martinez. Fixed stroke-only
+            // values let them share the existing pool without constructing stroke options.
+            this.NormalizeOutput = false;
+            this.LineCap = LineCap.Butt;
+            this.LineJoin = options.LineJoin;
             this.MiterLimit = options.MiterLimit;
             this.ArcDetailScale = options.ArcDetailScale;
         }
@@ -166,26 +218,34 @@ public sealed class PolygonStroker
     }
 
     /// <summary>
-    /// Strokes <paramref name="polygon"/> with <paramref name="width"/> using optional
-    /// <paramref name="options"/>.
+    /// Strokes the source contours with the specified width and default options.
     /// </summary>
-    /// <param name="polygon">Input polygon to stroke.</param>
-    /// <param name="width">Stroke width.</param>
-    /// <param name="options">
-    /// Stroke options controlling joins, caps and approximation behavior.
-    /// When null, default <see cref="StrokeOptions"/> are used.
-    /// </param>
-    /// <returns>The stroked polygon contours.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="polygon"/> is null.</exception>
-    /// <remarks>Preferred entry point. Uses internal thread-local reusable instances.</remarks>
-    public static Polygon Stroke(Polygon polygon, double width, StrokeOptions? options = null)
+    /// <param name="polygon">The source contours, each with its own closure state.</param>
+    /// <param name="width">The finite signed stroke width. Zero produces no geometry.</param>
+    /// <returns>Closed stroke contours without a repeated closing vertex.</returns>
+    /// <exception cref="ArgumentNullException">The polygon is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The width is not finite.</exception>
+    public static Polygon Stroke(Polygon polygon, double width)
+        => Stroke(polygon, width, DefaultStrokeOptions);
+
+    /// <summary>
+    /// Strokes the source contours with the specified width and options.
+    /// </summary>
+    /// <param name="polygon">The source contours, each with its own closure state.</param>
+    /// <param name="width">The finite signed stroke width. Zero produces no geometry.</param>
+    /// <param name="options">The join, cap, approximation, and output cleanup options.</param>
+    /// <returns>Closed stroke contours without a repeated closing vertex.</returns>
+    /// <exception cref="ArgumentNullException">The polygon or options are null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The width is not finite.</exception>
+    public static Polygon Stroke(Polygon polygon, double width, StrokeOptions options)
     {
-        StrokeOptions effectiveOptions = options ?? DefaultStrokeOptions;
-        StrokeOptionsKey key = new(effectiveOptions);
-        PolygonStroker stroker = Rent(key, effectiveOptions);
+        StrokeOptionsKey key = new(options);
+        Guard.MustBeBetweenOrEqualTo(width, double.MinValue, double.MaxValue, nameof(width));
+
+        PolygonStroker stroker = Rent(key);
         try
         {
-            stroker.Width = width;
+            stroker.SetHalfWidth(width * 0.5D);
             return stroker.Stroke(polygon);
         }
         finally
@@ -197,14 +257,14 @@ public sealed class PolygonStroker
     /// <summary>
     /// Strokes <paramref name="polygon"/> using this instance's configured options and width.
     /// </summary>
-    /// <param name="polygon">Input polygon to stroke.</param>
-    /// <returns>The stroked polygon contours.</returns>
+    /// <param name="polygon">The source contours, each with its own closure state.</param>
+    /// <returns>Closed stroke contours without a repeated closing vertex. Zero width returns no contours.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="polygon"/> is null.</exception>
     /// <remarks>Instance execution is not thread-safe for concurrent use.</remarks>
     public Polygon Stroke(Polygon polygon)
     {
-        ArgumentNullException.ThrowIfNull(polygon);
-        if (polygon.Count == 0)
+        Guard.NotNull(polygon, nameof(polygon));
+        if (polygon.Count == 0 || this.strokeWidth == 0)
         {
             return [];
         }
@@ -214,14 +274,7 @@ public sealed class PolygonStroker
         {
             Contour contour = polygon[i];
 
-            // Close explicit or near-seam contours to avoid tiny stitch gaps,
-            // but keep clearly open polylines open so caps are emitted.
-            bool isClosed = IsContourClosedForEmission(contour, this.widthAbs * 2D);
-            Polygon stroked = this.ProcessPathToPolygon(contour, isClosed);
-            if (stroked.Count > 0)
-            {
-                allContours.Join(stroked);
-            }
+            this.AppendPath(contour, contour.IsClosed, allContours);
         }
 
         if (allContours.Count == 0)
@@ -234,22 +287,9 @@ public sealed class PolygonStroker
             return allContours;
         }
 
-        // Stroker emission already follows positive-fill assumptions, so skip
-        // extra input-orientation normalization and only resolve overlaps.
-        return SelfIntersectionRemover.Process(allContours, normalizeInputForPositiveFill: false);
-    }
-
-    /// <summary>
-    /// Strokes <paramref name="polygon"/> after setting the current stroke width.
-    /// </summary>
-    /// <param name="polygon">Input polygon to stroke.</param>
-    /// <param name="width">Stroke width.</param>
-    /// <returns>The stroked polygon contours.</returns>
-    /// <remarks>Instance execution is not thread-safe for concurrent use.</remarks>
-    public Polygon Stroke(Polygon polygon, double width)
-    {
-        this.Width = width;
-        return this.Stroke(polygon);
+        // Raw outlines describe a NonZero-filled band. A negative width reverses
+        // their winding, so Positive filling would incorrectly erase that band.
+        return PolygonClipper.Normalize(allContours, FillRule.NonZero);
     }
 
     /// <summary>
@@ -285,55 +325,86 @@ public sealed class PolygonStroker
     /// <remarks>
     /// Positive values produce conventional outward stroking. Negative values are supported
     /// and flip the side orientation while preserving magnitude.
+    /// Zero width produces no geometry.
     /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">The width is not finite.</exception>
     public double Width
     {
         get => this.strokeWidth * 2D;
         set
         {
-            this.strokeWidth = value * 0.5D;
-            if (this.strokeWidth < 0D)
-            {
-                this.widthAbs = -this.strokeWidth;
-                this.widthSign = -1;
-            }
-            else
-            {
-                this.widthAbs = this.strokeWidth;
-                this.widthSign = 1;
-            }
-
-            this.widthEps = this.strokeWidth / 1024D;
+            Guard.MustBeBetweenOrEqualTo(value, double.MinValue, double.MaxValue, nameof(value));
+            this.SetHalfWidth(value * 0.5D);
         }
     }
 
     /// <summary>
-    /// Converts a single contour into stroked polygon contours.
+    /// Displaces resolved closed boundaries for Positive-fill resolution.
+    /// </summary>
+    /// <param name="polygon">Resolved closed boundaries with positive output orientation.</param>
+    /// <param name="delta">The nonzero finite distance. Positive selects the right side of each boundary.</param>
+    /// <param name="options">The offset join and arc settings.</param>
+    /// <returns>The displaced contour walks, including overlaps that preserve collapse behavior.</returns>
+    internal static Polygon OffsetBoundaries(Polygon polygon, double delta, OffsetOptions options)
+    {
+        StrokeOptionsKey key = new(options);
+        PolygonStroker stroker = Rent(key);
+        try
+        {
+            stroker.SetHalfWidth(delta);
+            stroker.offsetBoundary = true;
+            Polygon boundaries = new(polygon.Count);
+            for (int i = 0; i < polygon.Count; i++)
+            {
+                stroker.AppendPath(polygon[i], true, boundaries);
+            }
+
+            return boundaries;
+        }
+        finally
+        {
+            stroker.offsetBoundary = false;
+            Return(key, stroker);
+        }
+    }
+
+    /// <summary>
+    /// Sets the signed distance from the source path to each stroke side.
+    /// </summary>
+    /// <param name="halfWidth">The signed side distance.</param>
+    private void SetHalfWidth(double halfWidth)
+    {
+        this.strokeWidth = halfWidth;
+        this.widthAbs = Math.Abs(halfWidth);
+        this.widthSign = halfWidth < 0 ? -1 : 1;
+        this.widthEps = halfWidth / 1024D;
+        if (this.LineJoin is LineJoin.Round or LineJoin.MiterRound || this.LineCap == LineCap.Round)
+        {
+            this.arcStep = Math.Acos(this.widthAbs / (this.widthAbs + (0.125D / this.ArcDetailScale))) * 2D;
+        }
+    }
+
+    /// <summary>
+    /// Appends the generated closed contours directly to the destination polygon.
     /// </summary>
     /// <param name="contour">The source contour.</param>
-    /// <param name="isClosed">Whether the contour should be emitted as closed.</param>
-    /// <returns>The generated stroked contour set for this input contour.</returns>
-    private Polygon ProcessPathToPolygon(Contour contour, bool isClosed)
+    /// <param name="isClosed">Whether the source contour includes a final-to-first segment and closure join.</param>
+    /// <param name="result">The destination for raw contours, which have no hierarchy to remap.</param>
+    private void AppendPath(Contour contour, bool isClosed, Polygon result)
     {
-        ArgumentNullException.ThrowIfNull(contour);
+        Guard.NotNull(contour, nameof(contour));
 
         int pointCount = contour.Count;
         if (pointCount < 2)
         {
-            return [];
+            return;
         }
 
-        bool hasExplicitClosure = pointCount > 1 && contour[0] == contour[^1];
-        if (isClosed && hasExplicitClosure)
+        if (isClosed && pointCount > 2 && contour[0] == contour[^1])
         {
-            // Keep one implicit closure path in the stroker state machine.
-            // Duplicate terminal vertices are re-added at final contour emission.
+            // Keep two coincident input vertices for the established point-cap case.
+            // Longer closed paths need only one copy of their starting vertex.
             pointCount--;
-        }
-
-        if (pointCount < 2)
-        {
-            return [];
         }
 
         if (pointCount == 2)
@@ -343,7 +414,8 @@ public sealed class PolygonStroker
             if (Vertex.DistanceSquared(p0, p1) <= VertexDistanceEpsilon * VertexDistanceEpsilon)
             {
                 // Degenerate segment behaves like a stroked point.
-                return [this.GeneratePointCap(p0.X, p0.Y)];
+                result.Add(this.GeneratePointCap(p0.X, p0.Y));
+                return;
             }
         }
 
@@ -359,13 +431,16 @@ public sealed class PolygonStroker
             this.ClosePath();
         }
 
-        Polygon result = new(isClosed ? 2 : 1);
         this.FinishPath(result);
-        return result;
     }
 
+    /// <summary>
+    /// Rents a stroker with the captured settings, or creates one when the pool is empty.
+    /// </summary>
+    /// <param name="key">The captured settings used for construction and pool lookup.</param>
+    /// <returns>A stroker configured with the captured settings.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static PolygonStroker Rent(in StrokeOptionsKey key, StrokeOptions options)
+    private static PolygonStroker Rent(in StrokeOptionsKey key)
     {
         Dictionary<StrokeOptionsKey, Stack<PolygonStroker>>? pools = strokersByOptions;
         if (pools != null &&
@@ -375,7 +450,7 @@ public sealed class PolygonStroker
             return pool.Pop();
         }
 
-        return new PolygonStroker(options);
+        return new PolygonStroker(key);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -420,31 +495,6 @@ public sealed class PolygonStroker
     }
 
     /// <summary>
-    /// Returns whether a contour should be treated as closed when emitting stroke geometry.
-    /// </summary>
-    /// <param name="contour">The contour to inspect.</param>
-    /// <param name="strokeWidth">Current stroke width.</param>
-    /// <returns><see langword="true"/> if the contour should be treated as closed; otherwise <see langword="false"/>.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsContourClosedForEmission(Contour contour, double strokeWidth)
-    {
-        int count = contour.Count;
-        if (count < 3)
-        {
-            return false;
-        }
-
-        if (contour[0] == contour[^1])
-        {
-            return true;
-        }
-
-        Vertex delta = contour[0] - contour[^1];
-        double closeThreshold = Math.Max(strokeWidth, 1E-3D);
-        return delta.LengthSquared() <= closeThreshold * closeThreshold;
-    }
-
-    /// <summary>
     /// Marks the current path as closed before finishing the outline.
     /// </summary>
     private void ClosePath()
@@ -486,10 +536,15 @@ public sealed class PolygonStroker
                 // Start a new contour. Commit any previous contour that is already complete.
                 if (currentContour is { Count: >= 3 })
                 {
-                    result.Add(currentContour);
+                    AddStrokeContour(result, currentContour);
                 }
 
-                currentContour = new Contour(16);
+                // Each closed side visits the source once. An open outline visits
+                // both sides in one contour. Closure adds no repeated vertex here.
+                // Match the list's doubling sizes so extra join vertices do not
+                // overshoot the capacity that ordinary list growth would reach.
+                int capacity = Math.Max(16, this.closed != 0 ? this.srcVertices.Length : this.srcVertices.Length * 2);
+                currentContour = new Contour((int)BitOperations.RoundUpToPowerOf2((uint)capacity));
                 hasLastPoint = false;
             }
 
@@ -497,21 +552,30 @@ public sealed class PolygonStroker
             {
                 currentContour ??= new Contour(16);
 
-                // Drop immediate duplicate vertices to avoid zero-length segments
-                // entering the intersection-removal pass.
-                if (!hasLastPoint || current != lastPoint)
+                // Accumulate returns vertices only from a completed join or cap
+                // buffer. Drain that buffer here instead of repeating command
+                // dispatch for each vertex. The next call resumes the same state.
+                for (int i = this.outVertex - 1; i < this.outVertices.Length; i++)
                 {
-                    currentContour.Add(current);
-                    lastPoint = current;
-                    hasLastPoint = true;
+                    Vertex vertex = this.outVertices[i];
+
+                    // Keep the same duplicate removal across joins and caps.
+                    if (!hasLastPoint || vertex != lastPoint)
+                    {
+                        currentContour.Add(vertex);
+                        lastPoint = vertex;
+                        hasLastPoint = true;
+                    }
                 }
+
+                this.outVertex = this.outVertices.Length;
             }
 
             if (command.EndPoly())
             {
                 if (currentContour is { Count: >= 3 })
                 {
-                    result.Add(currentContour);
+                    AddStrokeContour(result, currentContour);
                 }
 
                 currentContour = null;
@@ -521,7 +585,27 @@ public sealed class PolygonStroker
 
         if (currentContour is { Count: >= 3 })
         {
-            result.Add(currentContour);
+            AddStrokeContour(result, currentContour);
+        }
+    }
+
+    /// <summary>
+    /// Adds a generated contour after removing a repeated closing vertex.
+    /// </summary>
+    /// <param name="result">The destination polygon.</param>
+    /// <param name="contour">A generated contour with at least three stored vertices.</param>
+    private static void AddStrokeContour(Polygon result, Contour contour)
+    {
+        // Closure belongs to the contour, not to a duplicate endpoint. Apply this
+        // before emission so raw and cleaned output use the same representation.
+        if (contour[0] == contour[^1])
+        {
+            contour.RemoveVertexAt(contour.Count - 1);
+        }
+
+        if (contour.Count >= 3)
+        {
+            result.Add(contour);
         }
     }
 
@@ -599,7 +683,8 @@ public sealed class PolygonStroker
 
                     if (src.Length < 3)
                     {
-                        // Very short contours cannot be treated as closed reliably.
+                        // Preserve capped-segment handling when duplicate removal leaves
+                        // only two vertices. This does not change the source closure flag.
                         this.closed = 0;
                     }
 
@@ -682,6 +767,14 @@ public sealed class PolygonStroker
                     break;
 
                 case Status.CloseFirst:
+                    if (this.offsetBoundary)
+                    {
+                        // Offset needs only the selected side. Positive filling resolves its displaced walk.
+                        this.status = Status.Stop;
+                        cmd = PathCommand.Stop;
+                        break;
+                    }
+
                     // Start second side as a new contour command stream.
                     cmd = PathCommand.MoveTo;
                     this.status = Status.Outline2;
@@ -824,8 +917,8 @@ public sealed class PolygonStroker
         double a1 = Math.Atan2(dy1 * this.widthSign, dx1 * this.widthSign);
         double a2 = Math.Atan2(dy2 * this.widthSign, dx2 * this.widthSign);
 
-        // Derive angular step from arc detail scale and stroke radius.
-        double da = Math.Acos(this.widthAbs / (this.widthAbs + (0.125D / this.ArcDetailScale))) * 2D;
+        // Reuse the angular step for this width and arc detail.
+        double da = this.arcStep;
         this.AddPoint(x + dx1, y + dy1);
 
         if (this.widthSign > 0)
@@ -1018,7 +1111,7 @@ public sealed class PolygonStroker
         else
         {
             // Round cap emitted as half-circle arc around endpoint.
-            double da = Math.Acos(this.widthAbs / (this.widthAbs + (0.125D / this.ArcDetailScale))) * 2D;
+            double da = this.arcStep;
             int n = (int)(Pi / da);
             da = Pi / (n + 1);
 
@@ -1103,6 +1196,35 @@ public sealed class PolygonStroker
         double cp = Vertex.Cross(segNext, segForward);
         if (Math.Abs(cp) > double.Epsilon && (cp > 0D) == (strokeWidth > 0D))
         {
+            if (this.offsetBoundary)
+            {
+                Vertex offset1 = new(dx1, -dy1);
+                Vertex offset2 = new(dx2, -dy2);
+                if (TryCalcIntersection(v0Vertex + offset1, v1Vertex + offset1, v1Vertex + offset2, v2Vertex + offset2, out Vertex intersection))
+                {
+                    Vertex fromCorner = intersection - v1Vertex;
+                    double incoming = Math.Max(-Vertex.Dot(fromCorner, segForward), -Vertex.Dot(offset2, segForward)) / len1;
+                    double outgoing = Math.Max(Vertex.Dot(fromCorner, segNext), Vertex.Dot(offset1, segNext)) / len2;
+                    if (incoming >= 0 && incoming <= len1 * 0.5D && outgoing >= 0 && outgoing <= len2 * 0.5D)
+                    {
+                        // The miter and both offset endpoints must fit within each incident half-edge.
+                        // Neighboring corners use opposite halves, so these trims cannot remove
+                        // the same strip coverage twice. This avoids extra overlap events on wide features.
+                        this.AddPoint(intersection.X, intersection.Y);
+                        return;
+                    }
+                }
+
+                // Connect both edge strips through their common source vertex. Their overlap must
+                // remain filled when the side distance exceeds a local feature's size. Joining the
+                // support lines here can fold the displaced contour into a false hole or island.
+                // Positive filling resolves the displaced walk without a separate band cleanup.
+                this.AddPoint(v1.X + dx1, v1.Y - dy1);
+                this.AddPoint(v1.X, v1.Y);
+                this.AddPoint(v1.X + dx2, v1.Y - dy2);
+                return;
+            }
+
             double limit = Math.Min(len1, len2) / widthAbs;
             if (limit < InnerMiterLimit)
             {
@@ -1179,7 +1301,7 @@ public sealed class PolygonStroker
         if (this.LineCap == LineCap.Round)
         {
             // Emit a full circle when a contour collapses to a point.
-            double da = Math.Acos(this.widthAbs / (this.widthAbs + (0.125D / this.ArcDetailScale))) * 2D;
+            double da = this.arcStep;
             int n = Math.Max(4, (int)(PiMul2 / da));
             double angleStep = PiMul2 / n;
 
@@ -1231,12 +1353,27 @@ public sealed class PolygonStroker
     {
         Vertex ab = b - a;
         Vertex cd = d - c;
+
         double denominator = Vertex.Cross(ab, cd);
         if (Math.Abs(denominator) < IntersectionEpsilon)
         {
             // Parallel or numerically unstable near-parallel lines.
             intersection = default;
             return false;
+        }
+
+        // The parallel check also rejects offset lines whose endpoints round to one point.
+        // A nonparallel axis-aligned crossing uses existing coordinates without division error.
+        if (ab.X == 0 && cd.Y == 0)
+        {
+            intersection = new(a.X, c.Y);
+            return true;
+        }
+
+        if (ab.Y == 0 && cd.X == 0)
+        {
+            intersection = new(c.X, a.Y);
+            return true;
         }
 
         double t = Vertex.Cross(c - a, cd) / denominator;

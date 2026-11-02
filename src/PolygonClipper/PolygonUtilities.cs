@@ -1,8 +1,8 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
-using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace SixLabors.PolygonClipper;
 
@@ -21,7 +21,33 @@ internal static class PolygonUtilities
     /// <returns>The <see cref="double"/> area.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static double SignedArea(in Vertex p0, in Vertex p1, in Vertex p2)
-        => Vertex.Cross(p0 - p2, p1 - p2);
+    {
+        Vertex a = p0 - p2;
+        Vertex b = p1 - p2;
+        double first = a.X * b.Y;
+        double second = a.Y * b.X;
+        double area = first - second;
+
+        // The two products can almost cancel. Rounding can then change the sign.
+        // For double arithmetic, u = 2^-53. The error factor is (3 + 16u)u.
+        // If the absolute area exceeds the bound below, its sign is reliable.
+        // Otherwise, the calculation needs higher precision to determine the sign.
+        // Source: https://www.cs.cmu.edu/afs/cs/project/quake/public/code/predicates.c
+        // exactinit defines this factor as ccwerrboundA. orient2d uses it.
+        const double unitRoundoff = 1D / 9_007_199_254_740_992D;
+        const double orientationErrorFactor = (3D + (16D * unitRoundoff)) * unitRoundoff;
+        if (first == 0 || second == 0 || !double.IsFinite(area) ||
+            Math.Abs(area) > orientationErrorFactor * (Math.Abs(first) + Math.Abs(second)))
+        {
+            return area;
+        }
+
+        ExtendedPrecisionDouble ax = ExtendedPrecisionDouble.Difference(p0.X, p2.X);
+        ExtendedPrecisionDouble ay = ExtendedPrecisionDouble.Difference(p0.Y, p2.Y);
+        ExtendedPrecisionDouble bx = ExtendedPrecisionDouble.Difference(p1.X, p2.X);
+        ExtendedPrecisionDouble by = ExtendedPrecisionDouble.Difference(p1.Y, p2.Y);
+        return ((ax * by) - (ay * bx)).Value;
+    }
 
     /// <summary>
     /// Finds the intersection of two line segments, constraining results to their intersection bounding box.
@@ -41,21 +67,34 @@ internal static class PolygonUtilities
         pi0 = default;
         pi1 = default;
 
-        if (!TryGetIntersectionBoundingBox(seg0.Source, seg0.Target, seg1.Source, seg1.Target, out Box2? bbox))
+        if (!TryGetIntersectionBoundingBox(seg0.Source, seg0.Target, seg1.Source, seg1.Target, out Box2 bbox))
         {
             return 0;
+        }
+
+        // A vertical segment and a horizontal segment intersect at existing
+        // source coordinates. The overlapping bounds identify that point
+        // exactly, so determinant construction and division add no information.
+        // Their overlap has zero width. Most diagonal crossings can skip the
+        // axis checks using bounds that the intersection already requires.
+        if (bbox.Min.X == bbox.Max.X &&
+            ((seg0.IsVertical() && seg1.Source.Y == seg1.Target.Y) ||
+             (seg1.IsVertical() && seg0.Source.Y == seg0.Target.Y)))
+        {
+            pi0 = bbox.Min;
+            return 1;
         }
 
         int interResult = FindIntersectionImpl(seg0, seg1, out pi0, out pi1);
 
         if (interResult == 1)
         {
-            pi0 = ConstrainToBoundingBox(pi0, bbox.Value);
+            pi0 = ConstrainToBoundingBox(pi0, bbox);
         }
         else if (interResult == 2)
         {
-            pi0 = ConstrainToBoundingBox(pi0, bbox.Value);
-            pi1 = ConstrainToBoundingBox(pi1, bbox.Value);
+            pi0 = ConstrainToBoundingBox(pi0, bbox);
+            pi1 = ConstrainToBoundingBox(pi1, bbox);
         }
 
         return interResult;
@@ -89,82 +128,99 @@ internal static class PolygonUtilities
 
         Vertex va = seg0.Target - a1;
         Vertex vb = seg1.Target - a2;
-        Vertex e = a2 - a1;
+        ExtendedPrecisionDouble ax = default;
+        ExtendedPrecisionDouble ay = default;
+        ExtendedPrecisionDouble bx = default;
+        ExtendedPrecisionDouble by = default;
+        ExtendedPrecisionDouble denominator = default;
 
-        double kross = Vertex.Cross(va, vb);
-        double sqrKross = kross * kross;
-        double sqrLenA = Vertex.Dot(va, va);
-
-        if (sqrKross > 0)
+        // Shared vertical or horizontal directions are exactly parallel. Other
+        // directions need the retained coordinate differences: rounding them
+        // first can make collinear source segments appear to cross.
+        if ((va.X != 0 || vb.X != 0) && (va.Y != 0 || vb.Y != 0))
         {
-            // Lines of the segments are not parallel
-            double s = Vertex.Cross(e, vb) / kross;
-            if (s is < 0 or > 1)
+            ax = ExtendedPrecisionDouble.Difference(seg0.Target.X, a1.X);
+            ay = ExtendedPrecisionDouble.Difference(seg0.Target.Y, a1.Y);
+            bx = ExtendedPrecisionDouble.Difference(seg1.Target.X, a2.X);
+            by = ExtendedPrecisionDouble.Difference(seg1.Target.Y, a2.Y);
+            denominator = (ax * by) - (ay * bx);
+        }
+
+        if (denominator.Value != 0)
+        {
+            // Retain subtraction, determinant, and division roundoff until the
+            // final coordinate is rounded. Independent segment pairs meeting at
+            // one junction must construct the same point for event closure.
+            ExtendedPrecisionDouble ex = ExtendedPrecisionDouble.Difference(a2.X, a1.X);
+            ExtendedPrecisionDouble ey = ExtendedPrecisionDouble.Difference(a2.Y, a1.Y);
+            ExtendedPrecisionDouble numerator = (ex * by) - (ey * bx);
+            ExtendedPrecisionDouble otherNumerator = (ex * ay) - (ey * ax);
+            double start = numerator.Value;
+            double end = (numerator - denominator).Value;
+            double otherStart = otherNumerator.Value;
+            double otherEnd = (otherNumerator - denominator).Value;
+            bool positive = denominator.Value > 0;
+            if (positive ? start < 0 || end > 0 || otherStart < 0 || otherEnd > 0
+                         : start > 0 || end < 0 || otherStart > 0 || otherEnd < 0)
             {
                 return 0;
             }
 
-            double t = Vertex.Cross(e, va) / kross;
-            if (t is < 0 or > 1)
+            // A rounded quotient can equal one for an interior crossing.
+            // Preserve a source endpoint only when the retained numerator
+            // actually equals zero or the denominator.
+            if (start == 0 || end == 0)
             {
-                return 0;
-            }
-
-            // If s or t is exactly 0 or 1, the intersection is on an endpoint
-            if (s is 0 or 1)
-            {
-                // On an endpoint of line segment a
-                pi0 = MidPoint(a1, s, va);
+                pi0 = start == 0 ? a1 : seg0.Target;
                 return 1;
             }
 
-            if (t is 0 or 1)
+            if (otherStart == 0 || otherEnd == 0)
             {
-                // On an endpoint of line segment b
-                pi0 = MidPoint(a2, t, vb);
+                pi0 = otherStart == 0 ? a2 : seg1.Target;
                 return 1;
             }
 
-            // Intersection of lines is a point on each segment
-            pi0 = a1 + (s * va);
+            ExtendedPrecisionDouble parameter = numerator / denominator;
+            ExtendedPrecisionDouble intersectionX = parameter * ax;
+            ExtendedPrecisionDouble intersectionY = parameter * ay;
+            intersectionX += new ExtendedPrecisionDouble(a1.X);
+            intersectionY += new ExtendedPrecisionDouble(a1.Y);
+            pi0 = new Vertex(intersectionX.Value, intersectionY.Value);
             return 1;
         }
 
-        // Lines are parallel; check if they are collinear
-        kross = Vertex.Cross(e, va);
-        sqrKross = kross * kross;
-        if (sqrKross > 0)
+        // Use the original coordinates for collinearity. A point has no
+        // supporting direction, so test it against the other segment instead.
+        if ((seg0.IsDegenerate() ? SignedArea(a2, seg1.Target, a1) : SignedArea(a1, seg0.Target, a2)) != 0)
         {
-            // Lines of the segments are different
             return 0;
         }
 
-        // Segments are collinear, check for overlap
-        double sa = Vertex.Dot(va, e) / sqrLenA;
-        double sb = sa + (Vertex.Dot(va, vb) / sqrLenA);
-        double smin = Math.Min(sa, sb);
-        double smax = Math.Max(sa, sb);
-
-        if (smin <= 1 && smax >= 0)
+        // The bounding-box check already established overlap. Compare source
+        // coordinates along a non-constant axis, without normalized parameters.
+        // A short overlap near a long segment's end must not round to one point.
+        bool useX = va.X != 0;
+        double firstSource = useX ? a1.X : a1.Y;
+        double firstTarget = useX ? seg0.Target.X : seg0.Target.Y;
+        double secondSource = useX ? a2.X : a2.Y;
+        double secondTarget = useX ? seg1.Target.X : seg1.Target.Y;
+        bool firstForward = firstSource <= firstTarget;
+        bool secondForward = secondSource <= secondTarget;
+        Vertex firstMin = firstForward ? a1 : seg0.Target;
+        Vertex firstMax = firstForward ? seg0.Target : a1;
+        Vertex secondMin = secondForward ? a2 : seg1.Target;
+        Vertex secondMax = secondForward ? seg1.Target : a2;
+        Vertex minimum = Math.Min(firstSource, firstTarget) >= Math.Min(secondSource, secondTarget) ? firstMin : secondMin;
+        Vertex maximum = Math.Max(firstSource, firstTarget) <= Math.Max(secondSource, secondTarget) ? firstMax : secondMax;
+        pi0 = firstForward ? minimum : maximum;
+        if (minimum == maximum)
         {
-            if (smin == 1)
-            {
-                pi0 = MidPoint(a1, smin, va);
-                return 1;
-            }
-
-            if (smax == 0)
-            {
-                pi0 = MidPoint(a1, smax, va);
-                return 1;
-            }
-
-            pi0 = MidPoint(a1, Math.Max(smin, 0), va);
-            pi1 = MidPoint(a1, Math.Min(smax, 1), va);
-            return 2;
+            return 1;
         }
 
-        return 0;
+        pi1 = firstForward ? maximum : minimum;
+        return 2;
     }
 
     /// <summary>
@@ -174,7 +230,7 @@ internal static class PolygonUtilities
     /// <param name="a2">The second point of the first segment.</param>
     /// <param name="b1">The first point of the second segment.</param>
     /// <param name="b2">The second point of the second segment.</param>
-    /// <param name="result">The intersection bounding box if one exists, otherwise null.</param>
+    /// <param name="result">The intersection bounds when the method returns true.</param>
     /// <returns>
     /// <see langword="true"/> if the segments intersect; otherwise, <see langword="false"/>.
     /// </returns>
@@ -183,7 +239,7 @@ internal static class PolygonUtilities
         in Vertex a2,
         in Vertex b1,
         in Vertex b2,
-        [NotNullWhen(true)] out Box2? result)
+        out Box2 result)
     {
         Vertex minA = Vertex.Min(a1, a2);
         Vertex maxA = Vertex.Max(a1, a2);
@@ -199,7 +255,7 @@ internal static class PolygonUtilities
             return true;
         }
 
-        result = null;
+        result = default;
         return false;
     }
 
@@ -262,20 +318,32 @@ internal static class PolygonUtilities
     /// <summary>
     /// Computes the signed area of a contour.
     /// </summary>
-    public static double Area(List<Vertex> path)
+    public static double Area(List<Vertex> path) => Area(CollectionsMarshal.AsSpan(path));
+
+    /// <summary>
+    /// Computes the signed area of a contour.
+    /// </summary>
+    /// <param name="path">The contour vertices.</param>
+    /// <returns>The signed area.</returns>
+    public static double Area(ReadOnlySpan<Vertex> path)
     {
-        int count = path.Count;
+        int count = path.Length;
         if (count < 3)
         {
             return 0D;
         }
 
         double area = 0;
-        Vertex prev = path[count - 1];
+
+        // Translation does not change area. Subtract a local origin before the
+        // products so a small ring far from zero does not lose its area or sign
+        // when large absolute-coordinate products cancel.
+        Vertex origin = path[0];
+        Vertex prev = path[count - 1] - origin;
         for (int i = 0; i < count; i++)
         {
-            Vertex current = path[i];
-            area += (prev.Y + current.Y) * (prev.X - current.X);
+            Vertex current = path[i] - origin;
+            area += Vertex.Cross(prev, current);
             prev = current;
         }
 
@@ -501,8 +569,17 @@ internal static class PolygonUtilities
     /// Determines whether a point is inside a contour.
     /// </summary>
     public static PointInPolygonResult PointInPolygon(in Vertex point, List<Vertex> polygon)
+        => PointInPolygon(point, CollectionsMarshal.AsSpan(polygon));
+
+    /// <summary>
+    /// Determines whether a point is inside a contour.
+    /// </summary>
+    /// <param name="point">The point to test.</param>
+    /// <param name="polygon">The contour vertices.</param>
+    /// <returns>The point's position relative to the contour.</returns>
+    public static PointInPolygonResult PointInPolygon(in Vertex point, ReadOnlySpan<Vertex> polygon)
     {
-        int len = polygon.Count;
+        int len = polygon.Length;
         int start = 0;
         if (len < 3)
         {
@@ -687,172 +764,5 @@ internal static class PolygonUtilities
     /// - Returns 2 if the segments overlap.
     /// </returns>
     public static int FindIntersection(in Vertex a1, in Vertex a2, in Vertex b1, in Vertex b2, out Vertex pi0, out Vertex pi1)
-    {
-        pi0 = default;
-        pi1 = default;
-
-        if (!TryGetIntersectionBoundingBox(a1, a2, b1, b2, out Box2 bbox))
-        {
-            return 0;
-        }
-
-        int interResult = FindIntersectionImpl(a1, a2, b1, b2, out pi0, out pi1);
-
-        if (interResult == 1)
-        {
-            pi0 = ConstrainToBoundingBox(pi0, bbox);
-        }
-        else if (interResult == 2)
-        {
-            pi0 = ConstrainToBoundingBox(pi0, bbox);
-            pi1 = ConstrainToBoundingBox(pi1, bbox);
-        }
-
-        return interResult;
-    }
-
-    /// <summary>
-    /// Finds the intersection of two line segments.
-    /// </summary>
-    /// <param name="a1">The first point of the first segment.</param>
-    /// <param name="a2">The second point of the first segment.</param>
-    /// <param name="b1">The first point of the second segment.</param>
-    /// <param name="b2">The second point of the second segment.</param>
-    /// <param name="pi0">
-    /// The first intersection point (if any). If the segments intersect at a single point, this will contain the intersection point.
-    /// If the segments overlap, this will contain the start of the overlapping segment.
-    /// </param>
-    /// <param name="pi1">
-    /// The second intersection point (if any). If the segments overlap, this will contain the end of the overlapping segment.
-    /// </param>
-    /// <returns>
-    /// An <see cref="int"/> indicating the number of intersection points:
-    /// - Returns 0 if there is no intersection.
-    /// - Returns 1 if the segments intersect at a single point.
-    /// - Returns 2 if the segments overlap.
-    /// </returns>
-    private static int FindIntersectionImpl(in Vertex a1, in Vertex a2, in Vertex b1, in Vertex b2, out Vertex pi0, out Vertex pi1)
-    {
-        pi0 = default;
-        pi1 = default;
-
-        Vertex va = a2 - a1;
-        Vertex vb = b2 - b1;
-        Vertex e = b1 - a1;
-        double kross = Vertex.Cross(va, vb);
-        double sqrKross = kross * kross;
-        double sqrLenA = Vertex.Dot(va, va);
-
-        if (sqrKross > 0D)
-        {
-            // Lines of the segments are not parallel.
-            double s = Vertex.Cross(e, vb) / kross;
-            if (s is < 0D or > 1D)
-            {
-                return 0;
-            }
-
-            double t = Vertex.Cross(e, va) / kross;
-            if (t is < 0D or > 1D)
-            {
-                return 0;
-            }
-
-            // If s or t is exactly 0 or 1, the intersection is on an endpoint.
-            if (s is 0D or 1D)
-            {
-                // On an endpoint of segment a.
-                pi0 = MidPoint(a1, s, va);
-                return 1;
-            }
-
-            if (t is 0D or 1D)
-            {
-                // On an endpoint of segment b.
-                pi0 = MidPoint(a2, t, vb);
-                return 1;
-            }
-
-            // Intersection of lines is a point on each segment.
-            pi0 = MidPoint(a1, s, va);
-            return 1;
-        }
-
-        // Lines are parallel; check if they are collinear.
-        kross = Vertex.Cross(e, va);
-        sqrKross = kross * kross;
-        if (sqrKross > 0D)
-        {
-            // Parallel but not collinear.
-            return 0;
-        }
-
-        if (sqrLenA == 0D)
-        {
-            return 0;
-        }
-
-        // Segments are collinear, check 1D overlap in segment-a parameter space.
-        double sa = Vertex.Dot(va, e) / sqrLenA;
-        double sb = sa + (Vertex.Dot(va, vb) / sqrLenA);
-        double smin = Math.Min(sa, sb);
-        double smax = Math.Max(sa, sb);
-
-        if (smin <= 1D && smax >= 0D)
-        {
-            if (smin == 1D)
-            {
-                pi0 = MidPoint(a1, smin, va);
-                return 1;
-            }
-
-            if (smax == 0D)
-            {
-                pi0 = MidPoint(a1, smax, va);
-                return 1;
-            }
-
-            pi0 = MidPoint(a1, Math.Max(smin, 0D), va);
-            pi1 = MidPoint(a1, Math.Min(smax, 1D), va);
-            return pi0 == pi1 ? 1 : 2;
-        }
-
-        return 0;
-    }
-
-    /// <summary>
-    /// Computes the bounding box of the intersection area of two line segments.
-    /// </summary>
-    /// <param name="a1">The first point of the first segment.</param>
-    /// <param name="a2">The second point of the first segment.</param>
-    /// <param name="b1">The first point of the second segment.</param>
-    /// <param name="b2">The second point of the second segment.</param>
-    /// <param name="result">The intersection bounding box if one exists, otherwise null.</param>
-    /// <returns>
-    /// <see langword="true"/> if the segments intersect; otherwise, <see langword="false"/>.
-    /// </returns>
-    private static bool TryGetIntersectionBoundingBox(
-        in Vertex a1,
-        in Vertex a2,
-        in Vertex b1,
-        in Vertex b2,
-        out Box2 result)
-    {
-        Vertex minA = Vertex.Min(a1, a2);
-        Vertex maxA = Vertex.Max(a1, a2);
-        Vertex minB = Vertex.Min(b1, b2);
-        Vertex maxB = Vertex.Max(b1, b2);
-
-        Vertex interMin = Vertex.Max(minA, minB);
-        Vertex interMax = Vertex.Min(maxA, maxB);
-
-        if (interMin.X <= interMax.X && interMin.Y <= interMax.Y)
-        {
-            result = new Box2(interMin, interMax);
-            return true;
-        }
-
-        result = default;
-        return false;
-    }
+        => FindIntersection(new Segment(a1, a2), new Segment(b1, b2), out pi0, out pi1);
 }

@@ -11,6 +11,18 @@ namespace SixLabors.PolygonClipper;
 /// </summary>
 internal sealed class SegmentComparer : IComparer<SweepEvent>, IComparer
 {
+    /// <summary>
+    /// Compares outgoing rays sharing the same complete event point.
+    /// </summary>
+    /// <param name="first">The first outgoing interval.</param>
+    /// <param name="second">The second outgoing interval.</param>
+    /// <returns>The right-limit order, or zero for coincident rays.</returns>
+    public static int CompareRays(SweepEvent first, SweepEvent second)
+    {
+        double cross = PolygonUtilities.SignedArea(first.Point, first.SourceEnd, second.SourceEnd);
+        return cross > 0 ? -1 : cross < 0 ? 1 : 0;
+    }
+
     /// <inheritdoc/>
     public int Compare(SweepEvent? x, SweepEvent? y)
     {

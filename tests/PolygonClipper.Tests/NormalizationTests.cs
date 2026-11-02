@@ -8,6 +8,32 @@ namespace SixLabors.PolygonClipper.Tests;
 public class NormalizationTests
 {
     /// <summary>
+    /// Checks every boundary connection in the two dense-star union cases.
+    /// </summary>
+    /// <param name="vertexCount">The number of vertices in each source star.</param>
+    [Theory]
+    [InlineData(101)]
+    [InlineData(301)]
+    public void DenseStarUnion_PreservesBoundaryConnections(int vertexCount)
+    {
+        Polygon subject = GenericTestCases.BuildStarPolygon(vertexCount, 100D, 0D, 0D);
+        Polygon clip = GenericTestCases.BuildStarPolygon(vertexCount, 100D, 35D, 22D);
+
+        // Use the same six-decimal input scale as the comparison benchmark.
+        ClipperD reference = new(6) { PreserveCollinear = false };
+        reference.AddSubject(new PathsD(subject.Select(ProjectContour)));
+        reference.AddClip(new PathsD(clip.Select(ProjectContour)));
+        PathsD expected = [];
+        Assert.True(reference.Execute(ClipType.Union, Clipper2Lib.FillRule.EvenOdd, expected));
+
+        Polygon actual = PolygonClipper.Union(subject, clip, FillRule.EvenOdd);
+
+        // Contours can join differently at a shared vertex. Check every
+        // junction and segment instead of requiring the same contour count.
+        Assert.True(TestPolygonUtilities.HaveEquivalentBoundaryGraphs(actual.Select(ProjectContour), expected));
+    }
+
+    /// <summary>
     /// Tests that a simple rectangle (single contour, no holes) is preserved.
     /// </summary>
     [Fact]
@@ -26,7 +52,7 @@ public class NormalizationTests
         Polygon input = [outer];
 
         // Act
-        Polygon result = PolygonClipper.Normalize(input);
+        Polygon result = PolygonClipper.Normalize(input, FillRule.Positive);
 
         // Assert
         Assert.Equal(1, result.Count);
@@ -65,7 +91,7 @@ public class NormalizationTests
         Polygon input = [outer, inner];
 
         // Act
-        Polygon result = PolygonClipper.Normalize(input);
+        Polygon result = PolygonClipper.Normalize(input, FillRule.EvenOdd);
 
         // Assert
         Assert.Equal(2, result.Count);
@@ -95,7 +121,7 @@ public class NormalizationTests
         Polygon input = [outer, inner];
 
         // Act
-        Polygon result = PolygonClipper.Normalize(input);
+        Polygon result = PolygonClipper.Normalize(input, FillRule.EvenOdd);
 
         // Assert: Must have exactly 2 contours
         Assert.Equal(2, result.Count);
@@ -116,7 +142,7 @@ public class NormalizationTests
         Polygon input = [outer, inner];
 
         // Act
-        Polygon result = PolygonClipper.Normalize(input);
+        Polygon result = PolygonClipper.Normalize(input, FillRule.EvenOdd);
 
         // Assert: Must have exactly 2 contours
         Assert.Equal(2, result.Count);
@@ -145,7 +171,7 @@ public class NormalizationTests
         Polygon input = [outer, inner];
 
         // Act
-        Polygon result = PolygonClipper.Normalize(input);
+        Polygon result = PolygonClipper.Normalize(input, FillRule.EvenOdd);
 
         // Assert: Must have exactly 2 contours
         Assert.Equal(2, result.Count);
@@ -770,7 +796,7 @@ public class NormalizationTests
         // Assert: The input has 2 compound contours (each containing two loops connected by bridge segments).
         // When processed with positive fill rule, this produces 4 contours.
         // Only the contour and vertex counts are validated; vertex ordering may differ from Clipper2.
-        AssertMatchesClipperByCount(input);
+        AssertMatchesClipperByCount(input, FillRule.NonZero);
     }
 
     [Fact]
@@ -1533,7 +1559,7 @@ public class NormalizationTests
         // Assert: The "9" shape is more complex than the "O" shape. The input contours contain
         // self-intersections that, when resolved with positive fill rule, produce 4 contours.
         // Validate count parity with Clipper2 and exact geometry parity between both remover paths.
-        AssertMatchesClipperByCount(input);
+        AssertMatchesClipperByCount(input, FillRule.NonZero);
     }
 
     [Fact]
@@ -1932,7 +1958,7 @@ public class NormalizationTests
                          outer42, outer43, outer44, outer45, outer46];
 
         // Act + Assert
-        AssertMatchesClipperByCount(input);
+        AssertMatchesClipperByCount(input, FillRule.NonZero);
     }
 
     /// <summary>
@@ -1951,7 +1977,7 @@ public class NormalizationTests
         Polygon input = [outer, inner];
 
         // Act
-        Polygon result = PolygonClipper.Normalize(input);
+        Polygon result = PolygonClipper.Normalize(input, FillRule.EvenOdd);
 
         // Assert: Must have exactly 2 contours
         Assert.Equal(2, result.Count);
@@ -1978,7 +2004,7 @@ public class NormalizationTests
         Polygon input = [ring1, ring2, ring3, ring4];
 
         // Act
-        Polygon result = PolygonClipper.Normalize(input);
+        Polygon result = PolygonClipper.Normalize(input, FillRule.EvenOdd);
 
         // Assert: Must have exactly 4 contours
         Assert.Equal(4, result.Count);
@@ -2004,7 +2030,7 @@ public class NormalizationTests
         Polygon input = [circle1, circle2];
 
         // Act
-        Polygon result = PolygonClipper.Normalize(input);
+        Polygon result = PolygonClipper.Normalize(input, FillRule.Positive);
 
         // Assert: Must have exactly 2 separate external contours
         Assert.Equal(2, result.Count);
@@ -2038,7 +2064,7 @@ public class NormalizationTests
         Polygon input = [outer, hole1, hole2];
 
         // Act
-        Polygon result = PolygonClipper.Normalize(input);
+        Polygon result = PolygonClipper.Normalize(input, FillRule.EvenOdd);
 
         // Assert: 1 external + 2 holes
         Assert.Equal(3, result.Count);
@@ -2077,12 +2103,12 @@ public class NormalizationTests
         Polygon input = [rectA, rectB];
 
         // Act
-        Polygon result = PolygonClipper.Normalize(input);
+        Polygon result = PolygonClipper.Normalize(input, FillRule.Positive);
 
         // Assert: Should merge into a single rectangle (0,0)-(20,0)-(20,10)-(0,10)
         Assert.Equal(1, result.Count);
 
-        AssertMatchesClipperByCount(input);
+        AssertMatchesClipperByCount(input, FillRule.Positive);
     }
 
     /// <summary>
@@ -2117,16 +2143,16 @@ public class NormalizationTests
         Polygon input = [rect, para];
 
         // Act + Assert
-        AssertMatchesClipperByCount(input);
+        AssertMatchesClipperByCount(input, FillRule.Positive);
     }
 
     /// <summary>
-    /// Tests that a self-intersecting bowtie stays as one filled region under positive fill.
+    /// Checks the positive region of a bowtie when Positive filling is explicitly selected.
     /// </summary>
     [Fact]
-    public void FigureEight_WithSelfIntersection_RemainsSingleContour()
+    public void Bowtie_PositiveFill_SelectsOnlyPositiveLobe()
     {
-        // Arrange: Bowtie/hourglass that crosses itself at (5,0) so the winding stays >0 everywhere.
+        // The lobes have opposite winding. Positive filling retains one lobe.
         Contour figure8 =
         [
             new Vertex(0, 5), // Top-left
@@ -2139,11 +2165,14 @@ public class NormalizationTests
         Polygon input = [figure8];
 
         // Act
-        Polygon result = PolygonClipper.Normalize(input);
+        Polygon result = PolygonClipper.Normalize(input, FillRule.Positive);
 
-        // Assert: Positive fill treats the bowtie as a single filled region (same as Clipper).
+        // Positive selects the right-hand triangle; the other lobe has negative winding.
         Assert.Equal(1, result.Count);
-        AssertMatchesClipperByCount(input);
+        Assert.Equal(new Vertex(5, -5), result.GetBoundingBox().Min);
+        Assert.Equal(new Vertex(10, 5), result.GetBoundingBox().Max);
+        Assert.Equal(25D, Clipper.Area(ProjectContour(result[0])));
+        AssertMatchesClipperByCount(input, FillRule.Positive);
     }
 
     /// <summary>
@@ -2192,14 +2221,14 @@ public class NormalizationTests
         Polygon input = [baseRect, post1, post2, post3];
 
         // Act + Assert
-        AssertMatchesClipperByCount(input);
+        AssertMatchesClipperByCount(input, FillRule.Positive);
     }
 
     /// <summary>
-    /// Tests partially overlapping collinear edges to validate overlap handling.
+    /// Checks the exact union rectangle independently of retained collinear vertex counts.
     /// </summary>
     [Fact]
-    public void PartialOverlap_CollinearEdges_MatchesClipper()
+    public void PartialOverlap_CollinearEdges_PreservesUnionRectangle()
     {
         // Arrange: Two rectangles with a partial overlap on the shared horizontal edges.
         Contour rectA =
@@ -2222,8 +2251,29 @@ public class NormalizationTests
 
         Polygon input = [rectA, rectB];
 
-        // Act + Assert
-        AssertMatchesClipperByCount(input);
+        Polygon result = PolygonClipper.Normalize(input, FillRule.Positive);
+        Contour boundary = Assert.Single(result);
+        PathD reference = Assert.Single(NormalizeWithClipperD(input, FillRule.Positive, 6));
+
+        // [0,12] and [6,18] overlap over [6,12]. Their union is exactly
+        // [0,18] by [0,4], with area 72 and perimeter 44. Collinear nodes do not
+        // change that rectangle, so Clipper2's node count is not an expectation.
+        Assert.Equal(new Vertex(0, 0), boundary.GetBoundingBox().Min);
+        Assert.Equal(new Vertex(18, 4), boundary.GetBoundingBox().Max);
+        Assert.Equal(72D, Clipper.Area(ProjectContour(boundary)));
+        Assert.Equal(72D, Clipper.Area(reference));
+        double perimeter = 0;
+        for (int i = 0; i < boundary.Count; i++)
+        {
+            Vertex first = boundary[i];
+            Vertex second = boundary[(i + 1) % boundary.Count];
+            bool horizontal = first.Y == second.Y && (first.Y == 0 || first.Y == 4);
+            bool vertical = first.X == second.X && (first.X == 0 || first.X == 18);
+            Assert.True(horizontal || vertical);
+            perimeter += Math.Abs(first.X - second.X) + Math.Abs(first.Y - second.Y);
+        }
+
+        Assert.Equal(44D, perimeter);
     }
 
     /// <summary>
@@ -2252,7 +2302,7 @@ public class NormalizationTests
         Polygon input = [triA, triB];
 
         // Act + Assert
-        AssertMatchesClipperByCount(input);
+        AssertMatchesClipperByCount(input, FillRule.Positive);
     }
 
     /// <summary>
@@ -2272,7 +2322,7 @@ public class NormalizationTests
             new Vertex(-2, 0)
         ];
 
-        Polygon actual = PolygonClipper.Normalize([mainActual, add1]);
+        Polygon actual = PolygonClipper.Normalize([mainActual, add1], FillRule.Positive);
 
         Polygon expected = PolygonClipper.Union(
             [CreateIssue1051Main()],
@@ -2282,9 +2332,13 @@ public class NormalizationTests
                 new Vertex(0, 1),
                 new Vertex(-2, 1),
                 new Vertex(-2, 0)
-            ]]);
+            ]],
+            FillRule.EvenOdd);
 
         AssertContourVertexSignature(expected, actual);
+        Assert.Equal(new Vertex(-2, 0), actual.GetBoundingBox().Min);
+        Assert.Equal(new Vertex(2, 2), actual.GetBoundingBox().Max);
+        Assert.Equal(6D, Clipper.Area(ProjectContour(Assert.Single(actual))));
     }
 
     /// <summary>
@@ -2305,7 +2359,7 @@ public class NormalizationTests
             new Vertex(-2, 1)
         ];
 
-        Polygon actual = PolygonClipper.Normalize([mainActual, add2]);
+        Polygon actual = PolygonClipper.Normalize([mainActual, add2], FillRule.Positive);
 
         Polygon expected = PolygonClipper.Union(
             [CreateIssue1051Main()],
@@ -2315,9 +2369,17 @@ public class NormalizationTests
                 new Vertex(0, 1),
                 new Vertex(-2, 1),
                 new Vertex(-2, 1)
-            ]]);
+            ]],
+            FillRule.EvenOdd);
 
         AssertContourVertexSignature(expected, actual);
+
+        // The degenerate rectangle contributes a segment in each direction.
+        // It has no filled area and cannot extend the original 2-by-2 square.
+        Contour boundary = Assert.Single(actual);
+        Assert.Equal(new Vertex(0, 0), boundary.GetBoundingBox().Min);
+        Assert.Equal(new Vertex(2, 2), boundary.GetBoundingBox().Max);
+        Assert.Equal(4D, Clipper.Area(ProjectContour(boundary)));
     }
 
     private static Contour CreateIssue1051Main()
@@ -2400,10 +2462,15 @@ public class NormalizationTests
         return first.x == last.x && first.y == last.y ? count - 1 : count;
     }
 
-    private static void AssertMatchesClipperByCount(Polygon input)
+    /// <summary>
+    /// Compares cleanup with Clipper2 using the same raw contours and fill rule.
+    /// </summary>
+    /// <param name="input">The source contours.</param>
+    /// <param name="fillRule">The source fill rule.</param>
+    private static void AssertMatchesClipperByCount(Polygon input, FillRule fillRule)
     {
-        Polygon result = PolygonClipper.Normalize(input);
-        PathsD clipperResult = NormalizeWithClipperD(input);
+        Polygon result = PolygonClipper.Normalize(input, fillRule);
+        PathsD clipperResult = NormalizeWithClipperD(input, fillRule, 6);
 
         List<PathD> expected = SortPathsByLowestPoint(clipperResult);
         List<Contour> actual = SortContoursByLowestPoint(result);
@@ -2478,7 +2545,14 @@ public class NormalizationTests
         return new PointD(lowest.X, lowest.Y);
     }
 
-    private static PathsD NormalizeWithClipperD(Polygon polygon, int precision = 6)
+    /// <summary>
+    /// Resolves the source contours with Clipper2 at the requested decimal precision.
+    /// </summary>
+    /// <param name="polygon">The unmodified source contours.</param>
+    /// <param name="fillRule">The source fill rule.</param>
+    /// <param name="precision">The number of decimal places retained by Clipper2.</param>
+    /// <returns>The resolved Clipper2 contours.</returns>
+    private static PathsD NormalizeWithClipperD(Polygon polygon, FillRule fillRule, int precision)
     {
         PathsD subject = new(polygon.Count);
         for (int i = 0; i < polygon.Count; i++)
@@ -2494,12 +2568,6 @@ public class NormalizationTests
             subject.Add(path);
         }
 
-        GetLowestPathInfo(subject, out int lowestPathIdx, out bool isNegArea);
-        if (lowestPathIdx >= 0 && isNegArea)
-        {
-            ReversePaths(subject);
-        }
-
         ClipperD clipper = new(precision)
         {
             PreserveCollinear = true,
@@ -2508,53 +2576,16 @@ public class NormalizationTests
 
         clipper.AddSubject(subject);
         PathsD solution = [];
-        clipper.Execute(ClipType.Union, FillRule.Positive, solution);
+        Clipper2Lib.FillRule clipperRule = fillRule switch
+        {
+            FillRule.EvenOdd => Clipper2Lib.FillRule.EvenOdd,
+            FillRule.NonZero => Clipper2Lib.FillRule.NonZero,
+            FillRule.Positive => Clipper2Lib.FillRule.Positive,
+            _ => Clipper2Lib.FillRule.Negative
+        };
+
+        clipper.Execute(ClipType.Union, clipperRule, solution);
         return solution;
-    }
-
-    private static void ReversePaths(PathsD paths)
-    {
-        for (int i = 0; i < paths.Count; i++)
-        {
-            paths[i].Reverse();
-        }
-    }
-
-    private static void GetLowestPathInfo(PathsD paths, out int lowestPathIdx, out bool isNegArea)
-    {
-        lowestPathIdx = -1;
-        isNegArea = false;
-
-        if (paths.Count == 0)
-        {
-            return;
-        }
-
-        PointD lowestPoint = default;
-        bool hasPoint = false;
-
-        for (int i = 0; i < paths.Count; i++)
-        {
-            PathD path = paths[i];
-            if (path.Count == 0)
-            {
-                continue;
-            }
-
-            PointD candidate = GetLowestPoint(path);
-            if (!hasPoint || candidate.y > lowestPoint.y ||
-                (candidate.y == lowestPoint.y && candidate.x < lowestPoint.x))
-            {
-                lowestPoint = candidate;
-                lowestPathIdx = i;
-                hasPoint = true;
-            }
-        }
-
-        if (lowestPathIdx >= 0)
-        {
-            isNegArea = Clipper.Area(paths[lowestPathIdx]) < 0;
-        }
     }
 
     private static PointD GetLowestPoint(PathD path)

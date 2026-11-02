@@ -6,9 +6,9 @@ using System.Runtime.CompilerServices;
 namespace SixLabors.PolygonClipper;
 
 /// <summary>
-/// Provides extension methods for floating-point numbers.
+/// Provides extension methods for double values.
 /// </summary>
-internal static class FloatExtensions
+internal static class DoubleExtensions
 {
     /// <summary>
     /// Returns the next representable double value in the direction of y.

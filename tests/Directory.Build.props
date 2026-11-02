@@ -22,7 +22,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="$(MSBuildThisFileDirectory)..\src\PolygonClipper\PolygonCLipper.csproj" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)..\src\PolygonClipper\PolygonClipper.csproj" />
   </ItemGroup>
 
 </Project>

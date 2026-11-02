@@ -26,7 +26,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Use Source Link from the SDK instead of the older shared package. -->
+    <PackageReference Remove="Microsoft.SourceLink.GitHub" />
+
     <InternalsVisibleTo Include="SixLabors.PolygonClipper.Tests" Key="$(SixLaborsPublicKey)" />
+    <InternalsVisibleTo Include="PolygonClipper.Benchmarks" Key="$(SixLaborsPublicKey)" />
   </ItemGroup>
 
 </Project>

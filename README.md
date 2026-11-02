@@ -13,47 +13,97 @@ SixLabors.PolygonClipper
 
 </div>
 
-SixLabors.PolygonClipper provides high-performance polygon clipping and stroking in C#.
-Boolean operations (union, intersection, difference, xor) are implemented with a Martínez-Rueda sweep-line pipeline for complex polygons with holes and multiple contours.
-Contour normalization is handled by a dedicated Vatti/Clipper2-inspired pipeline (`PolygonClipper.Normalize`) that resolves self-intersections/overlaps into positive-winding output.
-`PolygonStroker` can optionally run that normalization pass on emitted stroke geometry.
+SixLabors.PolygonClipper performs polygon clipping, stroking and offsets in C#.
+It uses the Martinez-Rueda algorithm with double coordinates. It supports holes,
+self-intersections, overlapping edges, and multiple contours.
 
-## Features
+## Clipping
 
-- Works with non-convex polygons, including holes and multiple disjoint regions
-- Handles edge cases like overlapping edges and vertical segments
-- Preserves topology: output polygons include hole/contour hierarchy
-- Deterministic and robust sweep line algorithm with O((n + k) log n) complexity
-- Includes `PolygonClipper.Normalize` (Clipper2-inspired) for positive-winding contour normalization
-- Includes `PolygonStroker` for configurable geometric stroking (joins, caps, miter limits)
-- Uses double precision geometry without coordinate quantization
-
-## Usage
-
-The API centers around `Polygon` and `Contour` types. Construct input polygons using contours, then apply Boolean operations via `PolygonClipper`:
+The Boolean operations are `Intersection`, `Union`, `Difference`, and `Xor`.
+Each combines a subject polygon with a clip polygon. Both operands can contain open and closed contours.
+Each accepts `EvenOdd`, `NonZero`, `Positive`, or `Negative` filling.
 
 ```csharp
-Polygon result = PolygonClipper.Union(subject, clipping);
+using SixLabors.PolygonClipper;
+
+Polygon subject =
+[
+    [new Vertex(0, 0), new Vertex(10, 0), new Vertex(10, 10), new Vertex(0, 10)]
+];
+Polygon clip =
+[
+    [new Vertex(5, 5), new Vertex(15, 5), new Vertex(15, 15), new Vertex(5, 15)]
+];
+
+// Intersect both polygons using NonZero filling.
+Polygon result = PolygonClipper.Intersection(subject, clip, FillRule.NonZero);
 ```
 
-Boolean operations can process self-intersecting inputs directly.
-Use normalization when you want canonical positive-winding contours (for example, before export or rendering pipelines that rely on winding semantics):
+The subject and clip can use different fill rules:
 
 ```csharp
-Polygon clean = PolygonClipper.Normalize(input);
+// Use EvenOdd for the subject and NonZero for the clip.
+Polygon result = PolygonClipper.Intersection(subject, clip, FillRule.EvenOdd, FillRule.NonZero);
 ```
 
-`Normalize` uses a fixed positive-winding normalization path.
+These operations apply the fill rules during the clipping sweep. They do not require
+an input normalization pass. Coordinates must be finite doubles.
 
-### Stroking
+Fill rules interpret closed input contours. Closed results use positive orientation:
+counterclockwise exterior contours and islands, with clockwise holes, in Cartesian coordinates.
+Use `NonZero`, `EvenOdd`, or `Positive` filling to consume the resolved area.
+`Negative` selects negatively wound input; it does not request negatively oriented output.
 
-Use `PolygonStroker` to generate filled stroke polygons from input contours:
+## Normalization
+
+`Normalize(polygon, fillRule)` cleans one polygon. It resolves self-intersections and overlaps in filled boundaries
+and retains their full contour hierarchy. It also resolves overlapping open paths without filling them.
+It reads the original contour directions without changing the input or applying a preparation pass.
 
 ```csharp
-Polygon stroked = PolygonStroker.Stroke(input, width: 12);
+// Clean the NonZero-filled area and retain parent and hole information.
+Polygon result = PolygonClipper.Normalize(subject, FillRule.NonZero);
 ```
 
-Configure join/cap behavior through `StrokeOptions`:
+Clipping accepts raw contours and their fill rules directly. It does not require `Normalize` first.
+The positive output orientation follows [Clipper2's output convention](https://www.angusj.com/clipper2/Docs/Overview.htm).
+
+## Open paths
+
+`Contour.IsClosed` controls the closing edge for both clipping and stroking.
+Closed contours enclose filled areas. Open contours contain consecutive line segments with no filled interior.
+Fill rules do not change open path membership.
+
+All clipping operations return `Polygon`. Each result contour identifies its geometry:
+
+- A closed contour is a filled boundary. Its first vertex is not repeated at the end.
+- An open contour with two or more vertices is a line piece.
+- An open contour with one vertex is an isolated point.
+
+Clipping splits linework at intersections and retains the cut endpoints in each resulting piece.
+Ordinary source bends stay connected. An explicit line cycle remains open and retains its repeated terminal vertex.
+Open contours have no parent or holes. Covered linework and points are omitted when a retained area already represents them.
+
+```csharp
+Contour horizontal = [new Vertex(-2, 0), new Vertex(2, 0)];
+horizontal.IsClosed = false;
+Contour vertical = [new Vertex(0, -2), new Vertex(0, 2)];
+vertical.IsClosed = false;
+
+// Return one open contour containing the crossing point (0, 0).
+Polygon result = PolygonClipper.Intersection([horizontal], [vertical], FillRule.NonZero);
+```
+
+## Stroking
+
+`PolygonStroker` creates stroke polygons with configurable joins, caps, and width.
+Each source contour has an `IsClosed` property, which defaults to `true`.
+Set it to `false` for an open source path. Endpoint coordinates and stroke width do not select closure.
+One polygon can contain both open and closed stroke inputs.
+
+Stroke output contains closed contours without a repeated closing vertex.
+When `NormalizeOutput` is enabled, stroke cleanup calls `Normalize` with `NonZero` filling.
+This preserves the raw outlines' filled area for either sign of stroke width.
 
 ```csharp
 StrokeOptions options = new()
@@ -64,8 +114,35 @@ StrokeOptions options = new()
     ArcDetailScale = 1
 };
 
-Polygon stroked = PolygonStroker.Stroke(input, width: 12, options);
+// Build a stroke with width 12 and the specified joins and caps.
+Polygon result = PolygonStroker.Stroke(subject, width: 12, options);
 ```
+
+## Offsets
+
+`PolygonOffsetter.Offset(polygon, delta, fillRule, options)` expands or contracts a filled polygon.
+Positive distance expands exterior boundaries and shrinks holes. Negative distance contracts exterior boundaries and expands holes.
+Collapsed holes and components disappear. Zero distance returns an independent, resolved copy of the source filled area.
+
+All source contours must be closed. The fill rule interprets the original source contours before their boundaries are offset.
+`OffsetOptions` selects the join style, miter limit and arc detail. Offset results always contain resolved boundaries.
+
+```csharp
+OffsetOptions offsetOptions = new() { LineJoin = LineJoin.Round };
+
+// Expand the NonZero-filled area by two coordinate units with the selected joins.
+Polygon expanded = PolygonOffsetter.Offset(subject, 2, FillRule.NonZero, offsetOptions);
+
+// Contract the same source area by two coordinate units.
+Polygon contracted = PolygonOffsetter.Offset(subject, -2, FillRule.NonZero, offsetOptions);
+```
+
+## Complexity
+
+Martinez has a published complexity of `O((n + k) log n)` for `n` input edges and `k` intersections.
+
+This implementation stores active edges in a list, so inserting or removing an edge can take linear time.
+It does not guarantee that bound.
 
 ## Algorithm References
 
@@ -74,13 +151,10 @@ This project draws on the following algorithm and implementation references:
 > F. Martínez et al., "A simple algorithm for Boolean operations on polygons", *Advances in Engineering Software*, 64 (2013), pp. 11-19.  
 > https://doi.org/10.1016/j.advengsoft.2013.04.004
 
-> B. R. Vatti, "A generic solution to polygon clipping", *Communications of the ACM*, 35(7), 1992, pp. 56-63.  
-> https://dl.acm.org/doi/pdf/10.1145/129902.129906
-
 > 21re, *rust-geo-booleanop* (Rust Martínez-Rueda implementation reference).  
 > https://github.com/21re/rust-geo-booleanop
 
-> Angus Johnson, *Clipper2* polygon clipping library (reference implementation for the normalization pipeline).  
+> Angus Johnson, *Clipper2* polygon clipping library.
 > https://github.com/AngusJohnson/Clipper2
 
 ## License
