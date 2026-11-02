@@ -54,7 +54,7 @@ public class PolygonClipper
     private readonly StatusLine statusLine = new();
 
     private readonly List<QueueEntry> eventStorage = [];
-    private readonly StablePriorityQueue<QueueEntry, SweepEventComparer> events;
+    private readonly StablePriorityQueue<QueueEntry, QueueEntryComparer> events;
     private readonly SweepEventPoolList segments = [];
     private readonly SweepEventPoolList outgoing = [];
     private readonly SweepEventPoolList bundled = [];
@@ -103,7 +103,7 @@ public class PolygonClipper
     /// Initializes a new instance of the <see cref="PolygonClipper"/> class for pooled execution.
     /// </summary>
     private PolygonClipper()
-        => this.events = new(this.comparer, this.eventStorage);
+        => this.events = new(default(QueueEntryComparer), this.eventStorage);
 
     /// <summary>
     /// Specifies the form of returned contours.

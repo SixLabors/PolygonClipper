@@ -18,17 +18,25 @@ AMD RYZEN AI MAX+ 395 w/ Radeon 8060S 3.00GHz, 1 CPU, 32 logical and 16 physical
 Job=ShortRun  IterationCount=3  LaunchCount=1
 WarmupCount=3
 
-| Method                | File                 | Mean          | Error         | StdDev      | Op/s       | Gen0     | Gen1     | Gen2     | Allocated |
-|---------------------- |--------------------- |--------------:|--------------:|------------:|-----------:|---------:|---------:|---------:|----------:|
-| PolygonClipperEvenOdd | asia.geojson         | 11,200.902 us | 2,124.6733 us | 116.4605 us |      89.28 |  15.6250 |        - |        - |  463688 B |
-| PolygonClipperNonZero | asia.geojson         | 11,388.093 us | 7,892.3194 us | 432.6047 us |      87.81 |  15.6250 |        - |        - |  463688 B |
-| Clipper2Union         | asia.geojson         | 14,425.834 us | 7,891.2400 us | 432.5455 us |      69.32 | 468.7500 | 437.5000 | 125.0000 | 6613210 B |
-| PolygonClipperEvenOdd | hole_hole.geojson    |      5.639 us |     0.6195 us |   0.0340 us | 177,347.74 |   0.0916 |        - |        - |    1632 B |
-| PolygonClipperNonZero | hole_hole.geojson    |      5.105 us |     4.3337 us |   0.2375 us | 195,880.72 |   0.0458 |        - |        - |     872 B |
-| Clipper2Union         | hole_hole.geojson    |      2.775 us |     1.8953 us |   0.1039 us | 360,372.84 |   0.5951 |   0.0114 |        - |    9992 B |
-| PolygonClipperEvenOdd | state(...)ojson [21] |    738.178 us |   115.4451 us |   6.3279 us |   1,354.69 |        - |        - |        - |   16136 B |
-| PolygonClipperNonZero | state(...)ojson [21] |    777.143 us |   449.2819 us |  24.6267 us |   1,286.76 |        - |        - |        - |   16136 B |
-| Clipper2Union         | state(...)ojson [21] |    331.071 us |   326.0528 us |  17.8721 us |   3,020.50 |  20.5078 |   9.7656 |        - |  348984 B |
+| Method        | File                 | FillRule | Mean          | Error          | StdDev      | Op/s       | Ratio | RatioSD | Gen0     | Gen1     | Gen2    | Allocated | Alloc Ratio |
+|-------------- |--------------------- |--------- |--------------:|---------------:|------------:|-----------:|------:|--------:|---------:|---------:|--------:|----------:|------------:|
+| Union         | asia.geojson         | EvenOdd  | 10,873.490 us |  2,805.9234 us | 153.8021 us |      91.97 |  0.69 |    0.03 |  15.6250 |        - |       - |  463688 B |        0.07 |
+| Clipper2Union | asia.geojson         | EvenOdd  | 15,826.802 us | 13,961.0760 us | 765.2537 us |      63.18 |  1.00 |    0.06 | 437.5000 | 406.2500 | 93.7500 | 6613050 B |        1.00 |
+|               |                      |          |               |                |             |            |       |         |          |          |         |           |             |
+| Union         | asia.geojson         | NonZero  | 11,579.924 us |  8,157.2822 us | 447.1282 us |      86.36 |  0.78 |    0.04 |  15.6250 |        - |       - |  463688 B |        0.07 |
+| Clipper2Union | asia.geojson         | NonZero  | 14,908.794 us | 11,245.5674 us | 616.4075 us |      67.07 |  1.00 |    0.05 | 437.5000 | 406.2500 | 93.7500 | 6613050 B |        1.00 |
+|               |                      |          |               |                |             |            |       |         |          |          |         |           |             |
+| Union         | hole_hole.geojson    | EvenOdd  |      5.475 us |      0.3199 us |   0.0175 us | 182,655.67 |  2.18 |    0.02 |   0.0916 |        - |       - |    1632 B |        0.16 |
+| Clipper2Union | hole_hole.geojson    | EvenOdd  |      2.508 us |      0.4731 us |   0.0259 us | 398,689.33 |  1.00 |    0.01 |   0.5951 |   0.0114 |       - |    9992 B |        1.00 |
+|               |                      |          |               |                |             |            |       |         |          |          |         |           |             |
+| Union         | hole_hole.geojson    | NonZero  |      4.839 us |      0.5636 us |   0.0309 us | 206,639.50 |  2.44 |    0.03 |   0.0458 |        - |       - |     872 B |        0.12 |
+| Clipper2Union | hole_hole.geojson    | NonZero  |      1.980 us |      0.4235 us |   0.0232 us | 505,151.22 |  1.00 |    0.01 |   0.4463 |   0.0076 |       - |    7512 B |        1.00 |
+|               |                      |          |               |                |             |            |       |         |          |          |         |           |             |
+| Union         | state(...)ojson [21] | EvenOdd  |    733.801 us |    252.2293 us |  13.8255 us |   1,362.77 |  2.32 |    0.04 |        - |        - |       - |   16136 B |        0.05 |
+| Clipper2Union | state(...)ojson [21] | EvenOdd  |    315.624 us |     36.5730 us |   2.0047 us |   3,168.33 |  1.00 |    0.01 |  20.5078 |   6.8359 |       - |  348984 B |        1.00 |
+|               |                      |          |               |                |             |            |       |         |          |          |         |           |             |
+| Union         | state(...)ojson [21] | NonZero  |    737.601 us |     70.9301 us |   3.8879 us |   1,355.75 |  2.36 |    0.07 |        - |        - |       - |   16136 B |        0.05 |
+| Clipper2Union | state(...)ojson [21] | NonZero  |    312.442 us |    182.0525 us |   9.9789 us |   3,200.59 |  1.00 |    0.04 |  20.5078 |   6.8359 |       - |  348984 B |        1.00 |
 */
 
 /// <summary>
@@ -44,9 +52,21 @@ public class Benches
     private PathsD clipperClipping = null!;
     private const int ClipperPrecision = 6;
 
+    /// <summary>
+    /// Gets or sets the input geometry file.
+    /// </summary>
     [Params("hole_hole.geojson", "states_source.geojson", "asia.geojson")]
     public string File { get; set; }
 
+    /// <summary>
+    /// Gets or sets the fill rule used by both engines.
+    /// </summary>
+    [Params(FillRule.EvenOdd, FillRule.NonZero)]
+    public FillRule FillRule { get; set; }
+
+    /// <summary>
+    /// Loads the input polygons for both engines.
+    /// </summary>
     [GlobalSetup]
     public void Setup()
     {
@@ -55,26 +75,23 @@ public class Benches
         this.subject = subject;
         this.clipping = clipping;
 
-        this.clipperSubject = BuildClipperPaths(subject);
-        this.clipperClipping = BuildClipperPaths(clipping);
+        this.clipperSubject = BenchmarkGeometry.ToPaths(subject);
+        this.clipperClipping = BenchmarkGeometry.ToPaths(clipping);
     }
 
     /// <summary>
-    /// Measures even-odd union on the raw input contours.
+    /// Unions the source polygons with the selected fill rule.
     /// </summary>
-    /// <returns>The clipped geometry.</returns>
+    /// <returns>The resolved polygon.</returns>
     [Benchmark]
-    public Polygon PolygonClipperEvenOdd() => SixLabors.PolygonClipper.PolygonClipper.Union(this.subject, this.clipping, FillRule.EvenOdd);
+    public Polygon Union() => PolygonClipper.Union(this.subject, this.clipping, this.FillRule);
 
     /// <summary>
-    /// Measures non-zero clipping without a separate normalization operation.
+    /// Unions the same polygons and fill rule with Clipper2.
     /// </summary>
-    /// <returns>The clipped geometry.</returns>
-    [Benchmark]
-    public Polygon PolygonClipperNonZero() => SixLabors.PolygonClipper.PolygonClipper.Union(this.subject, this.clipping, FillRule.NonZero);
-
-    [Benchmark]
-    public PolyTreeD Clipper2Union()
+    /// <returns>The resolved contour tree.</returns>
+    [Benchmark(Baseline = true)]
+    public object Clipper2Union()
     {
         ClipperD clipper = new(ClipperPrecision)
         {
@@ -85,26 +102,7 @@ public class Benches
         clipper.AddSubject(this.clipperSubject);
         clipper.AddClip(this.clipperClipping);
         PolyTreeD solution = [];
-        clipper.Execute(ClipType.Union, Clipper2Lib.FillRule.EvenOdd, solution);
+        clipper.Execute(ClipType.Union, (Clipper2Lib.FillRule)this.FillRule, solution);
         return solution;
-    }
-
-    private static PathsD BuildClipperPaths(Polygon polygon)
-    {
-        PathsD paths = new(polygon.Count);
-        for (int i = 0; i < polygon.Count; i++)
-        {
-            Contour contour = polygon[i];
-            PathD path = new(contour.Count);
-            for (int j = 0; j < contour.Count; j++)
-            {
-                Vertex vertex = contour[j];
-                path.Add(new PointD(vertex.X, vertex.Y));
-            }
-
-            paths.Add(path);
-        }
-
-        return paths;
     }
 }
