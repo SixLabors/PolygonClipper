@@ -164,8 +164,14 @@ public sealed class Polygon : IReadOnlyCollection<Contour>
         return clone;
     }
 
+    /// <summary>
+    /// Returns an enumerator that visits the stored contours in order.
+    /// </summary>
+    /// <returns>The contour enumerator.</returns>
+    public List<Contour>.Enumerator GetEnumerator() => this.contours.GetEnumerator();
+
     /// <inheritdoc/>
-    public IEnumerator<Contour> GetEnumerator()
+    IEnumerator<Contour> IEnumerable<Contour>.GetEnumerator()
         => ((IEnumerable<Contour>)this.contours).GetEnumerator();
 
     /// <inheritdoc/>

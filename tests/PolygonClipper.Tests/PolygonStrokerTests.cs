@@ -6,6 +6,50 @@ namespace SixLabors.PolygonClipper.Tests;
 public class PolygonStrokerTests
 {
     /// <summary>
+    /// Checks exact output across contours and width changes when the same stroker is reused.
+    /// </summary>
+    /// <param name="closed">Whether each source contour has a closing edge.</param>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Stroke_ReusedInstance_MatchesFreshInstances(bool closed)
+    {
+        Polygon subject =
+        [
+            new Contour { new(0, 0), new(10, 5), new(20, -5), new(30, 0) },
+            new Contour { new(100, 10), new(110, -10), new(120, 0), new(140, 20) }
+        ];
+        subject[0].IsClosed = subject[1].IsClosed = closed;
+        StrokeOptions options = new() { LineJoin = LineJoin.Round, LineCap = LineCap.Round, NormalizeOutput = false };
+        PolygonStroker reused = new(options);
+        foreach (double width in new[] { 2D, -2D, 6D, 0D, 2D })
+        {
+            reused.Width = width;
+            Polygon actual = reused.Stroke(subject);
+            Polygon expected = new PolygonStroker(options) { Width = width }.Stroke(subject);
+            SvgTestOutput.SaveSvg(
+                nameof(PolygonStrokerTests),
+                nameof(this.Stroke_ReusedInstance_MatchesFreshInstances),
+                $"IsClosed-{closed}_Width-{width}",
+                subject,
+                [],
+                actual,
+                expected);
+
+            Assert.Equal(expected.Count, actual.Count);
+            for (int i = 0; i < expected.Count; i++)
+            {
+                Assert.Equal(expected[i].Count, actual[i].Count);
+                for (int j = 0; j < expected[i].Count; j++)
+                {
+                    Assert.Equal(BitConverter.DoubleToInt64Bits(expected[i][j].X), BitConverter.DoubleToInt64Bits(actual[i][j].X));
+                    Assert.Equal(BitConverter.DoubleToInt64Bits(expected[i][j].Y), BitConverter.DoubleToInt64Bits(actual[i][j].Y));
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// Checks that axis-aligned miter intersections retain a representable thin inner contour.
     /// </summary>
     [Fact]

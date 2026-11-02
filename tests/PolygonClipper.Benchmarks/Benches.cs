@@ -18,25 +18,25 @@ AMD RYZEN AI MAX+ 395 w/ Radeon 8060S 3.00GHz, 1 CPU, 32 logical and 16 physical
 Job=ShortRun  IterationCount=3  LaunchCount=1
 WarmupCount=3
 
-| Method        | File                 | FillRule | Mean          | Error          | StdDev      | Op/s       | Ratio | RatioSD | Gen0     | Gen1     | Gen2    | Allocated | Alloc Ratio |
-|-------------- |--------------------- |--------- |--------------:|---------------:|------------:|-----------:|------:|--------:|---------:|---------:|--------:|----------:|------------:|
-| Union         | asia.geojson         | EvenOdd  | 10,873.490 us |  2,805.9234 us | 153.8021 us |      91.97 |  0.69 |    0.03 |  15.6250 |        - |       - |  463688 B |        0.07 |
-| Clipper2Union | asia.geojson         | EvenOdd  | 15,826.802 us | 13,961.0760 us | 765.2537 us |      63.18 |  1.00 |    0.06 | 437.5000 | 406.2500 | 93.7500 | 6613050 B |        1.00 |
-|               |                      |          |               |                |             |            |       |         |          |          |         |           |             |
-| Union         | asia.geojson         | NonZero  | 11,579.924 us |  8,157.2822 us | 447.1282 us |      86.36 |  0.78 |    0.04 |  15.6250 |        - |       - |  463688 B |        0.07 |
-| Clipper2Union | asia.geojson         | NonZero  | 14,908.794 us | 11,245.5674 us | 616.4075 us |      67.07 |  1.00 |    0.05 | 437.5000 | 406.2500 | 93.7500 | 6613050 B |        1.00 |
-|               |                      |          |               |                |             |            |       |         |          |          |         |           |             |
-| Union         | hole_hole.geojson    | EvenOdd  |      5.475 us |      0.3199 us |   0.0175 us | 182,655.67 |  2.18 |    0.02 |   0.0916 |        - |       - |    1632 B |        0.16 |
-| Clipper2Union | hole_hole.geojson    | EvenOdd  |      2.508 us |      0.4731 us |   0.0259 us | 398,689.33 |  1.00 |    0.01 |   0.5951 |   0.0114 |       - |    9992 B |        1.00 |
-|               |                      |          |               |                |             |            |       |         |          |          |         |           |             |
-| Union         | hole_hole.geojson    | NonZero  |      4.839 us |      0.5636 us |   0.0309 us | 206,639.50 |  2.44 |    0.03 |   0.0458 |        - |       - |     872 B |        0.12 |
-| Clipper2Union | hole_hole.geojson    | NonZero  |      1.980 us |      0.4235 us |   0.0232 us | 505,151.22 |  1.00 |    0.01 |   0.4463 |   0.0076 |       - |    7512 B |        1.00 |
-|               |                      |          |               |                |             |            |       |         |          |          |         |           |             |
-| Union         | state(...)ojson [21] | EvenOdd  |    733.801 us |    252.2293 us |  13.8255 us |   1,362.77 |  2.32 |    0.04 |        - |        - |       - |   16136 B |        0.05 |
-| Clipper2Union | state(...)ojson [21] | EvenOdd  |    315.624 us |     36.5730 us |   2.0047 us |   3,168.33 |  1.00 |    0.01 |  20.5078 |   6.8359 |       - |  348984 B |        1.00 |
-|               |                      |          |               |                |             |            |       |         |          |          |         |           |             |
-| Union         | state(...)ojson [21] | NonZero  |    737.601 us |     70.9301 us |   3.8879 us |   1,355.75 |  2.36 |    0.07 |        - |        - |       - |   16136 B |        0.05 |
-| Clipper2Union | state(...)ojson [21] | NonZero  |    312.442 us |    182.0525 us |   9.9789 us |   3,200.59 |  1.00 |    0.04 |  20.5078 |   6.8359 |       - |  348984 B |        1.00 |
+| Method        | File                 | FillRule | Mean          | Error          | StdDev        | Op/s       | Ratio | RatioSD | Gen0     | Gen1     | Gen2     | Allocated | Alloc Ratio |
+|-------------- |--------------------- |--------- |--------------:|---------------:|--------------:|-----------:|------:|--------:|---------:|---------:|---------:|----------:|------------:|
+| Union         | asia.geojson         | EvenOdd  | 10,308.052 us |  2,417.9597 us |   132.5365 us |      97.01 |  0.70 |    0.03 |  15.6250 |        - |        - |  455752 B |        0.07 |
+| Clipper2Union | asia.geojson         | EvenOdd  | 14,730.047 us | 13,378.4588 us |   733.3185 us |      67.89 |  1.00 |    0.06 | 484.3750 | 468.7500 | 140.6250 | 6613312 B |        1.00 |
+|               |                      |          |               |                |               |            |       |         |          |          |          |           |             |
+| Union         | asia.geojson         | NonZero  | 10,082.858 us |  2,377.1639 us |   130.3004 us |      99.18 |  0.67 |    0.14 |  15.6250 |        - |        - |  455752 B |        0.07 |
+| Clipper2Union | asia.geojson         | NonZero  | 15,738.498 us | 64,525.5472 us | 3,536.8630 us |      63.54 |  1.04 |    0.30 | 375.0000 | 343.7500 | 187.5000 | 6613021 B |        1.00 |
+|               |                      |          |               |                |               |            |       |         |          |          |          |           |             |
+| Union         | hole_hole.geojson    | EvenOdd  |      5.080 us |      2.2882 us |     0.1254 us | 196,852.80 |  1.98 |    0.07 |   0.0763 |        - |        - |    1304 B |        0.13 |
+| Clipper2Union | hole_hole.geojson    | EvenOdd  |      2.562 us |      1.3565 us |     0.0744 us | 390,384.23 |  1.00 |    0.04 |   0.5951 |   0.0114 |        - |    9992 B |        1.00 |
+|               |                      |          |               |                |               |            |       |         |          |          |          |           |             |
+| Union         | hole_hole.geojson    | NonZero  |      4.533 us |      2.4151 us |     0.1324 us | 220,607.24 |  2.16 |    0.07 |   0.0305 |        - |        - |     616 B |        0.08 |
+| Clipper2Union | hole_hole.geojson    | NonZero  |      2.095 us |      0.8690 us |     0.0476 us | 477,409.56 |  1.00 |    0.03 |   0.4463 |   0.0076 |        - |    7512 B |        1.00 |
+|               |                      |          |               |                |               |            |       |         |          |          |          |           |             |
+| Union         | state(...)ojson [21] | EvenOdd  |    703.498 us |    382.3907 us |    20.9601 us |   1,421.47 |  2.31 |    0.10 |        - |        - |        - |   15826 B |        0.05 |
+| Clipper2Union | state(...)ojson [21] | EvenOdd  |    304.315 us |    215.0055 us |    11.7852 us |   3,286.06 |  1.00 |    0.05 |  20.5078 |   9.7656 |        - |  348984 B |        1.00 |
+|               |                      |          |               |                |               |            |       |         |          |          |          |           |             |
+| Union         | state(...)ojson [21] | NonZero  |    678.031 us |    291.4692 us |    15.9764 us |   1,474.86 |  2.25 |    0.09 |        - |        - |        - |   15826 B |        0.05 |
+| Clipper2Union | state(...)ojson [21] | NonZero  |    301.061 us |    228.4132 us |    12.5201 us |   3,321.59 |  1.00 |    0.05 |  20.5078 |   9.7656 |        - |  348984 B |        1.00 |
 */
 
 /// <summary>
@@ -91,7 +91,7 @@ public class Benches
     /// </summary>
     /// <returns>The resolved contour tree.</returns>
     [Benchmark(Baseline = true)]
-    public object Clipper2Union()
+    public PolyTreeD Clipper2Union()
     {
         ClipperD clipper = new(ClipperPrecision)
         {

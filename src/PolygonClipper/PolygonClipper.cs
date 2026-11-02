@@ -580,11 +580,6 @@ public class PolygonClipper
         for (int i = 0; i < result.Count; i++)
         {
             Contour contour = result[i];
-            if (contour.Count > 1 && contour[0] == contour[^1])
-            {
-                contour.RemoveVertexAt(contour.Count - 1);
-            }
-
             if ((contour.Depth & 1) == 0)
             {
                 contour.SetCounterClockwise();
@@ -1299,6 +1294,8 @@ public class PolygonClipper
         // This replaces repeated list growth, clearing and copying for large contours.
         using Buffer<Vertex> vertexBuffer = new((resultEvents.Count / 2) + 1);
         Span<Vertex> vertices = vertexBuffer.GetSpan();
+        int lastExterior = -1;
+        bool requiresGrouping = false;
         for (int i = 0; i < resultEvents.Count; i++)
         {
             if (processed[i])
@@ -1338,8 +1335,22 @@ public class PolygonClipper
             }
             while (true);
 
-            Contour contour = this.InitializeContourFromContext(resultEvents[i], result, contourId, vertexCount);
-            for (int j = 0; j < vertexCount; j++)
+            // The trace includes its repeated closing vertex. Do not allocate a
+            // slot for that vertex in every result contour and remove it later.
+            int count = vertices[vertexCount - 1] == initial ? vertexCount - 1 : vertexCount;
+            Contour contour = this.InitializeContourFromContext(resultEvents[i], result, contourId, count);
+            if (contour.ParentIndex is int parent)
+            {
+                // Hole indices are appended in discovery order. The result is
+                // already grouped if each hole follows the latest exterior.
+                requiresGrouping |= parent != lastExterior;
+            }
+            else
+            {
+                lastExterior = contourId;
+            }
+
+            for (int j = 0; j < count; j++)
             {
                 contour.Add(vertices[j]);
             }
@@ -1347,7 +1358,7 @@ public class PolygonClipper
             result.Add(contour);
         }
 
-        if (this.contourOutput == ContourOutput.Nested)
+        if (this.contourOutput == ContourOutput.Nested || !requiresGrouping)
         {
             return result;
         }
@@ -1490,7 +1501,7 @@ public class PolygonClipper
     /// <param name="sweepEvent">The current sweep event.</param>
     /// <param name="polygon">The collection of contours processed so far.</param>
     /// <param name="contourId">The ID for the new contour.</param>
-    /// <param name="vertexCount">The number of traced vertices, including the closing vertex.</param>
+    /// <param name="vertexCount">The number of stored vertices, without a repeated closing vertex.</param>
     /// <returns>The initialized <see cref="Contour"/>.</returns>
     private Contour InitializeContourFromContext(SweepEvent sweepEvent, Polygon polygon, int contourId, int vertexCount)
     {

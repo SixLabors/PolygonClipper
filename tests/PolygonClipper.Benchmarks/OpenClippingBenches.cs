@@ -16,31 +16,31 @@ AMD RYZEN AI MAX+ 395 w/ Radeon 8060S 3.00GHz, 1 CPU, 32 logical and 16 physical
 Job=ShortRun  IterationCount=3  LaunchCount=1
 WarmupCount=3
 
-| Method               | PathCount | VerticesPerPath | Transpose | Mean         | Error        | StdDev      | Op/s      | Ratio | RatioSD | Gen0     | Gen1     | Gen2     | Allocated  | Alloc Ratio |
-|--------------------- |---------- |---------------- |---------- |-------------:|-------------:|------------:|----------:|------:|--------:|---------:|---------:|---------:|-----------:|------------:|
-| Intersection         | 10        | 2               | False     |    10.904 us |     9.838 us |   0.5393 us |  91,709.9 |  3.87 |    0.21 |   0.1678 |        - |        - |    2.84 KB |        0.21 |
-| Clipper2Intersection | 10        | 2               | False     |     2.823 us |     1.937 us |   0.1062 us | 354,259.3 |  1.00 |    0.05 |   0.8163 |   0.0267 |        - |   13.36 KB |        1.00 |
-|                      |           |                 |           |              |              |             |           |       |         |          |          |          |            |             |
-| Intersection         | 10        | 2               | True      |    10.301 us |     2.189 us |   0.1200 us |  97,079.2 |  4.13 |    0.09 |   0.1678 |        - |        - |    2.84 KB |        0.19 |
-| Clipper2Intersection | 10        | 2               | True      |     2.495 us |     1.087 us |   0.0596 us | 400,776.5 |  1.00 |    0.03 |   0.9117 |   0.0343 |        - |   14.91 KB |        1.00 |
-|                      |           |                 |           |              |              |             |           |       |         |          |          |          |            |             |
-| Intersection         | 10        | 13              | False     |    28.831 us |     1.610 us |   0.0883 us |  34,684.6 |  2.87 |    0.02 |   0.3967 |        - |        - |    6.94 KB |        0.16 |
-| Clipper2Intersection | 10        | 13              | False     |    10.062 us |     1.545 us |   0.0847 us |  99,387.5 |  1.00 |    0.01 |   2.5940 |   0.2747 |        - |   42.57 KB |        1.00 |
-|                      |           |                 |           |              |              |             |           |       |         |          |          |          |            |             |
-| Intersection         | 10        | 13              | True      |    41.346 us |    18.318 us |   1.0041 us |  24,186.3 |  7.46 |    0.18 |   0.3662 |        - |        - |    6.94 KB |        0.22 |
-| Clipper2Intersection | 10        | 13              | True      |     5.542 us |     1.384 us |   0.0758 us | 180,453.8 |  1.00 |    0.02 |   1.9608 |   0.1678 |        - |   32.04 KB |        1.00 |
-|                      |           |                 |           |              |              |             |           |       |         |          |          |          |            |             |
-| Intersection         | 1000      | 2               | False     | 1,136.246 us |   158.943 us |   8.7122 us |     880.1 |  5.68 |    0.13 |  15.6250 |   5.8594 |        - |  258.07 KB |        0.24 |
-| Clipper2Intersection | 1000      | 2               | False     |   200.069 us |    93.368 us |   5.1178 us |   4,998.3 |  1.00 |    0.03 |  65.4297 |  50.2930 |        - | 1072.85 KB |        1.00 |
-|                      |           |                 |           |              |              |             |           |       |         |          |          |          |            |             |
-| Intersection         | 1000      | 2               | True      | 1,264.030 us |    91.072 us |   4.9920 us |     791.1 |  1.80 |    0.17 |  15.6250 |   5.8594 |        - |  258.07 KB |        0.21 |
-| Clipper2Intersection | 1000      | 2               | True      |   708.218 us | 1,343.360 us |  73.6341 us |   1,412.0 |  1.01 |    0.13 |  76.1719 |  65.4297 |        - | 1244.98 KB |        1.00 |
-|                      |           |                 |           |              |              |             |           |       |         |          |          |          |            |             |
-| Intersection         | 1000      | 13              | False     | 4,938.736 us |   178.069 us |   9.7606 us |     202.5 |  1.23 |    0.10 |  31.2500 |   7.8125 |        - |  597.91 KB |        0.16 |
-| Clipper2Intersection | 1000      | 13              | False     | 4,027.525 us | 6,991.955 us | 383.2526 us |     248.3 |  1.01 |    0.11 | 316.4063 | 312.5000 | 109.3750 | 3808.37 KB |        1.00 |
-|                      |           |                 |           |              |              |             |           |       |         |          |          |          |            |             |
-| Intersection         | 1000      | 13              | True      | 5,410.344 us | 3,778.677 us | 207.1221 us |     184.8 |  1.85 |    0.18 |  31.2500 |   7.8125 |        - |  597.91 KB |        0.20 |
-| Clipper2Intersection | 1000      | 13              | True      | 2,948.340 us | 5,395.866 us | 295.7656 us |     339.2 |  1.01 |    0.13 | 234.3750 | 230.4688 |  74.2188 | 2931.89 KB |        1.00 |
+| Method               | PathCount | VerticesPerPath | Transpose | Mean         | Error         | StdDev      | Op/s      | Ratio | RatioSD | Gen0     | Gen1     | Gen2     | Allocated  | Alloc Ratio |
+|--------------------- |---------- |---------------- |---------- |-------------:|--------------:|------------:|----------:|------:|--------:|---------:|---------:|---------:|-----------:|------------:|
+| Intersection         | 10        | 2               | False     |     9.883 us |     3.8132 us |   0.2090 us | 101,188.0 |  3.92 |    0.09 |   0.1526 |        - |        - |    2.66 KB |        0.20 |
+| Clipper2Intersection | 10        | 2               | False     |     2.519 us |     0.6361 us |   0.0349 us | 396,913.1 |  1.00 |    0.02 |   0.8163 |   0.0267 |        - |   13.36 KB |        1.00 |
+|                      |           |                 |           |              |               |             |           |       |         |          |          |          |            |             |
+| Intersection         | 10        | 2               | True      |    10.748 us |     2.3662 us |   0.1297 us |  93,036.3 |  4.25 |    0.16 |   0.1526 |        - |        - |    2.66 KB |        0.18 |
+| Clipper2Intersection | 10        | 2               | True      |     2.531 us |     1.8811 us |   0.1031 us | 395,167.2 |  1.00 |    0.05 |   0.9117 |   0.0343 |        - |   14.91 KB |        1.00 |
+|                      |           |                 |           |              |               |             |           |       |         |          |          |          |            |             |
+| Intersection         | 10        | 13              | False     |    26.421 us |     5.0646 us |   0.2776 us |  37,849.3 |  2.77 |    0.05 |   0.3967 |        - |        - |    6.76 KB |        0.16 |
+| Clipper2Intersection | 10        | 13              | False     |     9.543 us |     3.2125 us |   0.1761 us | 104,784.4 |  1.00 |    0.02 |   2.5940 |   0.2747 |        - |   42.57 KB |        1.00 |
+|                      |           |                 |           |              |               |             |           |       |         |          |          |          |            |             |
+| Intersection         | 10        | 13              | True      |    33.000 us |     2.9610 us |   0.1623 us |  30,303.4 |  5.75 |    0.19 |   0.3662 |        - |        - |    6.76 KB |        0.21 |
+| Clipper2Intersection | 10        | 13              | True      |     5.748 us |     3.9759 us |   0.2179 us | 173,965.4 |  1.00 |    0.05 |   1.9608 |   0.1678 |        - |   32.04 KB |        1.00 |
+|                      |           |                 |           |              |               |             |           |       |         |          |          |          |            |             |
+| Intersection         | 1000      | 2               | False     | 1,078.401 us |   254.6082 us |  13.9559 us |     927.3 |  5.15 |    0.08 |  15.6250 |   5.8594 |        - |  257.89 KB |        0.24 |
+| Clipper2Intersection | 1000      | 2               | False     |   209.518 us |    46.4339 us |   2.5452 us |   4,772.9 |  1.00 |    0.01 |  65.4297 |  50.2930 |        - | 1072.85 KB |        1.00 |
+|                      |           |                 |           |              |               |             |           |       |         |          |          |          |            |             |
+| Intersection         | 1000      | 2               | True      | 1,251.839 us |   465.4236 us |  25.5114 us |     798.8 |  1.98 |    0.06 |  15.6250 |   5.8594 |        - |  257.89 KB |        0.21 |
+| Clipper2Intersection | 1000      | 2               | True      |   631.272 us |   285.8368 us |  15.6677 us |   1,584.1 |  1.00 |    0.03 |  76.1719 |  65.4297 |        - | 1244.98 KB |        1.00 |
+|                      |           |                 |           |              |               |             |           |       |         |          |          |          |            |             |
+| Intersection         | 1000      | 13              | False     | 4,641.406 us | 1,638.6524 us |  89.8201 us |     215.5 |  2.65 |    0.06 |  31.2500 |   7.8125 |        - |  597.73 KB |        0.16 |
+| Clipper2Intersection | 1000      | 13              | False     | 1,751.292 us |   608.8764 us |  33.3746 us |     571.0 |  1.00 |    0.02 | 248.0469 | 246.0938 | 123.0469 |  3808.3 KB |        1.00 |
+|                      |           |                 |           |              |               |             |           |       |         |          |          |          |            |             |
+| Intersection         | 1000      | 13              | True      | 5,604.583 us | 6,479.1650 us | 355.1449 us |     178.4 |  3.65 |    0.26 |  31.2500 |   7.8125 |        - |  597.73 KB |        0.20 |
+| Clipper2Intersection | 1000      | 13              | True      | 1,539.851 us | 1,446.5691 us |  79.2913 us |     649.4 |  1.00 |    0.06 | 166.0156 | 164.0625 |  82.0313 | 2931.87 KB |        1.00 |
 */
 
 /// <summary>
@@ -128,14 +128,14 @@ public class OpenClippingBenches
     /// </summary>
     /// <returns>The open result contours.</returns>
     [Benchmark]
-    public object Intersection() => PolygonClipper.Intersection(this.subject, this.clip, FillRule.NonZero);
+    public Polygon Intersection() => PolygonClipper.Intersection(this.subject, this.clip, FillRule.NonZero);
 
     /// <summary>
     /// Clips the same original paths with the same closed mask using Clipper2.
     /// </summary>
     /// <returns>The open result paths.</returns>
     [Benchmark(Baseline = true)]
-    public object Clipper2Intersection()
+    public PathsD Clipper2Intersection()
     {
         ClipperD engine = new(6);
         engine.AddOpenSubject(this.openSubject);

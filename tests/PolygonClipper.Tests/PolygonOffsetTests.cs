@@ -562,6 +562,66 @@ public class PolygonOffsetTests
     }
 
     /// <summary>
+    /// Compares the convex shortcut with the complete Martinez sweep, including vertex bits and order.
+    /// </summary>
+    /// <param name="join">The boundary join style.</param>
+    /// <param name="delta">The signed offset distance.</param>
+    /// <param name="step">The stride through the source vertices. Two makes a self-intersecting star.</param>
+    [Theory]
+    [InlineData(LineJoin.Miter, 1D, 1)]
+    [InlineData(LineJoin.Miter, -1D, 1)]
+    [InlineData(LineJoin.Round, 3D, 1)]
+    [InlineData(LineJoin.Bevel, 3D, 1)]
+    [InlineData(LineJoin.Miter, -9D, 1)]
+    [InlineData(LineJoin.Miter, 1D, 2)]
+    [InlineData(LineJoin.Round, -1D, 2)]
+    public void Offset_DisplacedWalk_MatchesMartinezExactly(LineJoin join, double delta, int step)
+    {
+        Contour source = new(17);
+        for (int i = 0; i < 17; i++)
+        {
+            double angle = (((i * step) % 17) + 0.25D) * (Math.PI * 2D / 17);
+            source.Add(new Vertex(23D + (Math.Cos(angle) * 10D), -7D + (Math.Sin(angle) * 10D)));
+        }
+
+        Polygon subject = [source];
+        OffsetOptions options = new() { LineJoin = join };
+        Polygon area = PolygonClipper.Normalize(subject, FillRule.NonZero);
+        Assert.Single(area);
+        Polygon walks = PolygonStroker.OffsetBoundaries(area, delta, options);
+        Polygon expected = PolygonClipper.Normalize(walks, FillRule.Positive);
+        Polygon actual = PolygonOffsetter.Offset(subject, delta, FillRule.NonZero, options);
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonOffsetTests),
+            nameof(this.Offset_DisplacedWalk_MatchesMartinezExactly),
+            $"Join-{join}_Delta-{delta}_Step-{step}",
+            subject,
+            [],
+            actual,
+            expected);
+
+        Assert.Equal(expected.Count, actual.Count);
+        for (int i = 0; i < expected.Count; i++)
+        {
+            Assert.Equal(expected[i].IsClosed, actual[i].IsClosed);
+            Assert.Equal(expected[i].ParentIndex, actual[i].ParentIndex);
+            Assert.Equal(expected[i].Depth, actual[i].Depth);
+            Assert.Equal(expected[i].HoleCount, actual[i].HoleCount);
+            for (int j = 0; j < expected[i].HoleCount; j++)
+            {
+                Assert.Equal(expected[i].GetHoleIndex(j), actual[i].GetHoleIndex(j));
+            }
+
+            Assert.Equal(expected[i].Count, actual[i].Count);
+            for (int j = 0; j < expected[i].Count; j++)
+            {
+                Assert.Equal(BitConverter.DoubleToInt64Bits(expected[i][j].X), BitConverter.DoubleToInt64Bits(actual[i][j].X));
+                Assert.Equal(BitConverter.DoubleToInt64Bits(expected[i][j].Y), BitConverter.DoubleToInt64Bits(actual[i][j].Y));
+            }
+        }
+    }
+
+    /// <summary>
     /// Saves the comparison and checks both boundaries, contour count and output closure.
     /// </summary>
     /// <param name="testName">The test method name.</param>

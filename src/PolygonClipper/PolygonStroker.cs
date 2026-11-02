@@ -62,6 +62,10 @@ public sealed class PolygonStroker
     private double widthEps = 0.5D / 1024D;
     private int widthSign = 1;
 
+    // Width and arc detail stay fixed while a path is outlined. Reuse the same
+    // angular step without changing the per-arc angle or vertex calculations.
+    private double arcStep;
+
     // Offsets emit one side and retain overlaps at inner corners until Martinez resolves them.
     private bool offsetBoundary;
 
@@ -89,6 +93,7 @@ public sealed class PolygonStroker
         this.LineCap = key.LineCap;
         this.MiterLimit = key.MiterLimit;
         this.ArcDetailScale = key.ArcDetailScale;
+        this.SetHalfWidth(this.strokeWidth);
     }
 
     /// <summary>
@@ -349,9 +354,9 @@ public sealed class PolygonStroker
             stroker.SetHalfWidth(delta);
             stroker.offsetBoundary = true;
             Polygon boundaries = new(polygon.Count);
-            foreach (Contour boundary in polygon)
+            for (int i = 0; i < polygon.Count; i++)
             {
-                stroker.AppendPath(boundary, true, boundaries);
+                stroker.AppendPath(polygon[i], true, boundaries);
             }
 
             return boundaries;
@@ -373,6 +378,10 @@ public sealed class PolygonStroker
         this.widthAbs = Math.Abs(halfWidth);
         this.widthSign = halfWidth < 0 ? -1 : 1;
         this.widthEps = halfWidth / 1024D;
+        if (this.LineJoin is LineJoin.Round or LineJoin.MiterRound || this.LineCap == LineCap.Round)
+        {
+            this.arcStep = Math.Acos(this.widthAbs / (this.widthAbs + (0.125D / this.ArcDetailScale))) * 2D;
+        }
     }
 
     /// <summary>
@@ -908,8 +917,8 @@ public sealed class PolygonStroker
         double a1 = Math.Atan2(dy1 * this.widthSign, dx1 * this.widthSign);
         double a2 = Math.Atan2(dy2 * this.widthSign, dx2 * this.widthSign);
 
-        // Derive angular step from arc detail scale and stroke radius.
-        double da = Math.Acos(this.widthAbs / (this.widthAbs + (0.125D / this.ArcDetailScale))) * 2D;
+        // Reuse the angular step for this width and arc detail.
+        double da = this.arcStep;
         this.AddPoint(x + dx1, y + dy1);
 
         if (this.widthSign > 0)
@@ -1102,7 +1111,7 @@ public sealed class PolygonStroker
         else
         {
             // Round cap emitted as half-circle arc around endpoint.
-            double da = Math.Acos(this.widthAbs / (this.widthAbs + (0.125D / this.ArcDetailScale))) * 2D;
+            double da = this.arcStep;
             int n = (int)(Pi / da);
             da = Pi / (n + 1);
 
@@ -1292,7 +1301,7 @@ public sealed class PolygonStroker
         if (this.LineCap == LineCap.Round)
         {
             // Emit a full circle when a contour collapses to a point.
-            double da = Math.Acos(this.widthAbs / (this.widthAbs + (0.125D / this.ArcDetailScale))) * 2D;
+            double da = this.arcStep;
             int n = Math.Max(4, (int)(PiMul2 / da));
             double angleStep = PiMul2 / n;
 

@@ -41,6 +41,68 @@ public class PolygonTests
         Assert.Same(outer, result[result[holeIndex].ParentIndex!.Value]);
     }
 
+    /// <summary>
+    /// Checks that a later hole is grouped with its owner across another exterior.
+    /// </summary>
+    [Fact]
+    public void Union_InterleavedExteriorAndHole_PreservesGroupedHierarchy()
+    {
+        Contour exterior = CreateSquare(0, 0, 100);
+        Contour hole = CreateSquare(80, 80, 10);
+        Contour separate = CreateSquare(20, 200, 10);
+        Polygon subject = [exterior, hole, separate];
+        Polygon result = PolygonClipper.Union(subject, [], FillRule.EvenOdd);
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonTests),
+            nameof(this.Union_InterleavedExteriorAndHole_PreservesGroupedHierarchy),
+            string.Empty,
+            subject,
+            [],
+            result);
+
+        Assert.Equal(3, result.Count);
+        Assert.Equal(new Vertex(0, 0), result[0].GetBoundingBox().Min);
+        Assert.Equal(new Vertex(80, 80), result[1].GetBoundingBox().Min);
+        Assert.Equal(new Vertex(20, 200), result[2].GetBoundingBox().Min);
+        Assert.Equal(1, result[0].HoleCount);
+        Assert.Equal(1, result[0].GetHoleIndex(0));
+        Assert.Equal(0, result[1].ParentIndex);
+        Assert.Equal(1, result[1].Depth);
+        Assert.Null(result[2].ParentIndex);
+    }
+
+    /// <summary>
+    /// Checks the vertex sequence of independent triangles in an already grouped result.
+    /// </summary>
+    [Fact]
+    public void Union_DisjointTriangles_PreservesVertexSequence()
+    {
+        Polygon subject =
+        [
+            [new(0, 0), new(4, 0), new(2, 3)],
+            [new(10, 0), new(14, 0), new(12, 3)]
+        ];
+        Polygon result = PolygonClipper.Union(subject, [], FillRule.NonZero);
+        SvgTestOutput.SaveSvg(
+            nameof(PolygonTests),
+            nameof(this.Union_DisjointTriangles_PreservesVertexSequence),
+            string.Empty,
+            subject,
+            [],
+            result,
+            subject);
+
+        Assert.Equal(2, result.Count);
+        for (int i = 0; i < result.Count; i++)
+        {
+            Assert.Equal(3, result[i].Count);
+            Assert.Equal(subject[i], result[i]);
+            Assert.True(result[i].IsClosed);
+            Assert.Null(result[i].ParentIndex);
+            Assert.Equal(0, result[i].HoleCount);
+        }
+    }
+
     private static Contour CreateSquare(double x, double y, double size)
     {
         Contour contour =

@@ -28,9 +28,9 @@ public static class PolygonOffsetter
         Guard.NotNull(options, nameof(options));
         Guard.MustBeBetweenOrEqualTo(delta, double.MinValue, double.MaxValue, nameof(delta));
 
-        foreach (Contour contour in polygon)
+        for (int i = 0; i < polygon.Count; i++)
         {
-            Guard.IsTrue(contour.IsClosed, nameof(polygon), "Offset requires closed contours. Use Stroke for open paths.");
+            Guard.IsTrue(polygon[i].IsClosed, nameof(polygon), "Offset requires closed contours. Use Stroke for open paths.");
         }
 
         // Resolve the requested filled area before outlining it. Raw overlaps and self-crossings
@@ -48,8 +48,9 @@ public static class PolygonOffsetter
         }
 
         Polygon combined = new(area.Count);
-        foreach (Contour exterior in area)
+        for (int contourIndex = 0; contourIndex < area.Count; contourIndex++)
         {
+            Contour exterior = area[contourIndex];
             if ((exterior.Depth & 1) != 0)
             {
                 continue;
@@ -62,9 +63,9 @@ public static class PolygonOffsetter
             }
 
             Polygon offset = OffsetComponent(component, delta, options);
-            foreach (Contour boundary in offset)
+            for (int i = 0; i < offset.Count; i++)
             {
-                combined.Add(boundary);
+                combined.Add(offset[i]);
             }
         }
 
@@ -116,10 +117,72 @@ public static class PolygonOffsetter
 
         Polygon boundaries = PolygonStroker.OffsetBoundaries(component, delta, options);
 
+        if (boundaries.Count == 1 && TryGetConvexStart(boundaries[0], out int start))
+        {
+            // A strictly convex counterclockwise walk already bounds exactly the
+            // Positive-filled result. Match Martinez's leftmost starting vertex
+            // and orientation without sending this resolved boundary through another sweep.
+            Contour boundary = boundaries[0];
+            if (start != 0)
+            {
+                boundary.RotateVertices(start);
+            }
+
+            boundary.SetCounterClockwise();
+            return boundaries;
+        }
+
         // Source winding is 0 or 1. Band coverage is nonnegative, including overlapping strips.
         // The displaced walk has source winding plus band coverage for expansion, or minus it
         // for contraction. Positive filling selects the union or the uncovered source area.
         // The source walk cancels in both expressions, so it need not enter the final sweep.
         return PolygonClipper.Normalize(boundaries, FillRule.Positive);
+    }
+
+    /// <summary>
+    /// Checks for a simple, strictly convex counterclockwise walk and finds its first sweep vertex.
+    /// </summary>
+    /// <param name="contour">A closed displaced walk with at least three vertices.</param>
+    /// <param name="start">The index of the lexicographically smallest vertex.</param>
+    /// <returns>Whether every turn is positive and the edge directions make exactly one full turn.</returns>
+    private static bool TryGetConvexStart(Contour contour, out int start)
+    {
+        ReadOnlySpan<Vertex> points = contour.AsVertexSpan();
+        Vertex previous = points[^1];
+        Vertex current = points[0];
+        bool previousUpper = current.Y > previous.Y || (current.Y == previous.Y && current.X > previous.X);
+        int turns = 0;
+        start = 0;
+        for (int i = 0; i < points.Length; i++)
+        {
+            Vertex next = points[i + 1 == points.Length ? 0 : i + 1];
+            double turn = PolygonUtilities.SignedArea(previous, current, next);
+            if (!double.IsFinite(current.X) || !double.IsFinite(current.Y) ||
+                !double.IsFinite(turn) || turn <= 0)
+            {
+                return false;
+            }
+
+            // Positive turns restrict each direction change to less than half a turn.
+            // Crossing from the lower half-plane to the upper half-plane counts a full
+            // direction wrap. One wrap proves convexity; stars and repeated walks wrap more often.
+            // Endpoint comparisons classify the half-plane without overflowing edge subtraction.
+            bool upper = next.Y > current.Y || (next.Y == current.Y && next.X > current.X);
+            if (!previousUpper && upper && ++turns > 1)
+            {
+                return false;
+            }
+
+            if (SweepEventComparer.Instance.Compare(current, points[start]) < 0)
+            {
+                start = i;
+            }
+
+            previousUpper = upper;
+            previous = current;
+            current = next;
+        }
+
+        return turns == 1;
     }
 }

@@ -179,6 +179,20 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     }
 
     /// <summary>
+    /// Moves the selected vertex to the start without changing the cyclic order.
+    /// </summary>
+    /// <param name="startIndex">The existing vertex that will become the first vertex.</param>
+    internal void RotateVertices(int startIndex)
+    {
+        // Three reversals rotate the existing storage without allocating a copy.
+        // Rotation preserves the closed edges and any cached orientation.
+        Span<Vertex> points = CollectionsMarshal.AsSpan(this.vertices);
+        points[..startIndex].Reverse();
+        points[startIndex..].Reverse();
+        points.Reverse();
+    }
+
+    /// <summary>
     /// Sets the contour to clockwise orientation.
     /// </summary>
     public void SetClockwise()
@@ -321,8 +335,14 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
         return clone;
     }
 
+    /// <summary>
+    /// Returns an enumerator that visits the stored vertices in order.
+    /// </summary>
+    /// <returns>The vertex enumerator.</returns>
+    public List<Vertex>.Enumerator GetEnumerator() => this.vertices.GetEnumerator();
+
     /// <inheritdoc/>
-    public IEnumerator<Vertex> GetEnumerator()
+    IEnumerator<Vertex> IEnumerable<Vertex>.GetEnumerator()
         => ((IEnumerable<Vertex>)this.vertices).GetEnumerator();
 
     /// <inheritdoc/>

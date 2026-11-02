@@ -16,16 +16,16 @@ AMD RYZEN AI MAX+ 395 w/ Radeon 8060S 3.00GHz, 1 CPU, 32 logical and 16 physical
 Job=ShortRun  IterationCount=3  LaunchCount=1
 WarmupCount=3
 
-| Method            | VertexCount | Mean         | Error       | StdDev      | Op/s      | Ratio | RatioSD | Gen0      | Gen1      | Gen2      | Allocated  | Alloc Ratio |
-|------------------ |------------ |-------------:|------------:|------------:|----------:|------:|--------:|----------:|----------:|----------:|-----------:|------------:|
-| Normalize         | 101         |   1,695.4 us |    251.4 us |    13.78 us |   589.827 |  3.68 |    0.10 |         - |         - |         - |    3.41 KB |        0.02 |
-| Clipper2Normalize | 101         |     460.9 us |    253.8 us |    13.91 us | 2,169.784 |  1.00 |    0.04 |   12.2070 |    3.9063 |         - |  205.76 KB |        1.00 |
-|                   |             |              |             |             |           |       |         |           |           |           |            |             |
-| Normalize         | 301         |  16,385.1 us |  5,075.3 us |   278.19 us |    61.031 |  2.80 |    0.04 |         - |         - |         - |    9.66 KB |       0.004 |
-| Clipper2Normalize | 301         |   5,860.5 us |    765.2 us |    41.94 us |   170.633 |  1.00 |    0.01 |  492.1875 |  492.1875 |  492.1875 | 2297.18 KB |       1.000 |
-|                   |             |              |             |             |           |       |         |           |           |           |            |             |
-| Normalize         | 1001        | 197,339.6 us | 76,838.2 us | 4,211.76 us |     5.067 |  2.51 |    0.09 |         - |         - |         - |   31.54 KB |       0.002 |
-| Clipper2Normalize | 1001        |  78,746.5 us | 55,733.0 us | 3,054.92 us |    12.699 |  1.00 |    0.05 | 1857.1429 | 1857.1429 | 1857.1429 | 17115.1 KB |       1.000 |
+| Method            | VertexCount | Mean         | Error         | StdDev      | Op/s      | Ratio | RatioSD | Gen0      | Gen1      | Gen2      | Allocated   | Alloc Ratio |
+|------------------ |------------ |-------------:|--------------:|------------:|----------:|------:|--------:|----------:|----------:|----------:|------------:|------------:|
+| Normalize         | 101         |   1,702.8 us |     124.77 us |     6.84 us |   587.273 |  3.73 |    0.02 |         - |         - |         - |     3.41 KB |        0.02 |
+| Clipper2Normalize | 101         |     456.9 us |      53.14 us |     2.91 us | 2,188.465 |  1.00 |    0.01 |   12.2070 |    3.9063 |         - |   205.76 KB |        1.00 |
+|                   |             |              |               |             |           |       |         |           |           |           |             |             |
+| Normalize         | 301         |  15,951.5 us |     452.26 us |    24.79 us |    62.690 |  2.72 |    0.02 |         - |         - |         - |    10.46 KB |       0.005 |
+| Clipper2Normalize | 301         |   5,870.9 us |     710.59 us |    38.95 us |   170.333 |  1.00 |    0.01 |  492.1875 |  492.1875 |  492.1875 |  2297.18 KB |       1.000 |
+|                   |             |              |               |             |           |       |         |           |           |           |             |             |
+| Normalize         | 1001        | 199,441.3 us | 112,517.17 us | 6,167.45 us |     5.014 |  2.31 |    0.10 |         - |         - |         - |    48.88 KB |       0.003 |
+| Clipper2Normalize | 1001        |  86,335.0 us |  57,758.23 us | 3,165.92 us |    11.583 |  1.00 |    0.05 | 1833.3333 | 1833.3333 | 1833.3333 | 17114.61 KB |       1.000 |
 */
 
 /// <summary>
@@ -68,7 +68,7 @@ public class NormalizationBenches
     /// </summary>
     /// <returns>The resolved contour tree.</returns>
     [Benchmark(Baseline = true)]
-    public object Clipper2Normalize()
+    public PolyTreeD Clipper2Normalize()
     {
         ClipperD clipper = new(ClipperPrecision)
         {
