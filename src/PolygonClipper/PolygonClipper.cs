@@ -410,14 +410,30 @@ public class PolygonClipper
             int statusCount = this.statusLine.Count;
             int blockCount = after - first;
 
+            // A single ordinary continuation has no other ray to order or merge.
+            // Keep it in the outgoing list until the neighbor checks close the point.
+            bool singleContinuation = !open && blockCount == 1 && this.outgoing.Count == 1 &&
+                this.outgoing[0].Ends is null && !this.outgoing[0].Delta.IsZero;
+
+            SweepEventPoolList active;
+
             while (true)
             {
-                this.BundleOutgoing();
-                this.statusLine.ReplaceRange(first, blockCount, this.bundled.GetEventsSpan());
-                blockCount = this.bundled.Count;
-                for (int i = 0; i < this.bundled.Count; i++)
+                if (singleContinuation)
                 {
-                    SweepEvent edge = this.bundled[i];
+                    active = this.outgoing;
+                }
+                else
+                {
+                    this.BundleOutgoing();
+                    active = this.bundled;
+                }
+
+                this.statusLine.ReplaceRange(first, blockCount, active.GetEventsSpan());
+                blockCount = active.Count;
+                for (int i = 0; i < blockCount; i++)
+                {
+                    SweepEvent edge = active[i];
                     edge.Active = true;
                 }
 
@@ -425,16 +441,24 @@ public class PolygonClipper
                 // incidence predicate missed a neighboring interval. Absorb it
                 // before committing winding or immutable boundary history.
                 bool lowerIncident = this.PossibleIntersection(first - 1, first, point, sourcePoint);
-                bool upperIncident = this.bundled.Count == 0
+                bool upperIncident = blockCount == 0
                     ? lowerIncident
-                    : !lowerIncident && this.PossibleIntersection(first + this.bundled.Count - 1, first + this.bundled.Count, point, sourcePoint);
+                    : !lowerIncident && this.PossibleIntersection(first + blockCount - 1, first + blockCount, point, sourcePoint);
+
                 if (!lowerIncident && !upperIncident)
                 {
                     break;
                 }
 
-                this.outgoing.Clear();
-                this.outgoing.AddRange(this.bundled);
+                if (!singleContinuation)
+                {
+                    this.outgoing.Clear();
+                    this.outgoing.AddRange(this.bundled);
+                }
+
+                // An incident neighbor can add another ray at this point.
+                // Use the full bundle logic from this point on.
+                singleContinuation = false;
                 foreach (SweepEvent edge in this.outgoing)
                 {
                     // Rebundling can replace a representative. Invalidate any
@@ -471,9 +495,9 @@ public class PolygonClipper
             bool below = InResult(winding, operation, subjectRule, clipRule);
             SweepEvent? previousBoundary = null;
             bool hasBoundaryContext = false;
-            for (int i = 0; i < this.bundled.Count; i++)
+            for (int i = 0; i < active.Count; i++)
             {
-                SweepEvent edge = this.bundled[i];
+                SweepEvent edge = active[i];
                 winding = winding.Add(edge.Delta);
                 edge.Above = winding;
                 bool above = InResult(winding, operation, subjectRule, clipRule);
@@ -538,7 +562,7 @@ public class PolygonClipper
             // deaths, and changing bundles move the unchanged suffix.
             if (this.statusLine.Count != statusCount)
             {
-                for (int i = first + this.bundled.Count; i < this.statusLine.Count; i++)
+                for (int i = first + active.Count; i < this.statusLine.Count; i++)
                 {
                     SweepEvent edge = this.statusLine[i];
                     edge.Pos = i;
@@ -1256,26 +1280,6 @@ public class PolygonClipper
     {
         // Run already sorts completed boundary events. Work directly on their
         // pooled storage; no filtering copy or second ordering pass is needed.
-        // Assign positions to events
-        // The first loop ensures that every event gets its initial position based on its index in the list.
-        // This must be completed for all events before adjustments are made for right events to avoid inconsistent state.
-        for (int i = 0; i < resultEvents.Count; i++)
-        {
-            resultEvents[i].Pos = i;
-        }
-
-        // Adjust positions for right events
-        // The second loop handles swapping positions for right events with their corresponding left events.
-        // This ensures that the `Pos` values are consistent between paired events after the initial assignment.
-        for (int i = 0; i < resultEvents.Count; i++)
-        {
-            SweepEvent sweepEvent = resultEvents[i];
-            if (sweepEvent.Left)
-            {
-                (sweepEvent.OtherEvent.Pos, sweepEvent.Pos) = (sweepEvent.Pos, sweepEvent.OtherEvent.Pos);
-            }
-        }
-
         using Buffer<int> iterationBuffer = new(resultEvents.Count);
         Span<int> iterationMap = iterationBuffer.GetSpan();
         PrecomputeIterationOrder(resultEvents, iterationMap);
@@ -1350,11 +1354,7 @@ public class PolygonClipper
                 lastExterior = contourId;
             }
 
-            for (int j = 0; j < count; j++)
-            {
-                contour.Add(vertices[j]);
-            }
-
+            contour.AddRange(vertices[..count]);
             result.Add(contour);
         }
 
@@ -1401,6 +1401,7 @@ public class PolygonClipper
     /// </summary>
     /// <param name="data">The fully sorted, paired output events.</param>
     /// <param name="map">Receives the next incident event index for every boundary endpoint.</param>
+    /// <remarks>Each event's position is set to its paired endpoint's index.</remarks>
     private static void PrecomputeIterationOrder(SweepEventPoolList data, Span<int> map)
     {
         int i = 0;
@@ -1412,6 +1413,9 @@ public class PolygonClipper
             int rFrom = i;
             while (i < data.Count && xRef.Point == data[i].Point && !data[i].Left)
             {
+                // Crossing an edge must reach its opposite endpoint. Assign
+                // that index directly while visiting each incident event.
+                data[i].OtherEvent.Pos = i;
                 i++;
             }
 
@@ -1426,6 +1430,7 @@ public class PolygonClipper
                     throw new InvalidOperationException("Expected left event");
                 }
 
+                data[i].OtherEvent.Pos = i;
                 i++;
             }
 

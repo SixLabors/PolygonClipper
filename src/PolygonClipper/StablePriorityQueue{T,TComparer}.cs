@@ -96,7 +96,11 @@ internal sealed class StablePriorityQueue<T, TComparer>
     {
         List<T> data = this.heap;
         int count = data.Count;
-        ThrowIfEmpty(count);
+        if (count == 0)
+        {
+            ThrowEmpty();
+        }
+
         ref T dRef = ref MemoryMarshal.GetReference(CollectionsMarshal.AsSpan(data));
 
         int maxIndex = count - 1;
@@ -120,7 +124,11 @@ internal sealed class StablePriorityQueue<T, TComparer>
     /// <exception cref="InvalidOperationException">Thrown if the priority queue is empty.</exception>
     public T Peek()
     {
-        ThrowIfEmpty(this.Count);
+        if (this.heap.Count == 0)
+        {
+            ThrowEmpty();
+        }
+
         return this.heap[0];
     }
 
@@ -212,12 +220,10 @@ internal sealed class StablePriorityQueue<T, TComparer>
         }
     }
 
+    /// <summary>
+    /// Throws when an empty queue is read or dequeued.
+    /// </summary>
+    // Keep the throw outside the hot path without calling a helper for every valid read.
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static void ThrowIfEmpty(int count)
-    {
-        if (count == 0)
-        {
-            throw new InvalidOperationException("Queue is empty.");
-        }
-    }
+    private static void ThrowEmpty() => throw new InvalidOperationException("Queue is empty.");
 }

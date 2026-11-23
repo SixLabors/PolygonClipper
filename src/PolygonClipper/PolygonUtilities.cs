@@ -67,7 +67,7 @@ internal static class PolygonUtilities
         pi0 = default;
         pi1 = default;
 
-        if (!TryGetIntersectionBoundingBox(seg0.Source, seg0.Target, seg1.Source, seg1.Target, out Box2 bbox))
+        if (!TryGetIntersectionBoundingBox(seg0, seg1, out Box2 bbox))
         {
             return 0;
         }
@@ -226,28 +226,21 @@ internal static class PolygonUtilities
     /// <summary>
     /// Computes the bounding box of the intersection area of two line segments.
     /// </summary>
-    /// <param name="a1">The first point of the first segment.</param>
-    /// <param name="a2">The second point of the first segment.</param>
-    /// <param name="b1">The first point of the second segment.</param>
-    /// <param name="b2">The second point of the second segment.</param>
+    /// <param name="first">The first segment and its cached coordinate bounds.</param>
+    /// <param name="second">The second segment and its cached coordinate bounds.</param>
     /// <param name="result">The intersection bounds when the method returns true.</param>
     /// <returns>
     /// <see langword="true"/> if the segments intersect; otherwise, <see langword="false"/>.
     /// </returns>
     private static bool TryGetIntersectionBoundingBox(
-        in Vertex a1,
-        in Vertex a2,
-        in Vertex b1,
-        in Vertex b2,
+        in Segment first,
+        in Segment second,
         out Box2 result)
     {
-        Vertex minA = Vertex.Min(a1, a2);
-        Vertex maxA = Vertex.Max(a1, a2);
-        Vertex minB = Vertex.Min(b1, b2);
-        Vertex maxB = Vertex.Max(b1, b2);
-
-        Vertex interMin = Vertex.Max(minA, minB);
-        Vertex interMax = Vertex.Min(maxA, maxB);
+        // Segment construction already applies the same coordinate-wise Min
+        // and Max operations. Reuse them for every later adjacency check.
+        Vertex interMin = Vertex.Max(first.Min, second.Min);
+        Vertex interMax = Vertex.Min(first.Max, second.Max);
 
         if (interMin.X <= interMax.X && interMin.Y <= interMax.Y)
         {

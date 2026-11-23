@@ -240,6 +240,16 @@ public sealed class Contour : IReadOnlyCollection<Vertex>
     }
 
     /// <summary>
+    /// Appends vertices in their stored order.
+    /// </summary>
+    /// <param name="vertices">The vertices to append.</param>
+    internal void AddRange(ReadOnlySpan<Vertex> vertices)
+    {
+        this.vertices.AddRange(vertices);
+        this.hasCachedOrientation = false;
+    }
+
+    /// <summary>
     /// Removes the vertex at the specified index from the contour.
     /// </summary>
     /// <param name="index">The index of the vertex to remove.</param>

@@ -9,6 +9,18 @@ namespace SixLabors.PolygonClipper.Tests;
 public class QueueEntryComparerTests
 {
     /// <summary>
+    /// Checks that empty reads and removals retain the queue's exception contract.
+    /// </summary>
+    [Fact]
+    public void Queue_EmptyReadAndRemoval_Throw()
+    {
+        StablePriorityQueue<QueueEntry, QueueEntryComparer> queue = new(default(QueueEntryComparer));
+
+        Assert.Throws<InvalidOperationException>(() => queue.Peek());
+        Assert.Throws<InvalidOperationException>(() => queue.Dequeue());
+    }
+
+    /// <summary>
     /// Checks point, interval, version and endpoint order with both heap entry paths.
     /// </summary>
     /// <param name="heapify">Whether to build the heap from its shared backing list.</param>

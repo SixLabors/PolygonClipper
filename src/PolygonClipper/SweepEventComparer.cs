@@ -56,7 +56,9 @@ internal sealed class SweepEventComparer : IComparer<SweepEvent>, IComparer<Queu
         double area = PolygonUtilities.SignedArea(x.Point, x.OtherEvent.Point, y.OtherEvent.Point);
         if (area != 0)
         {
-            return x.IsBelow(y.OtherEvent.Point) ? -1 : 1;
+            // IsBelow uses this determinant for a left event and its negative
+            // for a right event. Reuse its sign instead of evaluating it again.
+            return (x.Left ? area > 0 : area < 0) ? -1 : 1;
         }
 
         // Compare by polygon type: subject polygons have higher priority

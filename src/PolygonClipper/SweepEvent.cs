@@ -113,9 +113,11 @@ internal sealed class SweepEvent
     public Vertex SourceEnd { get => this.interval.SourceEnd; set => this.interval.SourceEnd = value; }
 
     /// <summary>
-    /// Gets or sets the original supporting segment, preserved across rounded splits.
+    /// Gets a reference to the original supporting segment, preserved across rounded splits.
     /// </summary>
-    public Segment Support { get => this.interval.Support; set => this.interval.Support = value; }
+    // Intersection checks take this 64-byte value by reference. Forward the
+    // owned storage so each adjacent-pair check does not copy both supports.
+    public ref Segment Support => ref this.interval.Support;
 
     /// <summary>
     /// Gets or sets the signed subject and clip contributions of this interval.
@@ -328,14 +330,19 @@ internal sealed class SweepEvent
     private sealed class IntervalState
     {
         /// <summary>
+        /// The original support and its cached coordinate bounds.
+        /// </summary>
+        private Segment support;
+
+        /// <summary>
         /// Gets or sets the next source contribution endpoint.
         /// </summary>
         public Vertex SourceEnd { get; set; }
 
         /// <summary>
-        /// Gets or sets the original supporting segment, preserved across rounded splits.
+        /// Gets a reference to the original support and its cached coordinate bounds.
         /// </summary>
-        public Segment Support { get; set; }
+        public ref Segment Support => ref this.support;
 
         /// <summary>
         /// Gets or sets the signed subject and clip contributions of this interval.

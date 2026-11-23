@@ -5,6 +5,21 @@ namespace SixLabors.PolygonClipper.Tests;
 
 public class ContourTests
 {
+    /// <summary>
+    /// Checks that bulk appends preserve vertex order and invalidate cached orientation.
+    /// </summary>
+    [Fact]
+    public void AddRange_AppendsVerticesAndInvalidatesOrientation()
+    {
+        Contour contour = [new Vertex(0, 0), new Vertex(1, 0), new Vertex(0, 1)];
+        Assert.True(contour.IsCounterClockwise());
+
+        contour.AddRange([new Vertex(10, -10), new Vertex(10, -20)]);
+
+        Assert.Equal([new Vertex(0, 0), new Vertex(1, 0), new Vertex(0, 1), new Vertex(10, -10), new Vertex(10, -20)], contour);
+        Assert.False(contour.IsCounterClockwise());
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]

@@ -33,6 +33,46 @@ public static class PolygonOffsetter
             Guard.IsTrue(polygon[i].IsClosed, nameof(polygon), "Offset requires closed contours. Use Stroke for open paths.");
         }
 
+        if (delta != 0 && polygon.Count == 1 && (uint)fillRule <= (uint)FillRule.Negative &&
+            TryGetConvexStart(polygon[0], out int start, out bool counterClockwise))
+        {
+            // A simple convex ring has winding +1 or -1 throughout its interior.
+            if (!PolygonClipper.Filled(counterClockwise ? 1 : -1, fillRule))
+            {
+                return [];
+            }
+
+            if (counterClockwise && start == 0)
+            {
+                return OffsetComponent(polygon, delta, options);
+            }
+
+            // Match the sweep's source order before computing the joins. A new
+            // contour lets the stroker visit that order without editing the input.
+            ReadOnlySpan<Vertex> points = polygon[0].AsVertexSpan();
+            Contour source = new(points.Length);
+            if (counterClockwise)
+            {
+                source.AddRange(points[start..]);
+                source.AddRange(points[..start]);
+            }
+            else
+            {
+                source.Add(points[start]);
+                for (int i = start - 1; i >= 0; i--)
+                {
+                    source.Add(points[i]);
+                }
+
+                for (int i = points.Length - 1; i > start; i--)
+                {
+                    source.Add(points[i]);
+                }
+            }
+
+            return OffsetComponent([source], delta, options);
+        }
+
         // Resolve the requested filled area before outlining it. Raw overlaps and self-crossings
         // are not independent boundaries and must not introduce internal offset seams.
         Polygon area = PolygonClipper.Normalize(polygon, fillRule);
@@ -117,7 +157,7 @@ public static class PolygonOffsetter
 
         Polygon boundaries = PolygonStroker.OffsetBoundaries(component, delta, options);
 
-        if (boundaries.Count == 1 && TryGetConvexStart(boundaries[0], out int start))
+        if (boundaries.Count == 1 && TryGetConvexStart(boundaries[0], out int start, out bool counterClockwise) && counterClockwise)
         {
             // A strictly convex counterclockwise walk already bounds exactly the
             // Positive-filled result. Match Martinez's leftmost starting vertex
@@ -140,32 +180,48 @@ public static class PolygonOffsetter
     }
 
     /// <summary>
-    /// Checks for a simple, strictly convex counterclockwise walk and finds its first sweep vertex.
+    /// Checks for a simple, strictly convex walk and finds its first sweep vertex.
     /// </summary>
-    /// <param name="contour">A closed displaced walk with at least three vertices.</param>
+    /// <param name="contour">A closed contour.</param>
     /// <param name="start">The index of the lexicographically smallest vertex.</param>
-    /// <returns>Whether every turn is positive and the edge directions make exactly one full turn.</returns>
-    private static bool TryGetConvexStart(Contour contour, out int start)
+    /// <param name="counterClockwise">Whether the convex contour turns counterclockwise.</param>
+    /// <returns>Whether all turns have the same sign and the edge directions make exactly one full turn.</returns>
+    private static bool TryGetConvexStart(Contour contour, out int start, out bool counterClockwise)
     {
         ReadOnlySpan<Vertex> points = contour.AsVertexSpan();
+        start = 0;
+        counterClockwise = false;
+        if (points.Length < 3)
+        {
+            return false;
+        }
+
         Vertex previous = points[^1];
         Vertex current = points[0];
         bool previousUpper = current.Y > previous.Y || (current.Y == previous.Y && current.X > previous.X);
         int turns = 0;
-        start = 0;
         for (int i = 0; i < points.Length; i++)
         {
             Vertex next = points[i + 1 == points.Length ? 0 : i + 1];
             double turn = PolygonUtilities.SignedArea(previous, current, next);
             if (!double.IsFinite(current.X) || !double.IsFinite(current.Y) ||
-                !double.IsFinite(turn) || turn <= 0)
+                !double.IsFinite(turn) || turn == 0)
             {
                 return false;
             }
 
-            // Positive turns restrict each direction change to less than half a turn.
-            // Crossing from the lower half-plane to the upper half-plane counts a full
-            // direction wrap. One wrap proves convexity; stars and repeated walks wrap more often.
+            if (i == 0)
+            {
+                counterClockwise = turn > 0;
+            }
+            else if ((turn > 0) != counterClockwise)
+            {
+                return false;
+            }
+
+            // Same-sign turns move the direction by less than half a turn each time.
+            // Each full turn crosses from the lower half-plane to the upper half-plane once.
+            // A convex ring makes one full turn. Stars and repeated walks make more.
             // Endpoint comparisons classify the half-plane without overflowing edge subtraction.
             bool upper = next.Y > current.Y || (next.Y == current.Y && next.X > current.X);
             if (!previousUpper && upper && ++turns > 1)

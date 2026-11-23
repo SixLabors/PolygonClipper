@@ -28,6 +28,6 @@ public class ShortRunConfig : ManualConfig
 
         this.AddExporter(DefaultExporters.Html, DefaultExporters.Csv);
 
-        this.AddJob(Job.ShortRun);
+        this.AddJob(Job.ShortRun.WithLaunchCount(3).WithWarmupCount(5).WithIterationCount(10));
     }
 }
