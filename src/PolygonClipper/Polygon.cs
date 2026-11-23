@@ -8,8 +8,12 @@ using System.Text;
 namespace SixLabors.PolygonClipper;
 
 /// <summary>
-/// Represents a complex polygon.
+/// Represents a collection of contours.
 /// </summary>
+/// <remarks>
+/// Each contour's closure state distinguishes filled boundaries from open paths.
+/// Clipping can also return isolated points as open contours with one vertex.
+/// </remarks>
 #pragma warning disable CA1710 // Identifiers should have correct suffix
 public sealed class Polygon : IReadOnlyCollection<Contour>
 #pragma warning restore CA1710 // Identifiers should have correct suffix
@@ -74,21 +78,25 @@ public sealed class Polygon : IReadOnlyCollection<Contour>
     /// Joins another polygon to this instance.
     /// </summary>
     /// <param name="polygon">The polygon to join.</param>
+    /// <remarks>
+    /// Contours are shared with the source. Their hierarchy indices are updated for this polygon.
+    /// </remarks>
     public void Join(Polygon polygon)
     {
         int size = this.Count;
         for (int i = 0; i < polygon.contours.Count; ++i)
         {
             Contour contour = polygon.contours[i];
+            contour.OffsetHierarchyIndices(size);
             this.Add(contour);
-            this.GetLastContour().ClearHoles();
-
-            for (int j = 0; j < contour.HoleCount; ++j)
-            {
-                this.GetLastContour().AddHoleIndex(contour.GetHoleIndex(j) + size);
-            }
         }
     }
+
+    /// <summary>
+    /// Reserves space for a known result contour count without adding contours.
+    /// </summary>
+    /// <param name="capacity">The total number of contours to accommodate.</param>
+    internal void EnsureCapacity(int capacity) => this.contours.EnsureCapacity(capacity);
 
     /// <summary>
     /// Gets the bounding box.
@@ -156,8 +164,14 @@ public sealed class Polygon : IReadOnlyCollection<Contour>
         return clone;
     }
 
+    /// <summary>
+    /// Returns an enumerator that visits the stored contours in order.
+    /// </summary>
+    /// <returns>The contour enumerator.</returns>
+    public List<Contour>.Enumerator GetEnumerator() => this.contours.GetEnumerator();
+
     /// <inheritdoc/>
-    public IEnumerator<Contour> GetEnumerator()
+    IEnumerator<Contour> IEnumerable<Contour>.GetEnumerator()
         => ((IEnumerable<Contour>)this.contours).GetEnumerator();
 
     /// <inheritdoc/>

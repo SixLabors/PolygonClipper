@@ -8,165 +8,112 @@ using System.Runtime.CompilerServices;
 namespace SixLabors.PolygonClipper;
 
 /// <summary>
-/// Pool-backed list of clip vertices reused across clipping operations.
-/// </summary>
-internal sealed class VertexPoolList : PooledList<SweepVertex>
-{
-    /// <summary>
-    /// Adds or reuses a clip vertex initialized with the given data.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public SweepVertex Add(Vertex point, VertexFlags flags, SweepVertex? prev)
-    {
-        this.TryGrow();
-        SweepVertex poolVertex = this.Items[this.Size];
-        if (poolVertex == null)
-        {
-            poolVertex = new SweepVertex(point, flags, prev);
-            this.Items[this.Size] = poolVertex;
-        }
-        else
-        {
-            // Reset pooled state so linked lists are rebuilt safely.
-            poolVertex.Point = point;
-            poolVertex.Flags = flags;
-            poolVertex.Prev = prev;
-            poolVertex.Next = null;
-        }
-
-        this.Size++;
-        return poolVertex;
-    }
-}
-
-/// <summary>
-/// Pool-backed list of output points allocated during clipping.
-/// </summary>
-internal sealed class OutputPointPoolList : PooledList<OutputPoint>
-{
-    /// <summary>
-    /// Adds or reuses an output point and increments the owning record count.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public OutputPoint Add(Vertex pt, OutputRecord outputRecord)
-    {
-        this.TryGrow();
-        OutputPoint pooledPoint = this.Items[this.Size];
-        if (pooledPoint == null)
-        {
-            pooledPoint = new OutputPoint(pt, outputRecord);
-            this.Items[this.Size] = pooledPoint;
-        }
-        else
-        {
-            pooledPoint.Point = pt;
-            pooledPoint.OutputRecord = outputRecord;
-            pooledPoint.Next = pooledPoint;
-            pooledPoint.Prev = pooledPoint;
-            pooledPoint.HorizontalSegment = null;
-        }
-
-        this.Size++;
-        outputRecord.OutputPointCount++;
-        return pooledPoint;
-    }
-}
-
-/// <summary>
-/// Pool-backed list of output records that preserves per-record state between runs.
-/// </summary>
-internal sealed class OutputRecordPoolList : PooledList<OutputRecord>
-{
-    private static readonly List<Vertex> Tombstone = [];
-
-    /// <summary>
-    /// Adds or reuses an output record with cleared state.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public OutputRecord Add()
-    {
-        this.TryGrow();
-        OutputRecord outputRecord = this.Items[this.Size];
-        if (outputRecord == null)
-        {
-            outputRecord = new OutputRecord();
-            this.Items[this.Size] = outputRecord;
-        }
-        else
-        {
-            outputRecord.Index = 0;
-            outputRecord.OutputPointCount = 0;
-            outputRecord.Owner = null;
-            outputRecord.FrontEdge = null;
-            outputRecord.BackEdge = null;
-            outputRecord.Points = null;
-            outputRecord.Bounds = default;
-            outputRecord.Path = outputRecord.Path == Tombstone ? [] : outputRecord.Path;
-            outputRecord.Path.Clear();
-            outputRecord.Splits?.Clear();
-            outputRecord.RecursiveSplit = null;
-        }
-
-        this.Size++;
-        return outputRecord;
-    }
-
-    public override void Clear()
-    {
-        base.Clear();
-        for (int i = 0; i < this.Items.Length; i++)
-        {
-            OutputRecord outputRecord = this.Items[i];
-            if (outputRecord == null || outputRecord.Path == Tombstone)
-            {
-                break;
-            }
-
-            // Mark paths so pooled records are not accidentally reused without reset.
-            outputRecord.Path = Tombstone;
-            outputRecord.Owner = null;
-            outputRecord.FrontEdge = null;
-            outputRecord.BackEdge = null;
-            outputRecord.Points = null;
-            outputRecord.RecursiveSplit = null;
-        }
-    }
-}
-
-/// <summary>
-/// Pool-backed list of horizontal joins used during sweep processing.
-/// </summary>
-internal sealed class HorizontalJoinPoolList : PooledList<HorizontalJoin>
-{
-    /// <summary>
-    /// Adds or reuses a horizontal join entry.
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public HorizontalJoin Add(OutputPoint ltor, OutputPoint rtol)
-    {
-        this.TryGrow();
-        HorizontalJoin hJoin = this.Items[this.Size];
-        if (hJoin == null)
-        {
-            hJoin = new HorizontalJoin(ltor, rtol);
-            this.Items[this.Size] = hJoin;
-        }
-        else
-        {
-            hJoin.LeftToRight = ltor;
-            hJoin.RightToLeft = rtol;
-        }
-
-        this.Size++;
-        return hJoin;
-    }
-}
-
-/// <summary>
 /// Pool-backed list of sweep events reused between clipping runs.
 /// </summary>
 internal sealed class SweepEventPoolList : PooledList<SweepEvent>
 {
+    /// <summary>
+    /// Acquires a directed source interval and its paired endpoint from reusable storage.
+    /// </summary>
+    /// <param name="start">The canonical starting point.</param>
+    /// <param name="end">The source terminal point.</param>
+    /// <param name="delta">The signed operand contributions.</param>
+    /// <returns>The initialized live interval.</returns>
+    public SweepEvent Add(Vertex start, Vertex end, WindingCount delta)
+    {
+        this.TryGrow();
+        SweepEvent segment = this.Items[this.Size];
+        if (segment == null)
+        {
+            segment = new SweepEvent(start, true);
+            segment.OtherEvent = new SweepEvent(end, false, segment);
+            this.Items[this.Size] = segment;
+        }
+
+        segment.InitializeInterval(start, end, this.Size++, delta);
+        return segment;
+    }
+
+    /// <summary>
+    /// Acquires an output boundary record from the existing append-only pool.
+    /// </summary>
+    /// <param name="point">The boundary endpoint.</param>
+    /// <param name="left">Whether this endpoint starts the canonical interval.</param>
+    /// <param name="other">The paired endpoint.</param>
+    /// <param name="transition">The filled-side transition.</param>
+    /// <param name="previous">The fixed predecessor at interval creation.</param>
+    /// <param name="id">The source interval identity.</param>
+    /// <returns>The initialized history record.</returns>
+    public SweepEvent Add(
+        Vertex point,
+        bool left,
+        SweepEvent other,
+        ResultTransition transition,
+        SweepEvent previous,
+        int id)
+    {
+        this.TryGrow();
+        SweepEvent boundary = this.Items[this.Size] ??= new SweepEvent(point, left);
+        boundary.InitializeBoundary(point, left, other, transition, previous, id);
+        this.Size++;
+        return boundary;
+    }
+
+    /// <summary>
+    /// Orders completed boundary events at each sweep point for edge connection.
+    /// </summary>
+    /// <param name="comparer">The edge connector's event ordering.</param>
+    /// <remarks>The input points must already be in sweep order.</remarks>
+    public void Sort(SweepEventComparer comparer)
+    {
+        Span<SweepEvent> events = this.GetEventsSpan();
+        int first = 0;
+        while (first < events.Length)
+        {
+            int after = first + 1;
+            Vertex point = events[first].Point;
+            while (after < events.Length && events[after].Point == point)
+            {
+                after++;
+            }
+
+            // RunSweep appends immutable boundary points in queue order.
+            // Only rays at the same point need ordering after their pairs close.
+            // Most vertices have two rays. Compare that pair without a general sort.
+            int count = after - first;
+            if (count == 2)
+            {
+                if (comparer.Compare(events[first], events[first + 1]) > 0)
+                {
+                    (events[first], events[first + 1]) = (events[first + 1], events[first]);
+                }
+            }
+            else if (count > 2)
+            {
+                events.Slice(first, count).Sort(comparer);
+            }
+
+            first = after;
+        }
+    }
+
+    /// <summary>
+    /// Gets the active event references.
+    /// </summary>
+    /// <returns>A span that is valid until this pool changes.</returns>
+    public Span<SweepEvent> GetEventsSpan() => this.Items.AsSpan(0, this.Size);
+
+    /// <summary>
+    /// Appends references owned by another sweep pool without copying its inactive slots.
+    /// </summary>
+    /// <param name="source">The active references to append.</param>
+    public void AddRange(SweepEventPoolList source)
+    {
+        this.EnsureCapacity(this.Size + source.Size);
+        source.Items.AsSpan(0, source.Size).CopyTo(this.Items.AsSpan(this.Size));
+        this.Size += source.Size;
+    }
+
     /// <summary>
     /// Adds a sweep event to the active range.
     /// </summary>
@@ -230,10 +177,10 @@ internal abstract class PooledList<T> : IReadOnlyList<T>
 
             int target = (int)BitOperations.RoundUpToPowerOf2((uint)value);
             T[] newItems = new T[target];
-            if (this.Size > 0)
-            {
-                Array.Copy(this.Items, newItems, this.Size);
-            }
+
+            // Clear resets the active count but retains reusable objects. Copy
+            // those inactive slots too, including growth before the next run.
+            Array.Copy(this.Items, newItems, this.Items.Length);
 
             this.Items = newItems;
         }

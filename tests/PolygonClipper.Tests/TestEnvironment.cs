@@ -14,6 +14,8 @@ internal static class TestEnvironment
 
     private const string GeoJsonTestDataRelativePath = @"tests\TestData\";
 
+    private const string ActualOutputDirectoryRelativePath = @"tests\Images\ActualOutput";
+
     private static readonly Lazy<string> SolutionDirectoryFullPathLazy = new(GetSolutionDirectoryFullPathImpl);
 
     public static string SolutionDirectoryFullPath => SolutionDirectoryFullPathLazy.Value;
@@ -22,6 +24,11 @@ internal static class TestEnvironment
     /// Gets the correct full path to the GeoJson TestData directory.
     /// </summary>
     public static string GeoJsonTestDataFullPath => GetFullPath(GeoJsonTestDataRelativePath);
+
+    /// <summary>
+    /// Gets the full path to the images written by tests.
+    /// </summary>
+    public static string ActualOutputDirectoryFullPath => GetFullPath(ActualOutputDirectoryRelativePath);
 
     public static bool IsLinux => RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
 

@@ -161,16 +161,39 @@ public readonly struct Vertex : IEquatable<Vertex>
     /// <returns>The <see cref="double"/> cross product.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static double Cross(in Vertex a, in Vertex b)
-        => (a.X * b.Y) - (a.Y * b.X);
+    {
+        double first = a.X * b.Y;
+        double second = a.Y * b.X;
+        double cross = first - second;
 
-    /// <summary>Computes the Euclidean distance between the two given vertices.</summary>
+        // Unequal rounded products preserve their order. Equal products can hide
+        // a non-zero determinant, so recover their residuals only in that case.
+        // A zero product cannot hide cancellation between two rounded products.
+        if (cross != 0 || first == 0 || second == 0)
+        {
+            return cross;
+        }
+
+        // FMA retains each product's rounding error. Subtract the rounded second
+        // product inside the first FMA, then restore the part lost from that
+        // second product. Distinct near-parallel vectors must not become collinear.
+        double secondError = Math.FusedMultiplyAdd(-a.Y, b.X, second);
+        double determinant = Math.FusedMultiplyAdd(a.X, b.Y, -second);
+        return determinant + secondError;
+    }
+
+    /// <summary>
+    /// Computes the Euclidean distance between the two given vertices.
+    /// </summary>
     /// <param name="a">The first vertex.</param>
     /// <param name="b">The second vertex.</param>
     /// <returns>The distance.</returns>
     public static double Distance(in Vertex a, in Vertex b)
         => double.Sqrt(DistanceSquared(a, b));
 
-    /// <summary>Returns the Euclidean distance squared between two specified vertices.</summary>
+    /// <summary>
+    /// Returns the Euclidean distance squared between two specified vertices.
+    /// </summary>
     /// <param name="a">The first vertex.</param>
     /// <param name="b">The second vertex.</param>
     /// <returns>The distance squared.</returns>
@@ -185,7 +208,9 @@ public readonly struct Vertex : IEquatable<Vertex>
     public double Length()
         => double.Sqrt(this.LengthSquared());
 
-    /// <summary>Returns the length of the vertex squared.</summary>
+    /// <summary>
+    /// Returns the length of the vertex squared.
+    /// </summary>
     /// <returns>The vertex's length squared.</returns>
     /// <remarks>This operation offers better performance than a call to the <see cref="Length" /> method.</remarks>
     /// <altmember cref="Length" />
