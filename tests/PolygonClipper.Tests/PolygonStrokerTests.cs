@@ -99,6 +99,33 @@ public class PolygonStrokerTests
             $"Open and closed path strokes should differ. openArea={openArea:R}, closedArea={closedArea:R}.");
     }
 
+    /// <summary>
+    /// Checks the default and opt-out for nearby endpoints and the repeated vertex case.
+    /// </summary>
+    [Fact]
+    public void Stroke_CloseNearEndpointsFalse_KeepsButtCaps()
+    {
+        const double width = 2D;
+        const double epsilon = 1E-12D;
+        StrokeOptions options = new() { LineCap = LineCap.Butt, LineJoin = LineJoin.Miter };
+        Contour path = [new(0, 0), new(12, 0), new(12, 1), new(0, 1)];
+        Polygon defaultStroke = PolygonStroker.Stroke([path], width, options);
+
+        // Change the options on a second call so the test also checks pooled stroker reuse.
+        options.CloseNearEndpoints = false;
+        Polygon openStroke = PolygonStroker.Stroke([path], width, options);
+
+        path.Add(path[0]);
+        Polygon closedStroke = PolygonStroker.Stroke([path], width, options);
+
+        // The butt caps stop at x = 0. The closing segment covers the point to their left.
+        Vertex point = new(-0.5D, 0.5D);
+        Assert.Equal(Containment.Inside, ClassifyPoint(defaultStroke, point, epsilon));
+        Assert.Equal(Containment.Inside, ClassifyPoint(openStroke, new Vertex(6, -0.5D), epsilon));
+        Assert.Equal(Containment.Outside, ClassifyPoint(openStroke, point, epsilon));
+        Assert.Equal(Containment.Inside, ClassifyPoint(closedStroke, point, epsilon));
+    }
+
     [Fact]
     public void ProcessPolygonAndClip_FoldBackOpenPath_ProducesValidStroke()
     {
