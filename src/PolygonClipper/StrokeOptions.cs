@@ -19,6 +19,16 @@ public sealed class StrokeOptions : IEquatable<StrokeOptions?>
     public bool NormalizeOutput { get; set; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether to close contours with nearby endpoints.
+    /// </summary>
+    /// <remarks>
+    /// Defaults to <see langword="true"/>. The closing distance is the larger of the
+    /// stroke width and 0.001 coordinate units. When disabled, only a repeated start
+    /// vertex closes the contour.
+    /// </remarks>
+    public bool CloseNearEndpoints { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets the miter limit used to clamp outer miter joins.
     /// </summary>
     public double MiterLimit { get; set; } = 4D;
@@ -47,6 +57,7 @@ public sealed class StrokeOptions : IEquatable<StrokeOptions?>
     public bool Equals(StrokeOptions? other)
         => other is not null &&
            this.NormalizeOutput == other.NormalizeOutput &&
+           this.CloseNearEndpoints == other.CloseNearEndpoints &&
            this.MiterLimit == other.MiterLimit &&
            this.ArcDetailScale == other.ArcDetailScale &&
            this.LineJoin == other.LineJoin &&
@@ -56,6 +67,7 @@ public sealed class StrokeOptions : IEquatable<StrokeOptions?>
     public override int GetHashCode()
         => HashCode.Combine(
             this.NormalizeOutput,
+            this.CloseNearEndpoints,
             this.MiterLimit,
             this.ArcDetailScale,
             this.LineJoin,

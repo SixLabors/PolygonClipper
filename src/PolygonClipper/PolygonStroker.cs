@@ -52,6 +52,8 @@ public sealed class PolygonStroker
     [ThreadStatic]
     private static Dictionary<StrokeOptionsKey, Stack<PolygonStroker>>? strokersByOptions;
 
+    private readonly bool closeNearEndpoints;
+
     // Scratch buffers reused across contours to keep per-call allocations down.
     private ArrayBuilder<Vertex> outVertices = new(1);
     private ArrayBuilder<StrokeVertexDistance> srcVertices = new(16);
@@ -81,6 +83,7 @@ public sealed class PolygonStroker
     {
         ArgumentNullException.ThrowIfNull(options);
         this.NormalizeOutput = options.NormalizeOutput;
+        this.closeNearEndpoints = options.CloseNearEndpoints;
         this.LineJoin = options.LineJoin;
         this.LineCap = options.LineCap;
         this.MiterLimit = options.MiterLimit;
@@ -131,6 +134,7 @@ public sealed class PolygonStroker
         public StrokeOptionsKey(StrokeOptions options)
         {
             this.NormalizeOutput = options.NormalizeOutput;
+            this.CloseNearEndpoints = options.CloseNearEndpoints;
             this.LineJoin = options.LineJoin;
             this.LineCap = options.LineCap;
             this.MiterLimit = options.MiterLimit;
@@ -138,6 +142,11 @@ public sealed class PolygonStroker
         }
 
         public bool NormalizeOutput { get; }
+
+        /// <summary>
+        /// Gets a value indicating whether this pooled stroker can close nearby endpoints.
+        /// </summary>
+        public bool CloseNearEndpoints { get; }
 
         public LineJoin LineJoin { get; }
 
@@ -149,6 +158,7 @@ public sealed class PolygonStroker
 
         public bool Equals(StrokeOptionsKey other)
             => this.NormalizeOutput == other.NormalizeOutput &&
+               this.CloseNearEndpoints == other.CloseNearEndpoints &&
                this.LineJoin == other.LineJoin &&
                this.LineCap == other.LineCap &&
                this.MiterLimit == other.MiterLimit &&
@@ -159,6 +169,7 @@ public sealed class PolygonStroker
         public override int GetHashCode()
             => HashCode.Combine(
                 this.NormalizeOutput,
+                this.CloseNearEndpoints,
                 this.LineJoin,
                 this.LineCap,
                 this.MiterLimit,
@@ -214,9 +225,7 @@ public sealed class PolygonStroker
         {
             Contour contour = polygon[i];
 
-            // Close explicit or near-seam contours to avoid tiny stitch gaps,
-            // but keep clearly open polylines open so caps are emitted.
-            bool isClosed = IsContourClosedForEmission(contour, this.widthAbs * 2D);
+            bool isClosed = this.IsContourClosedForEmission(contour);
             Polygon stroked = this.ProcessPathToPolygon(contour, isClosed);
             if (stroked.Count > 0)
             {
@@ -423,10 +432,9 @@ public sealed class PolygonStroker
     /// Returns whether a contour should be treated as closed when emitting stroke geometry.
     /// </summary>
     /// <param name="contour">The contour to inspect.</param>
-    /// <param name="strokeWidth">Current stroke width.</param>
     /// <returns><see langword="true"/> if the contour should be treated as closed; otherwise <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static bool IsContourClosedForEmission(Contour contour, double strokeWidth)
+    private bool IsContourClosedForEmission(Contour contour)
     {
         int count = contour.Count;
         if (count < 3)
@@ -439,8 +447,13 @@ public sealed class PolygonStroker
             return true;
         }
 
+        if (!this.closeNearEndpoints)
+        {
+            return false;
+        }
+
         Vertex delta = contour[0] - contour[^1];
-        double closeThreshold = Math.Max(strokeWidth, 1E-3D);
+        double closeThreshold = Math.Max(this.widthAbs * 2D, 1E-3D);
         return delta.LengthSquared() <= closeThreshold * closeThreshold;
     }
 
